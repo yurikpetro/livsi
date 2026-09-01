@@ -64,7 +64,7 @@
                                            class="mt-1 block text-sm font-bold hover:text-green">
                                             {{ $item->variant->product->title }}
                                         </a>
-                                        <div class="mt-1 text-[11px] text-muted">{{ $item->variant->optionLabel() }}</div>
+                                        <div class="mt-1 text-[11px] text-muted">{{ $item->variant->storefrontLabel() }}</div>
                                     </div>
 
                                     <div class="text-right">
@@ -171,7 +171,7 @@
                                         {{ $gift->product->line?->title }}
                                     </div>
                                     <div class="mt-1 text-xs font-bold">{{ $gift->product->title }}</div>
-                                    <div class="mt-1 text-[11px] text-muted">{{ $gift->optionLabel() }}</div>
+                                    <div class="mt-1 text-[11px] text-muted">{{ $gift->storefrontLabel() }}</div>
                                     <div class="mt-3 text-[10px] uppercase tracking-[0.08em]">
                                         {{ $chosen ? 'Выбран' : 'Выбрать' }}
                                     </div>

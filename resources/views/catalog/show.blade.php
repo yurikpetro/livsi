@@ -49,7 +49,8 @@
 
                 {{-- Выбор варианта и добавление в корзину — одна форма, работает без JS.
                      Варианты идут по двум осям: объём × аромат. --}}
-                <form method="POST" action="{{ route('cart.add') }}" class="mt-8">
+                <form method="POST" action="{{ route('cart.add') }}" class="mt-8" x-data
+                      x-on:submit.prevent="Livewire.dispatch('cart-add', { variantId: Number(new FormData($el).get('variant_id')) })">
                     @csrf
 
                     @if ($product->variants->count() > 1)
@@ -63,7 +64,7 @@
                                 ])>
                                     <input type="radio" name="variant_id" value="{{ $v->id }}"
                                            class="sr-only" @checked($v->is_default && ! $out) @disabled($out)>
-                                    {{ $v->optionLabel() }}
+                                    {{ $v->storefrontLabel() }}
                                 </label>
                             @endforeach
                         </div>

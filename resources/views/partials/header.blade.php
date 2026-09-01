@@ -19,17 +19,7 @@
         <div class="flex items-center justify-end gap-5">
             <a href="{{ route('catalog.index') }}" class="md:hidden text-[11px] font-bold uppercase tracking-[0.08em]">Каталог</a>
 
-            <a href="{{ route('cart.index') }}" class="relative flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] hover:text-green"
-               aria-label="Корзина: {{ $cartCount ?? 0 }}">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-                    <path d="M4 7h16l-1.3 11.2a2 2 0 0 1-2 1.8H7.3a2 2 0 0 1-2-1.8L4 7Z"></path>
-                    <path d="M9 7V5.5a3 3 0 0 1 6 0V7"></path>
-                </svg>
-                <span class="hidden sm:inline">Корзина</span>
-                @if (($cartCount ?? 0) > 0)
-                    <span class="grid h-4 min-w-4 place-items-center rounded-full bg-neon px-1 text-[10px] font-bold text-ink">{{ $cartCount }}</span>
-                @endif
-            </a>
+            @livewire('cart-drawer')
         </div>
     </div>
 </header>

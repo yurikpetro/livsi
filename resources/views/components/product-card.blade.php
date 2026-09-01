@@ -57,7 +57,7 @@
         <p class="mt-1 text-xs text-muted leading-snug">{{ $product->short_description }}</p>
 
         @if ($variant)
-            <p class="mt-3 text-[11px] text-muted">{{ $variant->optionLabel() }}</p>
+            <p class="mt-3 text-[11px] text-muted">{{ $variant->storefrontLabel() }}</p>
         @endif
 
         <div class="mt-auto flex items-center justify-between gap-3 pt-5">
@@ -66,7 +66,10 @@
             @if ($available && $variant)
                 {{-- У товара с несколькими вариантами кладём в корзину вариант
                      по умолчанию: выбор объёма и аромата — на карточке товара. --}}
-                <form method="POST" action="{{ route('cart.add') }}">
+                {{-- Без JavaScript форма отправляется обычным POST и работает;
+                     с Alpine перехватываем и открываем выдвижную корзину. --}}
+                <form method="POST" action="{{ route('cart.add') }}" x-data
+                      x-on:submit.prevent="Livewire.dispatch('cart-add', { variantId: Number(new FormData($el).get('variant_id')) })">
                     @csrf
                     <input type="hidden" name="variant_id" value="{{ $variant->id }}">
                     <button type="submit" class="btn btn-outline !min-h-9 !px-3 !text-[10px]">

@@ -37,10 +37,21 @@ class ProductVariant extends Model
         return max(0, $quota->allocated - $quota->reserved - $quota->sold);
     }
 
-    /** Название варианта для витрины: «200 мл · сочная вишня». */
+    /** Название варианта: «200 мл · сочная вишня». Используется в админке. */
     public function optionLabel(): string
     {
         return collect([$this->option_volume, $this->option_aroma])
+            ->filter()
+            ->implode(' · ');
+    }
+
+    /**
+     * Подпись для витрины. Если аромат не вынесен в ось варианта, берём его
+     * с товара: покупателю важен аромат, а не то, как он смоделирован.
+     */
+    public function storefrontLabel(): string
+    {
+        return collect([$this->option_volume, $this->option_aroma ?: $this->product?->aroma])
             ->filter()
             ->implode(' · ');
     }
