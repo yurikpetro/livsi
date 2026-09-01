@@ -16,14 +16,30 @@
             <img src="{{ asset('img/logo.svg') }}" alt="LIVSI" class="h-7 w-auto">
         </a>
 
-        <div class="flex items-center justify-end gap-4">
-            {{-- Поиск, избранное, аккаунт и корзина подключаются в следующих инкрементах. --}}
-            <button type="button" class="text-ink/70 hover:text-ink" aria-label="Поиск">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                    <circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path>
-                </svg>
-            </button>
+        <div class="flex items-center justify-end gap-5">
             <a href="{{ route('catalog.index') }}" class="md:hidden text-[11px] font-bold uppercase tracking-[0.08em]">Каталог</a>
+
+            <a href="{{ route('cart.index') }}" class="relative flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] hover:text-green"
+               aria-label="Корзина: {{ $cartCount ?? 0 }}">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                    <path d="M4 7h16l-1.3 11.2a2 2 0 0 1-2 1.8H7.3a2 2 0 0 1-2-1.8L4 7Z"></path>
+                    <path d="M9 7V5.5a3 3 0 0 1 6 0V7"></path>
+                </svg>
+                <span class="hidden sm:inline">Корзина</span>
+                @if (($cartCount ?? 0) > 0)
+                    <span class="grid h-4 min-w-4 place-items-center rounded-full bg-neon px-1 text-[10px] font-bold text-ink">{{ $cartCount }}</span>
+                @endif
+            </a>
         </div>
     </div>
 </header>
+
+@if (session('cart_status') || session('cart_error'))
+    <div @class([
+        'site-container mt-4 border px-4 py-3 text-xs',
+        'border-green text-green' => session('cart_status'),
+        'border-danger text-danger' => session('cart_error'),
+    ])>
+        {{ session('cart_status') ?: session('cart_error') }}
+    </div>
+@endif

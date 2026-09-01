@@ -60,14 +60,25 @@
             <p class="mt-3 text-[11px] text-muted">{{ $variant->optionLabel() }}</p>
         @endif
 
-        <div class="mt-auto flex items-center justify-between pt-5">
+        <div class="mt-auto flex items-center justify-between gap-3 pt-5">
             <span class="text-base font-bold">{{ Money::rub($product->priceFrom()) }}</span>
 
-            <button type="button"
-                    @disabled(! $available)
-                    class="btn btn-outline !min-h-9 !px-3 !text-[10px] disabled:opacity-40 disabled:cursor-not-allowed">
-                В корзину
-            </button>
+            @if ($available && $variant)
+                {{-- У товара с несколькими вариантами кладём в корзину вариант
+                     по умолчанию: выбор объёма и аромата — на карточке товара. --}}
+                <form method="POST" action="{{ route('cart.add') }}">
+                    @csrf
+                    <input type="hidden" name="variant_id" value="{{ $variant->id }}">
+                    <button type="submit" class="btn btn-outline !min-h-9 !px-3 !text-[10px]">
+                        В корзину
+                    </button>
+                </form>
+            @else
+                <button type="button" disabled
+                        class="btn btn-outline !min-h-9 !px-3 !text-[10px] opacity-40 cursor-not-allowed">
+                    Нет в наличии
+                </button>
+            @endif
         </div>
     </div>
 </article>

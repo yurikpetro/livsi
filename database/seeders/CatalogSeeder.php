@@ -403,10 +403,23 @@ class CatalogSeeder extends Seeder
             ['title' => 'Бесплатная доставка', 'threshold' => 100000, 'is_active' => true, 'sort' => 10],
         );
 
-        PromoRule::updateOrCreate(
+        $gift = PromoRule::updateOrCreate(
             ['type' => 'gift', 'channel' => 'retail'],
             ['title' => 'Подарок к заказу', 'threshold' => 500000, 'is_active' => true, 'sort' => 20],
         );
+
+        // Покупатель выбирает один подарок из нескольких — как в прототипе.
+        // Список меняется в админке, здесь только стартовое наполнение.
+        $giftVariants = ProductVariant::query()
+            ->whereHas('product', fn ($q) => $q->whereIn('slug', [
+                'multipenka-dlya-manikyura-fresh',
+                'multipenka-dlya-manikyura-sweet',
+                'multipenka-dlya-ruk-i-stop',
+            ]))
+            ->where('is_default', true)
+            ->pluck('id');
+
+        $gift->gifts()->sync($giftVariants);
     }
 
     private function seedSellerProfile(): void

@@ -47,63 +47,73 @@
                 <h1 class="mt-5 text-4xl md:text-5xl normal-case tracking-tight">{{ $product->title }}</h1>
                 <p class="mt-4 text-sm text-muted leading-relaxed">{{ $product->short_description }}</p>
 
-                @if ($product->variants->count() > 1)
-                    <div class="mt-8">
+                {{-- Выбор варианта и добавление в корзину — одна форма, работает без JS.
+                     Варианты идут по двум осям: объём × аромат. --}}
+                <form method="POST" action="{{ route('cart.add') }}" class="mt-8">
+                    @csrf
+
+                    @if ($product->variants->count() > 1)
                         <div class="eyebrow">Вариант</div>
                         <div class="mt-3 flex flex-wrap gap-2">
                             @foreach ($product->variants as $v)
-                                <button type="button"
-                                        @disabled($v->available() < 1)
-                                        class="chip @if ($v->is_default) chip-active @endif disabled:opacity-40 disabled:line-through">
+                                @php $out = $v->available() < 1; @endphp
+                                <label @class([
+                                    'chip cursor-pointer has-[:checked]:bg-neon',
+                                    'opacity-40 line-through cursor-not-allowed' => $out,
+                                ])>
+                                    <input type="radio" name="variant_id" value="{{ $v->id }}"
+                                           class="sr-only" @checked($v->is_default && ! $out) @disabled($out)>
                                     {{ $v->optionLabel() }}
-                                </button>
+                                </label>
                             @endforeach
                         </div>
+                    @elseif ($variant)
+                        <input type="hidden" name="variant_id" value="{{ $variant->id }}">
+                    @endif
+
+                    <dl class="mt-8 divide-y divide-line border-y border-line text-xs">
+                        @if ($product->aroma)
+                            <div class="flex justify-between gap-6 py-3">
+                                <dt class="text-muted uppercase tracking-[0.08em] text-[10px]">Аромат</dt>
+                                <dd class="font-bold text-right">{{ $product->aroma }}</dd>
+                            </div>
+                        @endif
+                        @if ($product->effect)
+                            <div class="flex justify-between gap-6 py-3">
+                                <dt class="text-muted uppercase tracking-[0.08em] text-[10px]">Эффект</dt>
+                                <dd class="font-bold text-right">{{ $product->effect }}</dd>
+                            </div>
+                        @endif
+                        @if ($product->purposes->isNotEmpty())
+                            <div class="flex justify-between gap-6 py-3">
+                                <dt class="text-muted uppercase tracking-[0.08em] text-[10px]">Назначение</dt>
+                                <dd class="font-bold text-right">{{ $product->purposes->pluck('title')->implode(', ') }}</dd>
+                            </div>
+                        @endif
+                        @if ($product->tasks->isNotEmpty())
+                            <div class="flex justify-between gap-6 py-3">
+                                <dt class="text-muted uppercase tracking-[0.08em] text-[10px]">Задача</dt>
+                                <dd class="font-bold text-right">{{ $product->tasks->pluck('title')->implode(', ') }}</dd>
+                            </div>
+                        @endif
+                        @if ($variant?->sku)
+                            <div class="flex justify-between gap-6 py-3">
+                                <dt class="text-muted uppercase tracking-[0.08em] text-[10px]">Артикул</dt>
+                                <dd class="text-right">{{ $variant->sku }}</dd>
+                            </div>
+                        @endif
+                    </dl>
+
+                    <div class="mt-8 flex items-center gap-6">
+                        <span class="text-3xl font-black">{{ Money::rub($variant?->price) }}</span>
+                        <button type="submit"
+                                @disabled(! $product->isAvailable())
+                                class="btn btn-neon flex-1 disabled:opacity-40 disabled:cursor-not-allowed">
+                            {{ $product->isAvailable() ? 'Добавить в корзину' : 'Нет в наличии' }}
+                            <span aria-hidden="true">→</span>
+                        </button>
                     </div>
-                @endif
-
-                <dl class="mt-8 divide-y divide-line border-y border-line text-xs">
-                    @if ($product->aroma)
-                        <div class="flex justify-between gap-6 py-3">
-                            <dt class="text-muted uppercase tracking-[0.08em] text-[10px]">Аромат</dt>
-                            <dd class="font-bold text-right">{{ $product->aroma }}</dd>
-                        </div>
-                    @endif
-                    @if ($product->effect)
-                        <div class="flex justify-between gap-6 py-3">
-                            <dt class="text-muted uppercase tracking-[0.08em] text-[10px]">Эффект</dt>
-                            <dd class="font-bold text-right">{{ $product->effect }}</dd>
-                        </div>
-                    @endif
-                    @if ($product->purposes->isNotEmpty())
-                        <div class="flex justify-between gap-6 py-3">
-                            <dt class="text-muted uppercase tracking-[0.08em] text-[10px]">Назначение</dt>
-                            <dd class="font-bold text-right">{{ $product->purposes->pluck('title')->implode(', ') }}</dd>
-                        </div>
-                    @endif
-                    @if ($product->tasks->isNotEmpty())
-                        <div class="flex justify-between gap-6 py-3">
-                            <dt class="text-muted uppercase tracking-[0.08em] text-[10px]">Задача</dt>
-                            <dd class="font-bold text-right">{{ $product->tasks->pluck('title')->implode(', ') }}</dd>
-                        </div>
-                    @endif
-                    @if ($variant?->sku)
-                        <div class="flex justify-between gap-6 py-3">
-                            <dt class="text-muted uppercase tracking-[0.08em] text-[10px]">Артикул</dt>
-                            <dd class="text-right">{{ $variant->sku }}</dd>
-                        </div>
-                    @endif
-                </dl>
-
-                <div class="mt-8 flex items-center gap-6">
-                    <span class="text-3xl font-black">{{ Money::rub($variant?->price) }}</span>
-                    <button type="button"
-                            @disabled(! $product->isAvailable())
-                            class="btn btn-neon flex-1 disabled:opacity-40 disabled:cursor-not-allowed">
-                        {{ $product->isAvailable() ? 'Добавить в корзину' : 'Нет в наличии' }}
-                        <span aria-hidden="true">→</span>
-                    </button>
-                </div>
+                </form>
 
                 @if ($product->active_ingredients)
                     <details class="mt-8 border-t border-line py-4">
