@@ -1,0 +1,194 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+/* ---------------------------------------------------------------------------
+   Дизайн-система LIVSI.
+   Значения — из брендбука 2026: палитра стр. 38/41/48, типографика стр. 51–54.
+   Подробности и согласованные отступления — docs/02-plan.md §3.
+   --------------------------------------------------------------------------- */
+
+@theme {
+    /* Палитра брендбука */
+    --color-green: #51a940;
+    --color-neon: #d0dd56;
+    --color-berry: #be6eb5;
+    --color-rose: #f6accd;
+    --color-orange: #ec9022;
+    --color-lemon: #ffe405;
+    --color-cocoa: #cc8c34;
+    --color-sand: #f5e2b7;
+    --color-pro-light: #d0eaff;
+    --color-pro-blue: #99d0f7;
+
+    /* Семантика интерфейса. Брендбук требует чистые #000/#fff — используем их,
+       расхождение со старым макетом (#0A0A0A / #FFFDF8) снято в пользу брендбука. */
+    --color-ink: #000000;
+    --color-paper: #ffffff;
+    --color-muted: #6a6a65;
+    --color-line: #e5e4e0;
+    --color-shell: #f2f1ec;
+
+    /* Цвета ошибок и успеха в брендбуке отсутствуют — подобраны под палитру,
+       требуют согласования с автором брендбука (docs/02-plan.md §3, п. 4). */
+    --color-danger: #d13b2e;
+    --color-success: #51a940;
+
+    /* Типографика. Geist пока не подключён: нужны файлы с кириллицей от дизайнера
+       (открытый вопрос 9.2). До этого работает системный запасной стек. */
+    --font-sans: 'Geist', 'Inter', ui-sans-serif, system-ui, 'Segoe UI', Roboto, Arial, sans-serif;
+
+    --radius-card: 0px;
+    --radius-pill: 999px;
+
+    --container-site: 1720px;
+}
+
+/* Когда придут файлы Geist, положить их в public/fonts и раскомментировать.
+@font-face {
+    font-family: 'Geist';
+    src: url('/fonts/Geist-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Geist';
+    src: url('/fonts/Geist-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Geist';
+    src: url('/fonts/Geist-Black.woff2') format('woff2');
+    font-weight: 900;
+    font-display: swap;
+}
+*/
+
+@layer base {
+    html {
+        scroll-behavior: smooth;
+    }
+
+    body {
+        background-color: var(--color-paper);
+        color: var(--color-ink);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+    }
+
+    /* Брендбук задаёт межстрочное 100 % для всех уровней. Для дисплейных
+       заголовков это сохранено, для основного текста поднято до 1.45 —
+       иначе текст нечитаем. Отступление согласовывается (docs/02-plan.md §3). */
+    h1,
+    h2,
+    h3 {
+        text-transform: uppercase;
+        font-weight: 900;
+        line-height: 0.95;
+    }
+
+    h1 {
+        letter-spacing: -0.03em;
+    }
+
+    h2 {
+        letter-spacing: -0.02em;
+    }
+
+    h3 {
+        letter-spacing: -0.02em;
+    }
+}
+
+@layer components {
+    .site-container {
+        width: min(var(--container-site), calc(100% - 2rem));
+        margin-inline: auto;
+    }
+
+    @media (min-width: 768px) {
+        .site-container {
+            width: min(var(--container-site), calc(100% - 4rem));
+        }
+    }
+
+    /* Кнопка из брендбука (стр. 45): pill, Geist Bold, тёмный текст на цвете. */
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.25rem;
+        min-height: 3rem;
+        padding-inline: 1.5rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        transition: 150ms ease;
+        cursor: pointer;
+    }
+
+    .btn-dark {
+        background: var(--color-ink);
+        color: var(--color-paper);
+    }
+
+    .btn-dark:hover {
+        background: #1f1f1f;
+    }
+
+    .btn-neon {
+        background: var(--color-neon);
+        color: var(--color-ink);
+    }
+
+    .btn-neon:hover {
+        background: #c3d146;
+    }
+
+    .btn-outline {
+        border: 1px solid var(--color-ink);
+        color: var(--color-ink);
+    }
+
+    .btn-outline:hover {
+        background: var(--color-ink);
+        color: var(--color-paper);
+    }
+
+    .eyebrow {
+        font-size: 0.625rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--color-muted);
+    }
+
+    .chip {
+        display: inline-flex;
+        align-items: center;
+        height: 2rem;
+        padding-inline: 0.875rem;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        background: var(--color-shell);
+        color: var(--color-ink);
+        transition: 120ms ease;
+    }
+
+    .chip:hover {
+        background: #e7e6e0;
+    }
+
+    .chip-active {
+        background: var(--color-neon);
+    }
+
+    .chip-active:hover {
+        background: var(--color-neon);
+    }
+}

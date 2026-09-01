@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LIVSI — косметический гардероб ощущений</title>
+  <style>
+    :root{
+      --fresh:#D0DD56; --green:#51A940; --berry:#BE6EB5; --rose:#F6ACCD;
+      --orange:#EC9022; --lemon:#FFE405; --cocoa:#CC8C34; --sand:#F5E2B7;
+      --ink:#0A0A0A; --paper:#FFFDF8; --line:#DDDCD8; --muted:#6A6A65;
+      --radius:24px; --max:1320px;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;font-family:Geist,Inter,Arial,sans-serif;background:var(--paper);color:var(--ink)}
+    a{color:inherit;text-decoration:none}
+    button{font:inherit}
+    .container{width:min(var(--max),calc(100% - 64px));margin:auto}
+    .topbar{height:34px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;letter-spacing:.03em}
+    .header{height:82px;display:flex;align-items:center;border-bottom:1px solid rgba(0,0,0,.07);background:rgba(255,253,248,.94);position:sticky;top:0;z-index:20;backdrop-filter:blur(14px)}
+    .header-inner{display:grid;grid-template-columns:180px 1fr auto;gap:28px;align-items:center}
+    .logo{width:128px;height:56px;object-fit:contain;object-position:left center}
+    .nav{display:flex;justify-content:center;gap:28px;font-size:13px;font-weight:650;text-transform:uppercase;letter-spacing:.015em}
+    .nav a{padding:10px 0}
+    .tools{display:flex;align-items:center;gap:14px}
+    .icon{width:40px;height:40px;border:1px solid rgba(0,0,0,.12);border-radius:50%;display:grid;place-items:center;background:#fff;font-size:18px}
+    .hero{padding:18px 0 28px}
+    .hero-card{min-height:690px;background:var(--fresh);border-radius:32px;overflow:hidden;display:grid;grid-template-columns:42% 58%;position:relative}
+    .hero-copy{padding:88px 26px 64px 58px;z-index:2;display:flex;flex-direction:column;align-items:flex-start}
+    .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:750;text-transform:uppercase;letter-spacing:.08em}
+    .eyebrow:before{content:"";width:10px;height:10px;border-radius:50%;background:var(--green)}
+    h1{font-size:74px;line-height:.9;letter-spacing:-.055em;text-transform:uppercase;margin:34px 0 24px;font-weight:900;max-width:610px}
+    h1 .mark{background:#fff;padding:0 .08em}
+    .hero-copy p{font-size:21px;line-height:1.25;max-width:440px;margin:0 0 34px}
+    .actions{display:flex;gap:12px;flex-wrap:wrap}
+    .btn{height:54px;padding:0 24px;border-radius:999px;border:1.5px solid var(--ink);display:inline-flex;align-items:center;justify-content:center;font-weight:750;font-size:14px;cursor:pointer}
+    .btn.dark{background:var(--ink);color:white}
+    .btn.light{background:rgba(255,255,255,.4)}
+    .hero-media{position:relative;min-height:690px}
+    .hero-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 27%}
+    .hero-media:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,var(--fresh) 0%,rgba(208,221,86,.12) 22%,transparent 52%)}
+    .floating-note{position:absolute;right:34px;bottom:30px;background:#fff;border-radius:18px;padding:14px 16px;width:190px;font-size:12px;line-height:1.3;box-shadow:0 14px 40px rgba(0,0,0,.13);z-index:3}
+    .floating-note b{display:block;font-size:14px;margin-bottom:5px}
+    .section{padding:72px 0}
+    .section-head{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:30px}
+    h2{font-size:52px;line-height:.94;letter-spacing:-.045em;text-transform:uppercase;margin:0;font-weight:900}
+    .section-head p{max-width:500px;margin:0;color:var(--muted);font-size:16px;line-height:1.45}
+    .states{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+    .state{height:430px;border-radius:26px;overflow:hidden;position:relative;padding:28px;display:flex;flex-direction:column;justify-content:space-between}
+    .state h3{font-size:38px;line-height:.9;margin:0;text-transform:uppercase;letter-spacing:-.04em}
+    .state span{font-size:15px;font-weight:650}
+    .state img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+    .state:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(0,0,0,.42))}
+    .state>*{position:relative;z-index:2;color:#fff}
+    .state.base>*{color:var(--ink)}
+    .state.base:after{background:linear-gradient(180deg,rgba(245,226,183,.08),rgba(245,226,183,.72))}
+    .state.fresh{background:var(--green)}
+    .state.sweet{background:var(--berry)}
+    .state.warm{background:var(--orange)}
+    .state.base{background:var(--sand)}
+    .state .arrow{align-self:flex-end;width:48px;height:48px;border-radius:50%;background:#fff;color:var(--ink);display:grid;place-items:center;font-size:24px}
+    .products{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+    .product{background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:22px;overflow:hidden;min-height:430px;display:flex;flex-direction:column}
+    .product-media{height:285px;background:#f5f4ef;position:relative;overflow:hidden}
+    .product-media img{width:100%;height:100%;object-fit:cover}
+    .tag{position:absolute;top:14px;left:14px;background:var(--fresh);border-radius:999px;padding:7px 10px;font-size:10px;font-weight:800;text-transform:uppercase}
+    .heart{position:absolute;top:12px;right:12px;background:#fff;width:38px;height:38px;border-radius:50%;display:grid;place-items:center}
+    .product-copy{padding:18px;display:flex;flex-direction:column;gap:8px;flex:1}
+    .product-title{font-size:17px;line-height:1.2;font-weight:720}
+    .product-sub{font-size:12px;color:var(--muted)}
+    .price-row{margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:16px}
+    .price{font-weight:900;font-size:20px}
+    .mini-cart{width:42px;height:42px;border-radius:50%;border:0;background:var(--fresh);font-size:20px}
+    .mood-banner{background:linear-gradient(100deg,var(--berry),var(--rose));min-height:340px;border-radius:30px;overflow:hidden;display:grid;grid-template-columns:41% 59%;align-items:center}
+    .mood-banner img{width:100%;height:340px;object-fit:cover;object-position:center 30%}
+    .mood-copy{padding:48px}
+    .mood-copy h2{color:#fff;font-size:56px}
+    .mood-copy p{font-size:18px;max-width:560px;color:#fff}
+    .benefits{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+    .benefit{padding:34px 26px;border-right:1px solid var(--line)}
+    .benefit:last-child{border-right:0}
+    .benefit b{display:block;font-size:15px;text-transform:uppercase;margin-bottom:8px}
+    .benefit p{font-size:13px;color:var(--muted);margin:0;line-height:1.4}
+    .story-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:16px}
+    .story-card{border-radius:28px;overflow:hidden;position:relative;min-height:520px}
+    .story-card img{width:100%;height:100%;object-fit:cover}
+    .story-text{background:#cce7f8;padding:56px;display:flex;flex-direction:column;justify-content:space-between}
+    .story-text p{font-size:20px;line-height:1.35;max-width:580px}
+    .story-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .kpi{background:rgba(255,255,255,.62);border-radius:18px;padding:18px}
+    .kpi b{font-size:28px;display:block}
+    .kpi span{font-size:11px;color:#46525a}
+    .ugc{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+    .ugc img{width:100%;height:300px;object-fit:cover;border-radius:18px}
+    .newsletter{background:var(--ink);color:#fff;border-radius:30px;padding:54px;display:grid;grid-template-columns:1.1fr .9fr;align-items:center;gap:36px}
+    .newsletter h2{font-size:56px}
+    .newsletter p{color:#bbb;max-width:590px}
+    .subscribe{display:flex;background:#fff;border-radius:999px;padding:6px}
+    .subscribe input{flex:1;border:0;outline:0;padding:0 20px;font-size:15px;background:transparent;min-width:0}
+    .subscribe button{border:0;background:var(--fresh);height:48px;border-radius:999px;padding:0 24px;font-weight:800}
+    footer{padding:54px 0 34px}
+    .footer-grid{display:grid;grid-template-columns:1.2fr repeat(3,1fr);gap:50px}
+    .footer-grid h4{font-size:13px;text-transform:uppercase;margin:0 0 16px}
+    .footer-grid a{display:block;font-size:13px;color:#4d4d48;margin:9px 0}
+    .footer-logo{width:150px}
+    .copyright{margin-top:42px;border-top:1px solid var(--line);padding-top:20px;font-size:11px;color:#777;display:flex;justify-content:space-between}
+    .mobile-nav{display:none}
+    @media(max-width:900px){
+      .container{width:min(100% - 28px,700px)}
+      .topbar{font-size:10px;height:30px}
+      .header{height:66px}
+      .header-inner{grid-template-columns:1fr auto;gap:10px}
+      .logo{width:90px;height:44px}
+      .nav{display:none}.tools .icon:nth-child(-n+2){display:none}
+      .hero{padding-top:10px}
+      .hero-card{display:block;min-height:0;border-radius:24px}
+      .hero-copy{padding:30px 22px 24px;min-height:420px}
+      h1{font-size:47px;max-width:330px;margin:22px 0 16px}
+      .hero-copy p{font-size:16px;max-width:300px;margin-bottom:20px}
+      .btn{height:46px;padding:0 17px;font-size:12px}
+      .hero-media{height:440px;min-height:0}
+      .hero-media:after{background:linear-gradient(180deg,var(--fresh),transparent 30%)}
+      .floating-note{right:16px;bottom:16px}
+      .section{padding:48px 0}
+      .section-head{display:block}
+      h2{font-size:38px}
+      .section-head p{margin-top:14px}
+      .states{grid-template-columns:repeat(2,1fr);gap:10px}
+      .state{height:260px;padding:18px;border-radius:20px}
+      .state h3{font-size:27px}
+      .products{grid-template-columns:repeat(2,1fr);gap:10px}
+      .product{min-height:350px;border-radius:18px}
+      .product-media{height:210px}
+      .product-copy{padding:14px}.product-title{font-size:14px}
+      .mood-banner{display:block}.mood-banner img{height:280px}.mood-copy{padding:28px}.mood-copy h2{font-size:38px}
+      .benefits{grid-template-columns:repeat(2,1fr)}.benefit:nth-child(2){border-right:0}.benefit:nth-child(-n+2){border-bottom:1px solid var(--line)}
+      .story-grid{grid-template-columns:1fr}.story-card{min-height:420px}.story-text{padding:30px}.story-kpis{grid-template-columns:1fr}
+      .ugc{grid-template-columns:repeat(2,1fr)}.ugc img{height:240px}.ugc img:last-child{display:none}
+      .newsletter{grid-template-columns:1fr;padding:30px;border-radius:22px}.newsletter h2{font-size:40px}
+      .subscribe{display:block;background:transparent;padding:0}.subscribe input{width:100%;height:50px;background:#fff;border-radius:999px;margin-bottom:10px}.subscribe button{width:100%}
+      .footer-grid{grid-template-columns:1fr 1fr;gap:28px}.footer-grid>div:first-child{grid-column:1/-1}
+      .copyright{display:block;line-height:1.7}
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">БЕСПЛАТНАЯ ДОСТАВКА ОТ 3 000 ₽ · ПОДАРОК К ЗАКАЗУ ОТ 5 000 ₽</div>
+  <header class="header">
+    <div class="container header-inner">
+      <img class="logo" src="assets_web/logo.svg" alt="LIVSI" />
+      <nav class="nav">
+        <a href="#catalog">Каталог</a><a href="#states">Линейки</a><a href="#about">О бренде</a><a href="#production">Производство</a><a href="#delivery">Доставка и оплата</a>
+      </nav>
+      <div class="tools"><span class="icon">⌕</span><span class="icon">♡</span><span class="icon">🛒</span></div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container hero-card">
+        <div class="hero-copy">
+          <div class="eyebrow">Новый ритм ухода</div>
+          <h1>Выбирай не продукт — <span class="mark">выбирай состояние</span></h1>
+          <p>LIVSI — косметический гардероб ощущений. Свежесть, сладость, теплота или спокойствие — в нужный момент.</p>
+          <div class="actions"><a class="btn dark" href="#states">Выбрать состояние →</a><a class="btn light" href="#catalog">Смотреть новинки</a></div>
+        </div>
+        <div class="hero-media"><img src="assets_web/fresh-hero.jpg" alt="LIVSI Fresh" /><div class="floating-note"><b>FRESH</b>Лёгкая пенка с ароматом лайма и грейпфрута.</div></div>
+      </div>
+    </section>
+
+    <section class="section" id="states">
+      <div class="container">
+        <div class="section-head"><h2>Выбери своё состояние</h2><p>Не подстраивай уход под правила. Собирай свой косметический гардероб по настроению, состоянию и желанию.</p></div>
+        <div class="states">
+          <article class="state fresh"><img src="assets_web/fresh-hero.jpg" alt="Fresh"><div><h3>Fresh</h3><span>Свежесть</span></div><div class="arrow">→</div></article>
+          <article class="state sweet"><img src="assets_web/sweet-portrait.jpg" alt="Sweet"><div><h3>Sweet</h3><span>Сладость</span></div><div class="arrow">→</div></article>
+          <article class="state warm"><img src="assets_web/mango-product.jpg" alt="Warm"><div><h3>Warm</h3><span>Теплота</span></div><div class="arrow">→</div></article>
+          <article class="state base"><img src="assets_web/avatar4.jpg" alt="Base"><div><h3>Base</h3><span>Базовое состояние</span></div><div class="arrow">→</div></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="catalog">
+      <div class="container">
+        <div class="section-head"><h2>Бестселлеры</h2><p>Средства, к которым возвращаются. Актуальные цены и остатки будут синхронизироваться с каталогом магазина.</p></div>
+        <div class="products">
+          <article class="product"><div class="product-media"><span class="tag">Fresh</span><span class="heart">♡</span><img src="assets_web/fresh-hero.jpg" alt="Пенка Fresh"></div><div class="product-copy"><div class="product-title">Пенка для умывания FRESH</div><div class="product-sub">Свежесть · 200 мл</div><div class="price-row"><span class="price">590 ₽</span><button class="mini-cart">+</button></div></div></article>
+          <article class="product"><div class="product-media"><span class="tag" style="background:var(--rose)">Sweet</span><span class="heart">♡</span><img src="assets_web/sweet-portrait.jpg" alt="Пенка Sweet"></div><div class="product-copy"><div class="product-title">Пенка для умывания SWEET</div><div class="product-sub">Сладость · 200 мл</div><div class="price-row"><span class="price">590 ₽</span><button class="mini-cart">+</button></div></div></article>
+          <article class="product"><div class="product-media"><span class="tag" style="background:var(--lemon)">Warm</span><span class="heart">♡</span><img src="assets_web/mango-product.jpg" alt="Крем-парафин"></div><div class="product-copy"><div class="product-title">Крем-парафин для рук и ног</div><div class="product-sub">Манго и бергамот · 150 г</div><div class="price-row"><span class="price">750 ₽</span><button class="mini-cart">+</button></div></div></article>
+          <article class="product"><div class="product-media"><span class="tag" style="background:var(--sand)">Warm</span><span class="heart">♡</span><img src="assets_web/warm-portrait.jpg" alt="Скраб для тела"></div><div class="product-copy"><div class="product-title">Скраб для тела WARM</div><div class="product-sub">Манго и бергамот · 300 г</div><div class="price-row"><span class="price">690 ₽</span><button class="mini-cart">+</button></div></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container mood-banner">
+        <img src="assets_web/sweet-closeup.jpg" alt="LIVSI Sweet" />
+        <div class="mood-copy"><h2>Сегодня — Fresh.<br>Завтра — Sweet.</h2><p>Состояние меняется каждый день. LIVSI помогает выбирать уход не по календарю, а по ощущению.</p><a class="btn dark" href="#catalog">Перейти в каталог →</a></div>
+      </div>
+    </section>
+
+    <section class="container benefits" id="delivery">
+      <div class="benefit"><b>Собственное производство</b><p>Создаём и контролируем продукты сами.</p></div>
+      <div class="benefit"><b>Профессиональные формулы</b><p>Понятные действия и честные свойства.</p></div>
+      <div class="benefit"><b>Яркие ароматы и текстуры</b><p>Уход как маленький переключатель состояния.</p></div>
+      <div class="benefit"><b>Для дома и мастеров</b><p>Линейки B2C и PRO в единой системе.</p></div>
+    </section>
+
+    <section class="section" id="about">
+      <div class="container story-grid">
+        <div class="story-card"><img src="assets_web/warm-portrait.jpg" alt="LIVSI" /></div>
+        <div class="story-card story-text" id="production"><div><div class="eyebrow">О бренде</div><h2>Создаём косметику по ощущениям</h2><p>Мы создаём продукты, которые помогают почувствовать себя по-разному — в зависимости от настроения, состояния и желания.</p></div><div class="story-kpis"><div class="kpi"><b>4</b><span>состояния в основной системе</span></div><div class="kpi"><b>PRO</b><span>отдельная профессиональная линия</span></div><div class="kpi"><b>Ставрополь</b><span>собственное производство</span></div></div></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="section-head"><h2>Ты и LIVSI</h2><p>Реальные ритуалы, текстуры и состояния. В финальной версии здесь будет UGC и видео покупателей.</p></div>
+        <div class="ugc"><img src="assets_web/avatar3.jpg"><img src="assets_web/fresh-hero.jpg"><img src="assets_web/sweet-portrait.jpg"><img src="assets_web/warm-portrait.jpg"><img src="assets_web/avatar4.jpg"></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container newsletter"><div><h2>Новое состояние — в почте</h2><p>Новинки, наборы, идеи ухода и персональные предложения без лишнего шума.</p></div><form class="subscribe"><input type="email" placeholder="Ваш e-mail"><button type="button">Подписаться</button></form></div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container"><div class="footer-grid"><div><img class="footer-logo" src="assets_web/logo.svg"><p style="max-width:320px;color:#666;font-size:13px;line-height:1.5">Косметический гардероб ощущений и состояний.</p></div><div><h4>Покупателям</h4><a>Каталог</a><a>Доставка и оплата</a><a>Возврат</a><a>Личный кабинет</a></div><div><h4>О LIVSI</h4><a>О бренде</a><a>Производство</a><a>Оптовым партнёрам</a><a>Контакты</a></div><div><h4>Документы</h4><a>Публичная оферта</a><a>Политика конфиденциальности</a><a>Согласие на обработку данных</a></div></div><div class="copyright"><span>© 2026 LIVSI. Все права защищены.</span><span>livsi.shop</span></div></div>
+  </footer>
+</body>
+</html>

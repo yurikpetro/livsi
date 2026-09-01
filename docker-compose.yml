@@ -1,0 +1,45 @@
+# PostgreSQL и Redis для локальной разработки и staging.
+#
+# Локально проект по умолчанию работает на SQLite: в текущей сборке PHP
+# не включено расширение pdo_pgsql (DLL в каталоге ext есть, достаточно
+# раскомментировать extension=pdo_pgsql в php.ini), а демон Docker не запущен.
+# Как только одно из двух поправится — поднимайте этот compose и переключайте
+# DB_CONNECTION=pgsql в .env. Миграции написаны переносимо.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: livsi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-livsi}
+      POSTGRES_USER: ${DB_USERNAME:-livsi}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - livsi-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-livsi} -d ${DB_DATABASE:-livsi}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: livsi-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - livsi-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  livsi-pgdata:
+  livsi-redisdata:
