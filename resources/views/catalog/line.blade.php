@@ -41,7 +41,7 @@
         <div class="flex flex-wrap items-baseline justify-between gap-4 border-b border-line pb-4">
             <h2 class="text-xl md:text-2xl">Товары линейки</h2>
             <span class="text-[11px] uppercase tracking-[0.08em] text-muted">
-                {{ trans_choice(':count товар|:count товара|:count товаров', $products->count(), ['count' => $products->count()]) }}
+                {{ \App\Support\Plural::products($products->count()) }}
             </span>
         </div>
 

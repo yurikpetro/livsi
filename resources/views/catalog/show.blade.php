@@ -62,11 +62,12 @@
             <div x-data="{ active: 0 }" class="flex flex-col gap-3">
                 <div class="bg-shell">
                     @foreach ($images as $i => $image)
-                        <img x-show="active === {{ $i }}"
-                             src="{{ asset($image->path) }}" alt="{{ $image->alt }}"
-                             width="900" height="1100"
-                             @if ($i > 0) loading="lazy" @endif
-                             class="aspect-[4/5] w-full object-cover">
+                        <x-img x-show="active === {{ $i }}"
+                               :path="$image->path" :alt="$image->alt"
+                               sizes="(min-width: 1024px) 50vw, 100vw"
+                               :loading="$i === 0 ? 'eager' : 'lazy'"
+                               :fetchpriority="$i === 0 ? 'high' : null"
+                               class="aspect-[4/5] w-full object-cover" />
                     @endforeach
 
                     @if ($images->isEmpty())
@@ -81,8 +82,8 @@
                                     :class="active === {{ $i }} ? 'border-ink' : 'border-line'"
                                     class="w-16 shrink-0 border bg-shell transition"
                                     aria-label="Кадр {{ $i + 1 }}">
-                                <img src="{{ asset($image->path) }}" alt="" loading="lazy"
-                                     width="120" height="150" class="aspect-[4/5] w-full object-cover">
+                                <x-img :path="$image->path" alt="" sizes="64px"
+                                       class="aspect-[4/5] w-full object-cover" />
                             </button>
                         @endforeach
                     </div>
@@ -103,7 +104,7 @@
                         {{-- Источник рейтинга обязателен: отзывы собраны не на сайте. --}}
                         <span class="text-[11px] text-muted">
                             ★ {{ number_format($product->rating, 1, ',', '') }} ·
-                            {{ $product->reviews_count }} отзывов на {{ $product->reviews_source }}
+                            {{ \App\Support\Plural::reviews((int) $product->reviews_count) }} на {{ $product->reviews_source }}
                         </span>
                     @endif
                 </div>

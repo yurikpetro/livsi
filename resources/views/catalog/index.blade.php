@@ -74,7 +74,7 @@
                 @endforeach
             </div>
             <span class="text-[11px] uppercase tracking-[0.08em] text-muted">
-                {{ trans_choice(':count товар|:count товара|:count товаров', $products->total(), ['count' => $products->total()]) }}
+                {{ \App\Support\Plural::products($products->total()) }}
             </span>
         </div>
 

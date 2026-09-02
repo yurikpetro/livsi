@@ -74,8 +74,8 @@
                                            class="flex items-center gap-4 px-2 py-2 hover:bg-shell">
                                             <span class="block w-10 shrink-0 bg-shell">
                                                 @if ($image)
-                                                    <img src="{{ asset($image->path) }}" alt=""
-                                                         width="80" height="100" class="aspect-[4/5] w-full object-cover">
+                                                    <x-img :path="$image->path" alt="" sizes="40px"
+                                                           class="aspect-[4/5] w-full object-cover" />
                                                 @endif
                                             </span>
                                             <span class="min-w-0 flex-1">

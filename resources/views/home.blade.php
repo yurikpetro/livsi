@@ -6,8 +6,9 @@
     {{-- Hero --}}
     <section class="relative">
         <div class="relative min-h-[520px] md:min-h-[640px] overflow-hidden bg-shell">
-            <img src="{{ asset('img/catalog/fresh-hero.jpg') }}" alt=""
-                 class="absolute inset-0 h-full w-full object-cover" width="1920" height="1080">
+            <x-img path="img/catalog/fresh-hero.jpg" alt="" sizes="100vw"
+                   loading="eager" fetchpriority="high"
+                   class="absolute inset-0 h-full w-full object-cover" />
             <div class="absolute inset-0 bg-gradient-to-r from-black/70 via-black/30 to-transparent"></div>
 
             <div class="site-container relative flex min-h-[520px] md:min-h-[640px] flex-col justify-center py-16 text-paper">
@@ -82,9 +83,9 @@
             <h2 class="text-4xl md:text-5xl">Ты и LIVSI.</h2>
             <div class="mt-8 grid gap-3 grid-cols-2 md:grid-cols-5">
                 @foreach ($ugc as $item)
-                    <img src="{{ asset($item->image_path) }}" alt="{{ $item->alt }}"
-                         loading="lazy" width="400" height="500"
-                         class="aspect-[4/5] w-full object-cover">
+                    <x-img :path="$item->image_path" :alt="$item->alt"
+                           sizes="(min-width: 768px) 20vw, 50vw"
+                           class="aspect-[4/5] w-full object-cover" />
                 @endforeach
             </div>
         </section>

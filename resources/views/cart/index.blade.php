@@ -46,8 +46,8 @@
 
                             <a href="{{ route('catalog.show', $item->variant->product) }}" class="block w-24 shrink-0 bg-shell">
                                 @if ($image)
-                                    <img src="{{ asset($image->path) }}" alt="{{ $image->alt }}"
-                                         width="200" height="250" class="aspect-[4/5] w-full object-cover">
+                                    <x-img :path="$image->path" :alt="$image->alt" sizes="96px"
+                                           class="aspect-[4/5] w-full object-cover" />
                                 @endif
                             </a>
 

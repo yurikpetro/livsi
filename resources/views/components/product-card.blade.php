@@ -11,9 +11,9 @@
 <article class="group flex flex-col border border-line bg-paper">
     <a href="{{ route('catalog.show', $product) }}" class="relative block aspect-[4/5] overflow-hidden bg-shell">
         @if ($image)
-            <img src="{{ asset($image->path) }}" alt="{{ $image->alt }}"
-                 loading="lazy" width="600" height="750"
-                 class="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]">
+            <x-img :path="$image->path" :alt="$image->alt"
+                   sizes="(min-width: 1024px) 25vw, 50vw"
+                   class="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
         @endif
 
         @if ($product->badge)

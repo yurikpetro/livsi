@@ -94,8 +94,8 @@
                                    wire:click="closeDrawer"
                                    class="block w-16 shrink-0 bg-shell">
                                     @if ($image)
-                                        <img src="{{ asset($image->path) }}" alt="{{ $image->alt }}"
-                                             width="128" height="160" class="aspect-[4/5] w-full object-cover">
+                                        <x-img :path="$image->path" :alt="$image->alt" sizes="64px"
+                                               class="aspect-[4/5] w-full object-cover" />
                                     @endif
                                 </a>
 
