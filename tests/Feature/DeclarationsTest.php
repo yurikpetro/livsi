@@ -53,6 +53,55 @@ class DeclarationsTest extends TestCase
         }
     }
 
+    /** «Уход» раскрывает ароматические линейки — как в макете. */
+    public function test_care_submenu_lists_the_aromatic_lines(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('id="catalog-sub-care"', $html);
+
+        foreach (['FRESH', 'SWEET', 'WARM', 'BASE'] as $line) {
+            $this->assertStringContainsString($line, $html);
+        }
+
+        // Пункты подменю ведут на лендинги линеек, а не на фильтр каталога.
+        foreach (['fresh', 'sweet', 'warm', 'base'] as $code) {
+            $this->assertStringContainsString(route('catalog.line', $code), $html);
+        }
+    }
+
+    /** PRO раскрывает свои подкатегории. */
+    public function test_pro_submenu_lists_its_subcategories(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('id="catalog-sub-pro"', $html);
+        $this->assertStringContainsString('SKIN', $html);
+        $this->assertStringContainsString('MANICURE / PEDICURE', $html);
+    }
+
+    public function test_submenu_links_open_working_pages(): void
+    {
+        foreach ([
+            route('catalog.line', 'fresh'),
+            route('catalog.line', 'base'),
+            route('catalog.index', ['tab' => 'pro', 'purpose' => ['body', 'face']]),
+            route('catalog.index', ['tab' => 'pro', 'purpose' => ['manicure', 'pedicure']]),
+        ] as $url) {
+            $this->get($url)->assertOk();
+        }
+    }
+
+    /** Маркеры подменю окрашены цветами линеек из брендбука. */
+    public function test_submenu_markers_use_brandbook_colours(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        foreach (['#d0dd56', '#f6accd', '#ffe405', '#f5e2b7', '#99d0f7'] as $colour) {
+            $this->assertStringContainsString('background: ' . $colour, $html);
+        }
+    }
+
     /** Сам пункт остаётся ссылкой, иначе без JavaScript каталог недоступен. */
     public function test_catalog_menu_trigger_is_a_link(): void
     {

@@ -1,11 +1,44 @@
 @php
-    // Пункты выпадающего меню каталога — как в макете.
+    /**
+     * Меню каталога с вложенностью — как в макете: «Уход» раскрывает
+     * ароматические линейки, PRO раскрывает свои подкатегории.
+     *
+     * Подкатегории PRO собраны из существующих осей навигации, а не из новой
+     * сущности: в прототипе SKIN и MANICURE / PEDICURE на текущих данных
+     * возвращают один и тот же единственный PRO-товар, различить их
+     * невозможно. Толкование требует подтверждения — docs/07-design-review.md §13.
+     */
     $catalogMenu = [
-        ['Все товары', route('catalog.index')],
-        ['Новинки',    route('catalog.index', ['tab' => 'new'])],
-        ['Наборы',     route('catalog.index', ['tab' => 'bundles'])],
-        ['Уход',       route('catalog.index', ['tab' => 'care'])],
-        ['PRO',        route('catalog.pro')],
+        ['label' => 'Все товары', 'url' => route('catalog.index')],
+        ['label' => 'Новинки',    'url' => route('catalog.index', ['tab' => 'new'])],
+        ['label' => 'Наборы',     'url' => route('catalog.index', ['tab' => 'bundles'])],
+        [
+            'label'    => 'Уход',
+            'url'      => route('catalog.index', ['tab' => 'care']),
+            'key'      => 'care',
+            'children' => $siteLines->map(fn ($line) => [
+                'label' => $line->title,
+                'url'   => route('catalog.line', $line),
+                'color' => $line->color_bg,
+            ])->all(),
+        ],
+        [
+            'label'    => 'PRO',
+            'url'      => route('catalog.pro'),
+            'key'      => 'pro',
+            'children' => [
+                [
+                    'label' => 'SKIN',
+                    'url'   => route('catalog.index', ['tab' => 'pro', 'purpose' => ['body', 'face']]),
+                    'color' => '#99d0f7',
+                ],
+                [
+                    'label' => 'MANICURE / PEDICURE',
+                    'url'   => route('catalog.index', ['tab' => 'pro', 'purpose' => ['manicure', 'pedicure']]),
+                    'color' => '#99d0f7',
+                ],
+            ],
+        ],
     ];
 @endphp
 
@@ -15,8 +48,8 @@
     </div>
 @endif
 
-<header x-data="{ menu: false, catalog: false }"
-        x-on:keydown.escape.window="menu = false; catalog = false"
+<header x-data="{ menu: false, catalog: false, sub: null }"
+        x-on:keydown.escape.window="menu = false; catalog = false; sub = null"
         class="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
     <div class="site-container grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-3 md:h-16 md:gap-4">
         <div class="flex items-center">
@@ -43,7 +76,7 @@
                      чтобы работал и без JavaScript, и в поиске. --}}
                 <div class="relative"
                      x-on:mouseenter="catalog = true"
-                     x-on:mouseleave="catalog = false">
+                     x-on:mouseleave="catalog = false; sub = null">
                     <a href="{{ route('catalog.index') }}"
                        x-on:click.prevent="catalog = ! catalog"
                        x-on:focus="catalog = true"
@@ -64,12 +97,39 @@
                          x-transition:enter="transition ease-out duration-150"
                          x-transition:enter-start="-translate-y-1 opacity-0"
                          x-transition:enter-end="translate-y-0 opacity-100"
-                         class="absolute left-0 top-full w-64 border border-line bg-paper py-3 shadow-xl">
-                        @foreach ($catalogMenu as [$label, $url])
-                            <a href="{{ $url }}"
-                               class="block px-5 py-2.5 text-sm font-bold normal-case tracking-normal hover:bg-shell">
-                                {{ $label }}
-                            </a>
+                         class="absolute left-0 top-full w-72 border border-line bg-paper py-3 shadow-xl">
+                        @foreach ($catalogMenu as $item)
+                            @if (empty($item['children']))
+                                <a href="{{ $item['url'] }}"
+                                   class="block px-5 py-2.5 text-sm font-bold normal-case tracking-normal hover:bg-shell">
+                                    {{ $item['label'] }}
+                                </a>
+                            @else
+                                {{-- Раздел с вложенностью: по наведению подсвечивается
+                                     сам раздел и раскрывается список под ним. --}}
+                                <div x-on:mouseenter="sub = '{{ $item['key'] }}'">
+                                    <a href="{{ $item['url'] }}"
+                                       :class="sub === '{{ $item['key'] }}' && 'bg-shell'"
+                                       :aria-expanded="sub === '{{ $item['key'] }}' ? 'true' : 'false'"
+                                       aria-controls="catalog-sub-{{ $item['key'] }}"
+                                       class="block px-5 py-2.5 text-sm font-bold normal-case tracking-normal">
+                                        {{ $item['label'] }}
+                                    </a>
+
+                                    <div id="catalog-sub-{{ $item['key'] }}"
+                                         x-show="sub === '{{ $item['key'] }}'"
+                                         x-cloak x-collapse
+                                         class="pb-1">
+                                        @foreach ($item['children'] as $child)
+                                            <a href="{{ $child['url'] }}"
+                                               class="flex items-center gap-2.5 px-5 py-2 pl-8 text-[11px] font-bold tracking-[0.06em] hover:bg-shell">
+                                                <span class="h-2 w-2 shrink-0" style="background: {{ $child['color'] }}"></span>
+                                                {{ $child['label'] }}
+                                            </a>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
                         @endforeach
 
                         <div class="mx-5 my-2 border-t border-line"></div>
@@ -97,13 +157,24 @@
         </div>
     </div>
 
-    {{-- Мобильное меню. Линейки тоже сюда, иначе с телефона до них
-         не добраться иначе как через фильтры каталога. --}}
+    {{-- Мобильное меню: та же структура, но вложенность раскрыта сразу —
+         на телефоне лишний уровень наведения только мешает. --}}
     <nav id="mobile-nav" x-show="menu" x-cloak x-collapse
          class="border-t border-line bg-paper md:hidden">
         <div class="site-container py-4">
-            @foreach ($catalogMenu as [$label, $url])
-                <a href="{{ $url }}" class="block py-2.5 text-sm font-bold uppercase tracking-[0.06em]">{{ $label }}</a>
+            @foreach ($catalogMenu as $item)
+                <a href="{{ $item['url'] }}" class="block py-2.5 text-sm font-bold uppercase tracking-[0.06em]">{{ $item['label'] }}</a>
+
+                @if (! empty($item['children']))
+                    <div class="mb-1 flex flex-wrap gap-2 pl-1">
+                        @foreach ($item['children'] as $child)
+                            <a href="{{ $child['url'] }}" class="chip gap-2">
+                                <span class="h-2 w-2 shrink-0" style="background: {{ $child['color'] }}"></span>
+                                {{ $child['label'] }}
+                            </a>
+                        @endforeach
+                    </div>
+                @endif
             @endforeach
 
             <a href="{{ route('declarations') }}" class="block py-2.5 text-sm font-bold uppercase tracking-[0.06em]">Декларации</a>
@@ -111,15 +182,6 @@
             <div class="mt-3 border-t border-line pt-3">
                 <a href="{{ route('partners') }}" class="block py-2.5 text-sm font-bold uppercase tracking-[0.06em]">Стать партнёром</a>
                 <a href="{{ route('contract') }}" class="block py-2.5 text-sm font-bold uppercase tracking-[0.06em]">Контрактное производство</a>
-            </div>
-
-            <div class="mt-3 border-t border-line pt-3">
-                <div class="eyebrow">Линейки</div>
-                <div class="mt-2 flex flex-wrap gap-2">
-                    @foreach ($siteLines as $line)
-                        <a href="{{ route('catalog.line', $line) }}" class="chip">{{ $line->title }}</a>
-                    @endforeach
-                </div>
             </div>
         </div>
     </nav>

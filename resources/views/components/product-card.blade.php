@@ -8,7 +8,7 @@
     $available = $product->isAvailable();
 @endphp
 
-<article class="group flex flex-col border border-line bg-paper">
+<article class="group relative flex flex-col border border-line bg-paper">
     <a href="{{ route('catalog.show', $product) }}" class="relative block aspect-[4/5] overflow-hidden bg-shell">
         @if ($image)
             <x-img :path="$image->path" :alt="$image->alt"
@@ -33,6 +33,19 @@
             </span>
         @endunless
     </a>
+
+    {{-- Быстрый просмотр. Кнопка вынесена из ссылки на товар: вложенные
+         интерактивные элементы ломают и клавиатуру, и разметку. На тач-устройствах
+         показываем всегда — там нет наведения. --}}
+    <div class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center pb-3 opacity-100 transition group-hover:opacity-100 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100"
+         style="top: auto">
+        <button type="button"
+                x-data
+                x-on:click="Livewire.dispatch('quick-view', { productId: {{ $product->id }} })"
+                class="pointer-events-auto bg-paper/95 px-3 py-2 text-[9px] font-bold uppercase tracking-[0.1em] shadow-sm hover:bg-paper">
+            Быстрый просмотр
+        </button>
+    </div>
 
     <div class="flex flex-1 flex-col p-4">
         <div class="flex items-start justify-between gap-3">
