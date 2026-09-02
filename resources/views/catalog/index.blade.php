@@ -1,70 +1,109 @@
 @extends('layouts.app')
 
-@section('title', 'Каталог косметики — LIVSI')
+@section('title', $query->q !== ''
+    ? 'Поиск: ' . $query->q . ' — LIVSI'
+    : 'Каталог косметики — LIVSI')
 
 @section('content')
-    <section class="site-container pt-14">
-        <h1 class="text-5xl md:text-6xl">Все товары.</h1>
+    <section class="site-container pt-10 md:pt-14">
+        @if ($query->q !== '')
+            <div class="eyebrow">Поиск</div>
+            <h1 class="mt-3 text-3xl md:text-5xl normal-case tracking-tight">«{{ $query->q }}»</h1>
+        @else
+            <h1 class="text-4xl md:text-6xl">Все товары.</h1>
+        @endif
 
-        {{-- Три независимые оси. Каждая комбинация — собственный адрес страницы. --}}
-        <div class="mt-10 space-y-4">
-            <div class="flex flex-wrap items-center gap-2">
-                <span class="eyebrow w-24">Подборки</span>
-                <a href="{{ route('catalog.index') }}"
-                   class="chip @if (! $filters['tab'] && ! $filters['line'] && ! $filters['purpose'] && ! $filters['task']) chip-active @endif">Все</a>
-                @foreach (['new' => 'Новинки', 'best' => 'Бестселлеры', 'bundles' => 'Наборы', 'pro' => 'PRO'] as $code => $title)
-                    <a href="{{ route('catalog.index', array_filter(array_merge($filters, ['tab' => $code]))) }}"
-                       class="chip @if ($filters['tab'] === $code) chip-active @endif">{{ $title }}</a>
-                @endforeach
-            </div>
-
-            <div class="flex flex-wrap items-center gap-2">
-                <span class="eyebrow w-24">Линейка</span>
-                @foreach ($lines as $line)
-                    <a href="{{ route('catalog.index', array_filter(array_merge($filters, ['line' => $filters['line'] === $line->code ? null : $line->code]))) }}"
-                       class="chip @if ($filters['line'] === $line->code) chip-active @endif">{{ $line->title }}</a>
-                @endforeach
-            </div>
-
-            <div class="flex flex-wrap items-center gap-2">
-                <span class="eyebrow w-24">Назначение</span>
-                @foreach ($purposes as $purpose)
-                    <a href="{{ route('catalog.index', array_filter(array_merge($filters, ['purpose' => $filters['purpose'] === $purpose->code ? null : $purpose->code]))) }}"
-                       class="chip @if ($filters['purpose'] === $purpose->code) chip-active @endif">{{ $purpose->title }}</a>
-                @endforeach
-            </div>
-
-            <div class="flex flex-wrap items-center gap-2">
-                <span class="eyebrow w-24">Задача</span>
-                @foreach ($tasks as $task)
-                    <a href="{{ route('catalog.index', array_filter(array_merge($filters, ['task' => $filters['task'] === $task->code ? null : $task->code]))) }}"
-                       class="chip @if ($filters['task'] === $task->code) chip-active @endif">{{ $task->title }}</a>
-                @endforeach
-            </div>
+        {{-- Быстрые подборки поверх осей --}}
+        <div class="mt-8 flex flex-wrap items-center gap-2">
+            <span class="eyebrow w-full sm:w-24">Подборки</span>
+            @foreach (\App\Services\CatalogQuery::TABS as $code => $title)
+                <a href="{{ $query->urlToggle('tab', $code) }}"
+                   class="chip @if ($query->isActive('tab', $code)) chip-active @endif">{{ $title }}</a>
+            @endforeach
         </div>
 
-        <div class="mt-8 flex items-center justify-between border-t border-line pt-4">
-            <div class="flex gap-4 text-[11px] uppercase tracking-[0.08em] text-muted">
-                @foreach (['popular' => 'По популярности', 'price_asc' => 'Сначала дешевле', 'price_desc' => 'Сначала дороже', 'rating' => 'По рейтингу'] as $code => $title)
-                    <a href="{{ route('catalog.index', array_filter(array_merge($filters, ['sort' => $code]))) }}"
-                       class="@if ($filters['sort'] === $code) text-ink font-bold @endif hover:text-ink">{{ $title }}</a>
+        {{-- Три независимые оси. Внутри оси — ИЛИ, между осями — И.
+             Счётчик считается без учёта своей оси, иначе фильтр становится тупиком. --}}
+        <div class="mt-4 space-y-3 border-t border-line pt-5">
+            @foreach ([
+                'line'    => ['Линейка', $facets['line']],
+                'purpose' => ['Назначение', $facets['purpose']],
+                'task'    => ['Задача', $facets['task']],
+            ] as $axis => [$label, $values])
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="eyebrow w-full sm:w-24">{{ $label }}</span>
+                    @foreach ($values as $value)
+                        @php $empty = $value->products_count === 0 && ! $query->isActive($axis, $value->code); @endphp
+                        <a href="{{ $empty ? '#' : $query->urlToggle($axis, $value->code) }}"
+                           @class([
+                               'chip gap-1.5',
+                               'chip-active' => $query->isActive($axis, $value->code),
+                               'pointer-events-none opacity-35' => $empty,
+                           ])
+                           @if ($empty) aria-disabled="true" tabindex="-1" @endif>
+                            {{ $value->title }}
+                            <span class="text-[9px] opacity-60">{{ $value->products_count }}</span>
+                        </a>
+                    @endforeach
+                </div>
+            @endforeach
+        </div>
+
+        {{-- Активные фильтры: каждый снимается по отдельности --}}
+        @if ($chips->isNotEmpty())
+            <div class="mt-5 flex flex-wrap items-center gap-2">
+                <span class="eyebrow w-full sm:w-24">Выбрано</span>
+                @foreach ($chips as $chip)
+                    <a href="{{ $chip['url'] }}" class="chip chip-active gap-2">
+                        {{ $chip['label'] }}
+                        <span aria-hidden="true" class="text-[11px] leading-none">✕</span>
+                    </a>
+                @endforeach
+                <a href="{{ route('catalog.index') }}"
+                   class="text-[10px] uppercase tracking-[0.08em] text-muted underline hover:text-ink">
+                    Сбросить всё
+                </a>
+            </div>
+        @endif
+
+        <div class="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-line pt-4">
+            <div class="flex flex-wrap gap-4 text-[11px] uppercase tracking-[0.08em] text-muted">
+                @foreach (\App\Services\CatalogQuery::SORTS as $code => $title)
+                    <a href="{{ $query->urlWithSort($code) }}"
+                       class="@if ($query->sort === $code) font-bold text-ink @endif hover:text-ink">{{ $title }}</a>
                 @endforeach
             </div>
-            <span class="text-[11px] uppercase tracking-[0.08em] text-muted">{{ trans_choice(':count товар|:count товара|:count товаров', $products->count(), ['count' => $products->count()]) }}</span>
+            <span class="text-[11px] uppercase tracking-[0.08em] text-muted">
+                {{ trans_choice(':count товар|:count товара|:count товаров', $products->total(), ['count' => $products->total()]) }}
+            </span>
         </div>
 
         @if ($products->isEmpty())
             <div class="py-24 text-center">
                 <p class="text-lg font-bold">Ничего не нашлось</p>
-                <p class="mt-2 text-xs text-muted">Попробуйте снять часть фильтров.</p>
-                <a href="{{ route('catalog.index') }}" class="btn btn-dark mt-6">Сбросить фильтры</a>
+                <p class="mt-2 text-xs text-muted">
+                    @if ($query->q !== '')
+                        По запросу «{{ $query->q }}» ничего нет. Попробуйте короче или другими словами.
+                    @else
+                        Попробуйте снять часть фильтров.
+                    @endif
+                </p>
+                @if ($query->hasFilters())
+                    <a href="{{ route('catalog.index') }}" class="btn btn-dark mt-6">Сбросить фильтры</a>
+                @endif
             </div>
         @else
-            <div class="mt-8 grid gap-4 grid-cols-2 lg:grid-cols-4">
+            <div class="mt-8 grid gap-3 grid-cols-2 md:gap-4 lg:grid-cols-4">
                 @foreach ($products as $product)
                     <x-product-card :product="$product" />
                 @endforeach
             </div>
+
+            @if ($products->hasPages())
+                <div class="mt-12">
+                    {{ $products->links() }}
+                </div>
+            @endif
         @endif
     </section>
 @endsection

@@ -19,6 +19,8 @@
         <div class="flex items-center justify-end gap-5">
             <a href="{{ route('catalog.index') }}" class="md:hidden text-[11px] font-bold uppercase tracking-[0.08em]">Каталог</a>
 
+            @livewire('search-box')
+
             @livewire('cart-drawer')
         </div>
     </div>

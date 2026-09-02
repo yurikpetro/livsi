@@ -3,79 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
-use App\Models\ProductLine;
-use App\Models\Purpose;
-use App\Models\Task;
+use App\Services\CatalogQuery;
 use Illuminate\Http\Request;
 
-/**
- * Каталог с тремя независимыми осями навигации (docs/06-scope-v2.md §3):
- * линейка — одна на товар, назначение и задача — many-to-many.
- *
- * Каждая комбинация фильтров живёт по собственному адресу — в прототипе
- * фильтры работали только в браузере и не давали индексируемых страниц.
- */
 class CatalogController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Product::active()->with(['line', 'images', 'variants.quota']);
-
-        // Ось 1: ароматическая линейка.
-        if ($line = $request->string('line')->toString()) {
-            $query->whereHas('line', fn ($q) => $q->where('code', $line));
-        }
-
-        // Ось 2: назначение.
-        if ($purpose = $request->string('purpose')->toString()) {
-            $query->whereHas('purposes', fn ($q) => $q->where('code', $purpose));
-        }
-
-        // Ось 3: задача.
-        if ($task = $request->string('task')->toString()) {
-            $query->whereHas('tasks', fn ($q) => $q->where('code', $task));
-        }
-
-        // Быстрые подборки поверх осей.
-        match ($request->string('tab')->toString()) {
-            'pro'     => $query->where('is_pro', true),
-            'bundles' => $query->where('is_bundle', true),
-            'new'     => $query->where('badge', 'new'),
-            'best'    => $query->where('badge', 'best'),
-            default   => null,
-        };
-
-        $sort = $request->string('sort')->toString() ?: 'popular';
-
-        match ($sort) {
-            'price_asc'  => $query->orderBy(
-                \App\Models\ProductVariant::select('price')
-                    ->whereColumn('product_variants.product_id', 'products.id')
-                    ->orderBy('price')
-                    ->limit(1)
-            ),
-            'price_desc' => $query->orderByDesc(
-                \App\Models\ProductVariant::select('price')
-                    ->whereColumn('product_variants.product_id', 'products.id')
-                    ->orderBy('price')
-                    ->limit(1)
-            ),
-            'rating'     => $query->orderByDesc('rating'),
-            default      => $query->orderBy('sort'),
-        };
+        $query  = CatalogQuery::fromRequest($request);
+        $facets = $query->facets();
 
         return view('catalog.index', [
-            'products' => $query->get(),
-            'lines'    => ProductLine::active()->orderBy('sort')->get(),
-            'purposes' => Purpose::where('is_active', true)->orderBy('sort')->get(),
-            'tasks'    => Task::where('is_active', true)->orderBy('sort')->get(),
-            'filters'  => [
-                'line'    => $line ?? null,
-                'purpose' => $purpose ?? null,
-                'task'    => $task ?? null,
-                'tab'     => $request->string('tab')->toString(),
-                'sort'    => $sort,
-            ],
+            'query'    => $query,
+            'facets'   => $facets,
+            'chips'    => $query->chips($facets),
+            'products' => $query->builder()->paginate(CatalogQuery::PER_PAGE)->withQueryString(),
         ]);
     }
 
