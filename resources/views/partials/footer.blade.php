@@ -28,6 +28,7 @@
             <ul class="mt-5 space-y-3 text-xs">
                 <li><a href="{{ route('partners') }}" class="hover:text-neon">Стать партнёром</a></li>
                 <li><a href="{{ route('contract') }}" class="hover:text-neon">Контрактное производство</a></li>
+                <li><a href="{{ route('declarations') }}" class="hover:text-neon">Декларации соответствия</a></li>
             </ul>
         </div>
 

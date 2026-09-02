@@ -37,6 +37,11 @@ class CatalogQuery
         'new'     => 'Новинки',
         'best'    => 'Бестселлеры',
         'bundles' => 'Наборы',
+        // «Уход» в прототипе стоит рядом с «Наборами» и отдельно от PRO,
+        // поэтому читаем его как «отдельные средства для дома»: не набор
+        // и не профессиональная линейка. Толкование требует подтверждения —
+        // это часть открытого вопроса по таксономии (docs/07-design-review.md §5.6).
+        'care'    => 'Уход',
         'pro'     => 'PRO',
     ];
 
@@ -248,6 +253,7 @@ class CatalogQuery
         match ($this->tab) {
             'pro'     => $query->where('is_pro', true),
             'bundles' => $query->where('is_bundle', true),
+            'care'    => $query->where('is_pro', false)->where('is_bundle', false),
             'new'     => $query->where('badge', 'new'),
             'best'    => $query->where('badge', 'best'),
             default   => null,

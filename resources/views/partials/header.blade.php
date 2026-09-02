@@ -1,13 +1,24 @@
+@php
+    // Пункты выпадающего меню каталога — как в макете.
+    $catalogMenu = [
+        ['Все товары', route('catalog.index')],
+        ['Новинки',    route('catalog.index', ['tab' => 'new'])],
+        ['Наборы',     route('catalog.index', ['tab' => 'bundles'])],
+        ['Уход',       route('catalog.index', ['tab' => 'care'])],
+        ['PRO',        route('catalog.pro')],
+    ];
+@endphp
+
 @if ($siteTopbar)
     <div class="bg-ink px-4 py-2.5 text-center text-[9px] uppercase leading-tight tracking-[0.12em] text-paper sm:text-[10px] sm:tracking-[0.14em]">
         {{ $siteTopbar }}
     </div>
 @endif
 
-<header x-data="{ menu: false }" class="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
+<header x-data="{ menu: false, catalog: false }"
+        x-on:keydown.escape.window="menu = false; catalog = false"
+        class="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
     <div class="site-container grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-3 md:h-16 md:gap-4">
-        {{-- На мобильном навигация уезжает в выдвижное меню: три пункта
-             с длинными названиями в строку не помещаются. --}}
         <div class="flex items-center">
             <button type="button" x-on:click="menu = !menu"
                     class="-ml-1 p-1 md:hidden"
@@ -27,7 +38,50 @@
             </button>
 
             <nav class="hidden items-center gap-7 text-[11px] font-bold uppercase tracking-[0.08em] md:flex">
-                <a href="{{ route('catalog.index') }}" class="hover:text-green">Каталог</a>
+                {{-- «Каталог» — раскрывающееся меню: наведением на десктопе
+                     и по клику с клавиатуры. Сам пункт остаётся ссылкой,
+                     чтобы работал и без JavaScript, и в поиске. --}}
+                <div class="relative"
+                     x-on:mouseenter="catalog = true"
+                     x-on:mouseleave="catalog = false">
+                    <a href="{{ route('catalog.index') }}"
+                       x-on:click.prevent="catalog = ! catalog"
+                       x-on:focus="catalog = true"
+                       :aria-expanded="catalog ? 'true' : 'false'"
+                       aria-controls="catalog-menu"
+                       class="flex items-center gap-1.5 py-2 hover:text-green">
+                        Каталог
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2.5" aria-hidden="true"
+                             :class="catalog && 'rotate-180'" class="transition">
+                            <path d="m6 9 6 6 6-6"></path>
+                        </svg>
+                    </a>
+
+                    <div id="catalog-menu"
+                         x-show="catalog"
+                         x-cloak
+                         x-transition:enter="transition ease-out duration-150"
+                         x-transition:enter-start="-translate-y-1 opacity-0"
+                         x-transition:enter-end="translate-y-0 opacity-100"
+                         class="absolute left-0 top-full w-64 border border-line bg-paper py-3 shadow-xl">
+                        @foreach ($catalogMenu as [$label, $url])
+                            <a href="{{ $url }}"
+                               class="block px-5 py-2.5 text-sm font-bold normal-case tracking-normal hover:bg-shell">
+                                {{ $label }}
+                            </a>
+                        @endforeach
+
+                        <div class="mx-5 my-2 border-t border-line"></div>
+
+                        <a href="{{ route('declarations') }}"
+                           class="flex items-center justify-between gap-4 px-5 py-2.5 hover:bg-shell">
+                            <span>Декларации</span>
+                            <span aria-hidden="true">→</span>
+                        </a>
+                    </div>
+                </div>
+
                 <a href="{{ route('partners') }}" class="hover:text-green">Стать партнёром</a>
                 <a href="{{ route('contract') }}" class="hover:text-green">Контрактное производство</a>
             </nav>
@@ -43,15 +97,21 @@
         </div>
     </div>
 
-    {{-- Мобильное меню: линейки тоже сюда, иначе с телефона до них
+    {{-- Мобильное меню. Линейки тоже сюда, иначе с телефона до них
          не добраться иначе как через фильтры каталога. --}}
     <nav id="mobile-nav" x-show="menu" x-cloak x-collapse
          class="border-t border-line bg-paper md:hidden">
         <div class="site-container py-4">
-            <a href="{{ route('catalog.index') }}" class="block py-2.5 text-sm font-bold uppercase tracking-[0.06em]">Каталог</a>
-            <a href="{{ route('catalog.pro') }}" class="block py-2.5 text-sm font-bold uppercase tracking-[0.06em]">LIVSI PRO</a>
-            <a href="{{ route('partners') }}" class="block py-2.5 text-sm font-bold uppercase tracking-[0.06em]">Стать партнёром</a>
-            <a href="{{ route('contract') }}" class="block py-2.5 text-sm font-bold uppercase tracking-[0.06em]">Контрактное производство</a>
+            @foreach ($catalogMenu as [$label, $url])
+                <a href="{{ $url }}" class="block py-2.5 text-sm font-bold uppercase tracking-[0.06em]">{{ $label }}</a>
+            @endforeach
+
+            <a href="{{ route('declarations') }}" class="block py-2.5 text-sm font-bold uppercase tracking-[0.06em]">Декларации</a>
+
+            <div class="mt-3 border-t border-line pt-3">
+                <a href="{{ route('partners') }}" class="block py-2.5 text-sm font-bold uppercase tracking-[0.06em]">Стать партнёром</a>
+                <a href="{{ route('contract') }}" class="block py-2.5 text-sm font-bold uppercase tracking-[0.06em]">Контрактное производство</a>
+            </div>
 
             <div class="mt-3 border-t border-line pt-3">
                 <div class="eyebrow">Линейки</div>

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CatalogController;
+use App\Http\Controllers\DeclarationController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LineController;
 use App\Http\Controllers\PageController;
@@ -15,6 +16,8 @@ Route::get('/product/{product}', [CatalogController::class, 'show'])->name('cata
 
 Route::get('/pro', [LineController::class, 'pro'])->name('catalog.pro');
 Route::get('/line/{line:code}', [LineController::class, 'show'])->name('catalog.line');
+
+Route::get('/declarations', DeclarationController::class)->name('declarations');
 
 Route::get('/cart', [CartController::class, 'index'])->name('cart.index');
 Route::post('/cart/add', [CartController::class, 'add'])->name('cart.add');

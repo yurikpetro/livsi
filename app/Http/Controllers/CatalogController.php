@@ -39,7 +39,7 @@ class CatalogController extends Controller
     {
         abort_unless($product->is_active, 404);
 
-        $product->load(['line', 'images', 'variants.quota', 'purposes', 'tasks', 'reviews']);
+        $product->load(['line', 'images', 'variants.quota', 'purposes', 'tasks', 'reviews', 'declarations']);
 
         $related = Product::active()
             ->where('id', '!=', $product->id)

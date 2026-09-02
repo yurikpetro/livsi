@@ -63,6 +63,7 @@ class AdminPanelTest extends TestCase
             'отзывы'            => ['/admin/reviews'],
             'галерея'           => ['/admin/ugc-items'],
             'вопросы и ответы'  => ['/admin/faq-items'],
+            'декларации'        => ['/admin/declarations'],
             'реквизиты'         => ['/admin/seller-profiles'],
         ];
     }

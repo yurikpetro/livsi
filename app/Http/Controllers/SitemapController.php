@@ -14,6 +14,7 @@ class SitemapController extends Controller
             ['loc' => route('home'), 'priority' => '1.0'],
             ['loc' => route('catalog.index'), 'priority' => '0.9'],
             ['loc' => route('catalog.pro'), 'priority' => '0.8'],
+            ['loc' => route('declarations'), 'priority' => '0.7'],
             ['loc' => route('partners'), 'priority' => '0.6'],
             ['loc' => route('contract'), 'priority' => '0.6'],
         ];

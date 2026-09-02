@@ -185,20 +185,31 @@
                         @endif
                     @endforeach
 
-                    @if ($product->documents)
+                    @if ($product->declarations->isNotEmpty())
                         <details class="group py-4">
                             <summary class="flex cursor-pointer list-none items-center justify-between gap-4">
                                 <span class="text-xs font-bold uppercase tracking-[0.08em]">Документы</span>
                                 <span class="text-lg text-muted transition group-open:rotate-45" aria-hidden="true">+</span>
                             </summary>
                             <ul class="mt-3 space-y-2 text-xs">
-                                @foreach ($product->documents as $doc)
-                                    <li>
-                                        <a href="{{ $doc['url'] ?? '#' }}" class="underline hover:text-green"
-                                           target="_blank" rel="noopener">{{ $doc['title'] ?? 'Документ' }}</a>
+                                @foreach ($product->declarations as $declaration)
+                                    <li class="flex items-baseline justify-between gap-4">
+                                        <span>
+                                            Декларация {{ $declaration->number }}
+                                            @if ($declaration->valid_until)
+                                                <span class="text-muted">· до {{ $declaration->valid_until->format('d.m.Y') }}</span>
+                                            @endif
+                                        </span>
+                                        @if ($declaration->hasFile())
+                                            <a href="{{ asset($declaration->file_path) }}" target="_blank" rel="noopener"
+                                               class="shrink-0 underline hover:text-green">PDF</a>
+                                        @endif
                                     </li>
                                 @endforeach
                             </ul>
+                            <a href="{{ route('declarations') }}" class="mt-3 inline-block text-[10px] uppercase tracking-[0.08em] text-muted underline hover:text-ink">
+                                Все декларации
+                            </a>
                         </details>
                     @endif
                 </div>

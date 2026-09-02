@@ -18,7 +18,6 @@ class Product extends Model
         'is_active'    => 'boolean',
         'rating'       => 'float',
         'vat_rate'     => 'float',
-        'documents'    => 'array',
         'published_at' => 'datetime',
     ];
 
@@ -57,6 +56,11 @@ class Product extends Model
     public function reviews(): HasMany
     {
         return $this->hasMany(Review::class);
+    }
+
+    public function declarations(): BelongsToMany
+    {
+        return $this->belongsToMany(Declaration::class)->where('is_active', true)->orderBy('sort');
     }
 
     public function bundleItems(): HasMany
