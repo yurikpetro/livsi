@@ -28,6 +28,17 @@ use Illuminate\Support\Str;
  */
 class CatalogSeeder extends Seeder
 {
+    /** Временные изображения из старого макета — до реальной съёмки. */
+    private const PLACEHOLDER_IMAGES = [
+        'fresh-hero.jpg',
+        'sweet-portrait.jpg',
+        'mango-product.jpg',
+        'warm-portrait.jpg',
+        'sweet-closeup.jpg',
+        'avatar3.jpg',
+        'avatar4.jpg',
+    ];
+
     public function run(): void
     {
         $lines     = $this->seedLines();
@@ -270,6 +281,9 @@ class CatalogSeeder extends Seeder
                 'aroma'             => $row['aroma'] ?? null,
                 'effect'            => $row['effect'] ?? null,
                 'active_ingredients' => $row['active'] ?? null,
+                // Способ применения общий и безопасный. Состав (INCI) намеренно
+                // пустой: выдумывать его нельзя, ждём документацию производителя.
+                'application'        => $this->applicationFor($row['slug']),
                 'rating'            => $row['rating'],
                 'reviews_count'     => $row['reviews'],
                 'reviews_source'    => 'Ozon',
@@ -281,10 +295,20 @@ class CatalogSeeder extends Seeder
             $product->purposes()->sync(collect($row['purposes'])->map(fn ($c) => $purposes[$c]->id)->all());
             $product->tasks()->sync(collect($row['tasks'])->map(fn ($c) => $tasks[$c]->id)->all());
 
-            ProductImage::updateOrCreate(
-                ['product_id' => $product->id, 'path' => 'img/catalog/' . $row['image']],
-                ['alt' => $row['title'], 'is_primary' => true, 'sort' => 0],
-            );
+            // Галерея: основной кадр плюс два дополнительных из того же пула
+            // заглушек. Реальные фото без маркетплейсной инфографики ещё
+            // не переданы — вопрос 14.6.
+            $gallery = array_values(array_unique([
+                $row['image'],
+                ...array_slice(array_diff(self::PLACEHOLDER_IMAGES, [$row['image']]), 0, 2),
+            ]));
+
+            foreach ($gallery as $i => $file) {
+                ProductImage::updateOrCreate(
+                    ['product_id' => $product->id, 'path' => 'img/catalog/' . $file],
+                    ['alt' => $row['title'], 'is_primary' => $i === 0, 'sort' => $i * 10],
+                );
+            }
 
             $vSort = 0;
 
@@ -316,6 +340,30 @@ class CatalogSeeder extends Seeder
                 );
             }
         }
+    }
+
+    /**
+     * Способ применения. Текст общий и безопасный — он не утверждает ничего
+     * о составе. Поле composition (INCI) намеренно оставлено пустым:
+     * придумывать состав нельзя, ждём документацию производителя.
+     */
+    private function applicationFor(string $slug): ?string
+    {
+        return match ($slug) {
+            'multipenka-dlya-ruk-i-stop', 'multipenka-dlya-manikyura-fresh', 'multipenka-dlya-manikyura-sweet' =>
+                'Нанесите пенку на сухую кожу, распределите и снимите салфеткой. Смывать не требуется. Подходит для использования перед процедурой и между этапами.',
+            'krem-dlya-ruk-i-stop-25-urea' =>
+                'Нанесите на чистую сухую кожу рук или стоп, распределите массирующими движениями до впитывания. Используйте ежедневно, при выраженной сухости — дважды в день.',
+            'parfyumirovannyy-mist-dlya-tela' =>
+                'Распылите на расстоянии 20–30 см от кожи. При необходимости обновляйте в течение дня.',
+            'skrab-dlya-tela' =>
+                'Нанесите на влажную кожу, помассируйте 1–2 минуты и смойте тёплой водой. Используйте 1–2 раза в неделю.',
+            'keratoliticheskiy-gel-dlya-stop' =>
+                'Только для профессионального применения. Нанесите на участки гиперкератоза, выдержите по протоколу, обработайте и нейтрализуйте. Не наносите на повреждённую кожу.',
+            'nabor-chistota-i-myagkost' =>
+                'Первый шаг — очищение пенкой, второй — нанесение крема на сухую кожу. Используйте ежедневно.',
+            default => null,
+        };
     }
 
     private function seedReviews(): void

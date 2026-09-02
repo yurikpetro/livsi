@@ -18,6 +18,15 @@ class CatalogController extends Controller
             'facets'   => $facets,
             'chips'    => $query->chips($facets),
             'products' => $query->builder()->paginate(CatalogQuery::PER_PAGE)->withQueryString(),
+
+            // Сортировка не меняет состав выдачи, только порядок, поэтому
+            // канонический адрес — без неё. Страница в каноническом остаётся:
+            // иначе вторая страница склеилась бы с первой.
+            'canonical' => $query->canonicalUrl($request->integer('page') ?: null),
+
+            // Выдачу поиска не индексируем: бесконечные варианты запросов
+            // создают мусорные страницы.
+            'robots' => $query->q !== '' ? 'noindex, follow' : null,
         ]);
     }
 

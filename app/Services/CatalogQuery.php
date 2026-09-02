@@ -164,6 +164,22 @@ class CatalogQuery
         return $this->url($params);
     }
 
+    /**
+     * Канонический адрес: те же фильтры, но без сортировки — она меняет
+     * только порядок, а не состав выдачи, и плодила бы дубли для поиска.
+     */
+    public function canonicalUrl(?int $page = null): string
+    {
+        $params = $this->toArray();
+        unset($params['sort']);
+
+        if ($page && $page > 1) {
+            $params['page'] = $page;
+        }
+
+        return $this->url($params);
+    }
+
     public function urlWithSort(string $sort): string
     {
         return $this->url([...$this->toArray(), 'sort' => $sort]);
