@@ -26,69 +26,65 @@
 
 @section('content')
     {{-- ─────────────────────────────────────────────── первый экран --}}
-    <section class="bg-shell">
-        <div class="site-container grid items-stretch gap-10 py-16 md:grid-cols-2 md:gap-14 md:py-24">
-            <div class="flex flex-col">
+    <section>
+        <div class="site-container page-hero">
+            <div class="page-hero-copy">
                 <div class="eyebrow">Контрактное производство</div>
 
-                <h1 class="mt-5 text-[2.75rem] leading-[0.92] sm:text-6xl lg:text-7xl">
+                <h1 class="page-hero-title">
                     Косметика<br>под вашим<br>брендом
                 </h1>
 
-                <p class="mt-7 max-w-md text-sm leading-relaxed text-muted">
+                <p class="page-hero-lede">
                     На базе собственного производства LIVSI создадим косметику по вашему
                     запросу — с вашим названием и для ваших клиентов.
                 </p>
 
-                <div class="mt-10 flex items-center justify-between border-y border-line py-4 text-[10px] font-bold uppercase tracking-[0.12em]">
+                <div class="model-line model-line-wide">
                     <span>Ваша идея</span>
-                    <span aria-hidden="true" class="text-muted">→</span>
+                    <b aria-hidden="true">→</b>
                     <span>Готовый продукт</span>
                 </div>
 
-                <a href="#contract-request" class="btn btn-dark mt-auto w-full max-w-xs">
+                <a href="#contract-request" class="btn btn-dark page-hero-cta">
                     Обсудить проект
                     <span aria-hidden="true">↓</span>
                 </a>
             </div>
 
             <x-photo-slot :path="$shots[0]['path']" :alt="$shots[0]['alt']"
-                          :badge="$shots[0]['badge']"
+                          number="01"
+                          :caption="$shots[0]['badge']"
                           placeholder="Фото производства"
-                          tint="bg-paper"
                           sizes="(min-width: 768px) 50vw, 100vw"
-                          :priority="true"
-                          class="min-h-64" />
+                          :priority="true" />
         </div>
     </section>
 
     {{-- ─────────────────────────────────────────────── этапы --}}
     <section class="site-container py-16 md:py-24">
-        <div class="grid gap-10 md:grid-cols-2 md:gap-14">
+        <div class="grid gap-[42px] md:grid-cols-2 md:gap-[clamp(55px,8vw,125px)]">
             <x-photo-slot :path="$shots[1]['path']" :alt="$shots[1]['alt']"
-                          :badge="$shots[1]['badge']"
-                          badge-class="bg-paper"
+                          number="02"
+                          :caption="$shots[1]['badge']"
                           placeholder="Фото продукции под брендом клиента"
-                          tint="bg-shell"
                           sizes="(min-width: 768px) 50vw, 100vw"
-                          class="order-2 min-h-64 md:order-1" />
+                          class="order-2 md:order-1" />
 
-            <div class="order-1 md:order-2">
+            <div class="order-1 self-center md:order-2">
                 <div class="eyebrow">Этапы проекта</div>
-                <h2 class="mt-4 text-4xl md:text-5xl">Как мы<br>работаем</h2>
-                <p class="mt-5 max-w-md text-sm leading-relaxed text-muted">
+                <h2 class="section-title mt-6">Как мы<br>работаем</h2>
+                <p class="section-lede">
                     Начинаем с вашей задачи и последовательно доводим её до готового продукта.
                 </p>
 
-                <ol class="mt-10 divide-y divide-line border-t border-line">
+                <ol class="step-list">
                     @foreach ($steps as $i => [$title, $text])
-                        <li class="flex gap-5 py-6">
-                            <span class="shrink-0 text-xs font-black text-green">
-                                {{ str_pad($i + 1, 2, '0', STR_PAD_LEFT) }}
-                            </span>
+                        <li>
+                            <span>{{ str_pad($i + 1, 2, '0', STR_PAD_LEFT) }}</span>
                             <div>
-                                <h3 class="text-base normal-case tracking-normal">{{ $title }}</h3>
-                                <p class="mt-2 text-xs leading-relaxed text-muted">{{ $text }}</p>
+                                <h3>{{ $title }}</h3>
+                                <p>{{ $text }}</p>
                             </div>
                         </li>
                     @endforeach
@@ -98,12 +94,12 @@
     </section>
 
     {{-- ─────────────────────────────────────────────── заявка --}}
-    <section id="contract-request" class="bg-shell scroll-mt-24">
-        <div class="site-container grid gap-10 py-16 md:grid-cols-2 md:gap-16 md:py-24">
+    <section id="contract-request" class="lead-section scroll-mt-24">
+<div class="site-container lead-layout py-16 md:py-24">
             <div>
-                <div class="eyebrow">Заявка на производство</div>
-                <h2 class="mt-4 text-4xl md:text-5xl">Обсудить<br>проект</h2>
-                <p class="mt-5 max-w-md text-sm leading-relaxed text-muted">
+                <div><span class="lead-eyebrow">Заявка на производство</span></div>
+                <h2 class="lead-title">Обсудить<br>проект</h2>
+                <p class="lead-lede">
                     Оставьте контакты и коротко опишите задачу. Менеджер свяжется
                     с вами и уточнит детали.
                 </p>
@@ -128,7 +124,7 @@
                         </a>
                     </div>
                 @else
-                    <form method="POST" action="{{ route('contract.store') }}" class="space-y-5">
+                    <form method="POST" action="{{ route('contract.store') }}" class="lead-form">
                         @csrf
 
                         @error('company_website')
@@ -185,7 +181,7 @@
                         {{-- Поля для описания задачи в прототипе нет, хотя текст выше
                              просит «коротко опишите задачу». Добавлено: без него
                              менеджеру придётся выяснять всё звонком с нуля. --}}
-                        <label class="field">
+                        <label class="field field-wide">
                             <span class="field-label">Опишите задачу</span>
                             <textarea name="comment" rows="4"
                                       placeholder="Что за продукт, для кого, есть ли пожелания по составу и упаковке"
@@ -214,7 +210,7 @@
                             </span>
                         </label>
 
-                        <button type="submit" class="btn btn-dark w-full">
+                        <button type="submit" class="btn btn-dark">
                             Отправить заявку
                             <span aria-hidden="true">→</span>
                         </button>

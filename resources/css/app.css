@@ -218,24 +218,27 @@
     .field-control {
         display: block;
         width: 100%;
-        min-height: 3rem;
-        padding: 0.75rem 0.875rem;
+        /* 52px — высота поля в прототипе. */
+        height: 3.25rem;
+        padding: 0 0.8125rem;
         font-size: 0.875rem;
+        line-height: 1.3;
         color: var(--color-ink);
         background: var(--color-paper);
         border: 1px solid #aaa9a2;
         border-radius: 0;
-        transition: border-color 120ms ease;
+        transition: border-color 120ms ease, box-shadow 120ms ease;
     }
 
     .field-control::placeholder {
-        color: var(--color-muted);
+        color: #85857f;
     }
 
+    /* Фокус в прототипе — неоновая обводка тенью, а не системный outline. */
     .field-control:focus {
-        outline: 2px solid var(--color-ink);
-        outline-offset: -2px;
+        outline: 0;
         border-color: var(--color-ink);
+        box-shadow: 0 0 0 2px var(--color-neon);
     }
 
     /* Ошибку показываем не только цветом: на цвет полагаться нельзя. */
@@ -252,7 +255,9 @@
     }
 
     textarea.field-control {
+        height: auto;
         min-height: 7rem;
+        padding: 0.8125rem;
         resize: vertical;
     }
 
@@ -264,6 +269,287 @@
         background-size: 5px 5px, 5px 5px;
         background-repeat: no-repeat;
         padding-right: 2.5rem;
+    }
+
+    /* ---------------------------------------------------------------------
+       Страницы заявок: полоса «от … к …», список этапов, заголовки.
+       Значения из прототипа — линии там почти чёрные, а не светлые,
+       и номера этапов не окрашены.
+       --------------------------------------------------------------------- */
+
+    /* Первый экран страниц заявок. Обе страницы в прототипе используют
+       одну и ту же вёрстку, различается только ширина полосы «от → к». */
+    .page-hero {
+        display: grid;
+        gap: clamp(38px, 5vw, 78px);
+        padding-top: 76px;
+        padding-bottom: 80px;
+        background: var(--color-shell);
+        border-bottom: 1px solid var(--color-ink);
+    }
+
+    @media (min-width: 768px) {
+        .page-hero {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            min-height: 680px;
+        }
+    }
+
+    .page-hero-copy {
+        align-self: center;
+    }
+
+    .page-hero-title {
+        margin: 24px 0;
+        max-width: 45rem;
+        font-size: clamp(2.3125rem, 10.4vw, 2.75rem);
+        font-weight: 900;
+        line-height: 1.08;
+        letter-spacing: -0.01em;
+    }
+
+    @media (min-width: 768px) {
+        .page-hero-title {
+            margin: 28px 0 24px;
+            font-size: clamp(3.25rem, 5.45vw, 4.875rem);
+            line-height: 1.04;
+            letter-spacing: -0.022em;
+        }
+    }
+
+    .page-hero-lede {
+        margin: 0;
+        max-width: 36.875rem;
+        font-size: 1rem;
+        line-height: 1.6;
+        color: #4f4f4a;
+    }
+
+    .page-hero-cta {
+        width: 100%;
+        margin-top: 20px;
+    }
+
+    @media (min-width: 768px) {
+        .page-hero-cta {
+            width: min(100%, 290px);
+            margin-top: 24px;
+        }
+    }
+
+    /* «Опт → Розница», «Ваша идея → Готовый продукт». */
+    .model-line {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: min(100%, 380px);
+        height: 50px;
+        margin-top: 30px;
+        border-top: 1px solid var(--color-ink);
+        border-bottom: 1px solid var(--color-ink);
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.025em;
+        text-transform: uppercase;
+        line-height: 1.2;
+    }
+
+    @media (min-width: 768px) {
+        .model-line {
+            font-size: 0.875rem;
+        }
+    }
+
+    .model-line b {
+        font-size: 1.0625rem;
+        font-weight: 550;
+    }
+
+    /* «Ваша идея → Готовый продукт» длиннее, чем «Опт → Розница». */
+    .model-line-wide {
+        width: min(100%, 500px);
+        font-size: 0.625rem;
+        letter-spacing: 0.01em;
+    }
+
+    @media (min-width: 768px) {
+        .model-line-wide {
+            font-size: 0.6875rem;
+        }
+    }
+
+    /* Список этапов «Как это работает» / «Как мы работаем». */
+    .step-list {
+        margin-top: 31px;
+        padding: 0;
+        list-style: none;
+        border-top: 1px solid var(--color-ink);
+    }
+
+    @media (min-width: 768px) {
+        .step-list {
+            margin-top: 42px;
+        }
+    }
+
+    .step-list li {
+        display: grid;
+        grid-template-columns: 44px 1fr;
+        align-items: center;
+        gap: 16px;
+        min-height: 90px;
+        padding: 17px 0;
+        border-bottom: 1px solid var(--color-ink);
+    }
+
+    @media (min-width: 768px) {
+        .step-list li {
+            min-height: 94px;
+        }
+    }
+
+    /* Номер этапа — не цветной: цветом в прототипе выделены только
+       номера на подписях под фотографиями. */
+    .step-list li > span {
+        font-size: 0.625rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+    }
+
+    .step-list h3 {
+        margin: 0 0 7px;
+        font-size: 1.0625rem;
+        font-weight: 700;
+        line-height: 1.3;
+        letter-spacing: -0.008em;
+        text-transform: none;
+    }
+
+    @media (min-width: 768px) {
+        .step-list h3 {
+            font-size: 1.125rem;
+        }
+    }
+
+    .step-list p {
+        margin: 0;
+        font-size: 0.875rem;
+        line-height: 1.55;
+        color: #60605a;
+    }
+
+    /* Заголовок секции на страницах заявок. */
+    .section-title {
+        margin: 0;
+        font-size: clamp(2.125rem, 4.65vw, 4.125rem);
+        line-height: 1.06;
+        letter-spacing: -0.018em;
+    }
+
+    .section-lede {
+        margin-top: 22px;
+        max-width: 31.25rem;
+        font-size: 0.9375rem;
+        line-height: 1.6;
+        color: #5e5e58;
+    }
+
+    /* ---------------------------------------------------------------------
+       Блок заявки на страницах «Стать партнёром» и «Контрактное
+       производство». Значения из прототипа: рамка в один пиксель тёмным,
+       белый фон, внутренний отступ 34px, поля в две колонки.
+       --------------------------------------------------------------------- */
+    .lead-section {
+        /* В прототипе это --paper (#f3f2eb) — тёплый фон. У нас палитра
+           из брендбука, где paper = чистый белый, а этому оттенку
+           соответствует shell. */
+        background: var(--color-shell);
+        border-top: 1px solid #c9c9c2;
+    }
+
+    .lead-layout {
+        display: grid;
+        gap: clamp(35px, 8vw, 125px);
+    }
+
+    @media (min-width: 768px) {
+        .lead-layout {
+            /* Левая колонка уже правой — в прототипе .82fr против 1.18fr. */
+            grid-template-columns: minmax(330px, 0.82fr) minmax(0, 1.18fr);
+        }
+    }
+
+    /* Надзаголовок блока заявки — на неоновой подложке. */
+    .lead-eyebrow {
+        display: inline-block;
+        padding: 7px 9px;
+        background: var(--color-neon);
+        font-size: 0.625rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--color-ink);
+    }
+
+    .lead-form {
+        display: grid;
+        grid-template-columns: 1fr;
+        align-content: start;
+        gap: 22px;
+        padding: 24px 18px;
+        background: var(--color-paper);
+        border: 1px solid var(--color-ink);
+    }
+
+    @media (min-width: 768px) {
+        .lead-form {
+            grid-template-columns: 1fr 1fr;
+            gap: 25px 18px;
+            padding: 34px;
+        }
+    }
+
+    /* Согласие, кнопка и широкие поля занимают всю ширину формы. */
+    .lead-form .field-wide,
+    .lead-form .consent,
+    .lead-form button[type='submit'],
+    .lead-form .field-error[role='alert'] {
+        grid-column: 1 / -1;
+    }
+
+    .lead-form .field-label {
+        margin-bottom: 0.625rem;
+        font-size: 0.6875rem;
+        letter-spacing: 0.025em;
+        line-height: 1.35;
+        color: var(--color-ink);
+    }
+
+    /* Кнопка на всю ширину формы на мобильном и не больше 310px на десктопе. */
+    .lead-form button[type='submit'] {
+        width: 100%;
+    }
+
+    @media (min-width: 768px) {
+        .lead-form button[type='submit'] {
+            width: min(100%, 310px);
+        }
+    }
+
+    /* Заголовок и лид блока заявки. */
+    .lead-title {
+        margin-top: 29px;
+        font-size: clamp(2.125rem, 4.65vw, 4.125rem);
+        line-height: 1.06;
+        letter-spacing: -0.018em;
+    }
+
+    .lead-lede {
+        margin-top: 24px;
+        max-width: 30rem;
+        font-size: 0.9375rem;
+        line-height: 1.6;
+        color: #5e5e58;
     }
 
     .consent {

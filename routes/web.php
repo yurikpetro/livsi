@@ -28,6 +28,10 @@ Route::post('/cart/gift', [CartController::class, 'chooseGift'])->name('cart.gif
 
 Route::get('/partners', [PageController::class, 'partners'])->name('partners');
 
+Route::post('/partners', [LeadRequestController::class, 'storeWholesale'])
+    ->middleware('throttle:10,60')
+    ->name('partners.store');
+
 Route::get('/contract-manufacturing', [PageController::class, 'contractManufacturing'])->name('contract');
 
 // Ограничение частоты вместо капчи: капча требует согласия на передачу данных

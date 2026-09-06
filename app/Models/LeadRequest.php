@@ -35,6 +35,20 @@ class LeadRequest extends Model
         'other' => 'Другое',
     ];
 
+    /**
+     * Формат продаж для оптовой заявки — как в прототипе.
+     *
+     * Один источник на форму, валидацию и админку: список, размноженный
+     * по трём местам, разъезжается на первой же правке.
+     */
+    public const SALES_FORMATS = [
+        'shop'         => 'Магазин',
+        'salon'        => 'Салон или студия',
+        'online'       => 'Интернет-магазин',
+        'marketplaces' => 'Маркетплейсы',
+        'other'        => 'Другое',
+    ];
+
     public static function types(): array
     {
         return [
@@ -68,6 +82,14 @@ class LeadRequest extends Model
     {
         return $this->product_category
             ? (self::CONTRACT_CATEGORIES[$this->product_category] ?? $this->product_category)
+            : null;
+    }
+
+    /** Человеческое название формата продаж: в базе лежит код. */
+    public function salesFormatLabel(): ?string
+    {
+        return $this->sales_format
+            ? (self::SALES_FORMATS[$this->sales_format] ?? $this->sales_format)
             : null;
     }
 }

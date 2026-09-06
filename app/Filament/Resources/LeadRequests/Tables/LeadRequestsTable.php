@@ -42,7 +42,7 @@ class LeadRequestsTable
                     ->label('Предмет')
                     ->state(fn (LeadRequest $record) => $record->type === LeadRequest::TYPE_CONTRACT
                         ? trim(($record->categoryLabel() ?? '—') . ' · ' . ($record->planned_volume ?? 'объём не указан'))
-                        : trim(($record->city ?? '—') . ' · ' . ($record->sales_format ?? 'формат не указан'))),
+                        : trim(($record->city ?? '—') . ' · ' . ($record->salesFormatLabel() ?? 'формат не указан'))),
 
                 TextColumn::make('status')
                     ->label('Статус')

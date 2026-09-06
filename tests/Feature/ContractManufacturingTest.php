@@ -92,6 +92,33 @@ class ContractManufacturingTest extends TestCase
         $this->get(route('contract'))->assertOk()->assertSee('href="#contract-request"', escape: false);
     }
 
+    /**
+     * Фотографии лежали в прототипе с самого начала — я их пропустил
+     * и поставил заглушки. Тест держит их на месте.
+     */
+    public function test_photos_are_shown_not_placeholders(): void
+    {
+        $html = $this->get(route('contract'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('img/derived/contract/production', $html);
+        $this->assertStringContainsString('img/derived/contract/branding', $html);
+        $this->assertStringNotContainsString('Фото готовится', $html);
+        $this->assertStringNotContainsString('Фото производства', $html);
+    }
+
+    /** Подпись под фото — полоса с номером, как в прототипе. */
+    public function test_photo_captions_are_numbered(): void
+    {
+        $html = $this->get(route('contract'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('Производим на своей базе', $html);
+        $this->assertStringContainsString('Выпускаем под вашим брендом', $html);
+
+        // Две подписи, и в каждой номер в зелёном квадрате.
+        $this->assertSame(2, substr_count($html, '<figcaption'));
+        $this->assertSame(2, substr_count($html, 'bg-neon text-[9px]'));
+    }
+
     // ─────────────────────────────────── отправка
 
     public function test_valid_request_is_stored(): void
@@ -368,5 +395,46 @@ class ContractManufacturingTest extends TestCase
     public function test_page_is_in_the_sitemap(): void
     {
         $this->get('/sitemap.xml')->assertOk()->assertSee(route('contract'));
+    }
+
+    // ─────────────────────────────────── соответствие прототипу
+
+    /**
+     * Вёрстка блоков собрана общими классами из прототипа.
+     *
+     * Расхождения заказчик заметил визуально: у надзаголовка заявки не было
+     * неоновой подложки, у формы — рамки, поля шли одной колонкой вместо двух.
+     * Значения держатся на этих классах, поэтому проверяем именно их.
+     */
+    public function test_layout_uses_the_prototype_building_blocks(): void
+    {
+        $html = $this->get(route('contract'))->assertOk()->getContent();
+
+        foreach ([
+            'page-hero'       => 'первый экран',
+            'page-hero-title' => 'заголовок первого экрана',
+            'model-line'      => 'полоса «от → к»',
+            'step-list'       => 'список этапов',
+            'section-title'   => 'заголовок секции этапов',
+            'lead-section'    => 'секция заявки',
+            'lead-layout'     => 'колонки секции заявки',
+            'lead-eyebrow'    => 'надзаголовок на неоновой подложке',
+            'lead-form'       => 'форма в рамке',
+        ] as $class => $what) {
+            $this->assertStringContainsString($class, $html, "Нет класса {$class} — {$what}");
+        }
+    }
+
+    /** Подпись под фотографией — белая полоса с номером в зелёном квадрате. */
+    public function test_photo_captions_match_the_prototype(): void
+    {
+        $html = $this->get(route('contract'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('<figcaption', $html);
+        $this->assertStringContainsString('bg-neon', $html);
+
+        // Кадры фиксированной высоты: 380px на мобильном, 560px на десктопе.
+        $this->assertStringContainsString('h-[380px]', $html);
+        $this->assertStringContainsString('md:h-[560px]', $html);
     }
 }

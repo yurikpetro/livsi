@@ -55,12 +55,13 @@ class LeadRequestForm
                         TextInput::make('city')
                             ->label('Город')
                             ->disabled()->dehydrated(false)
-                            ->visible(fn ($record) => filled($record?->city)),
+                            ->visible(fn ($record) => $record?->type === LeadRequest::TYPE_WHOLESALE),
 
-                        TextInput::make('sales_format')
+                        // Не TextInput: в базе лежит код, а менеджеру нужно название.
+                        Placeholder::make('sales_format_label')
                             ->label('Формат продаж')
-                            ->disabled()->dehydrated(false)
-                            ->visible(fn ($record) => filled($record?->sales_format)),
+                            ->content(fn ($record) => $record?->salesFormatLabel() ?? '—')
+                            ->visible(fn ($record) => $record?->type === LeadRequest::TYPE_WHOLESALE),
 
                         // Контрактное производство
                         Placeholder::make('product_category_label')
@@ -74,7 +75,9 @@ class LeadRequestForm
                             ->visible(fn ($record) => $record?->type === LeadRequest::TYPE_CONTRACT),
 
                         Textarea::make('comment')
-                            ->label('Задача клиента')
+                            ->label(fn ($record) => $record?->type === LeadRequest::TYPE_CONTRACT
+                                ? 'Задача клиента'
+                                : 'Комментарий клиента')
                             ->rows(4)
                             ->disabled()->dehydrated(false)
                             ->columnSpanFull()
