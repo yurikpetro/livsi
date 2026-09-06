@@ -4,6 +4,7 @@ use App\Http\Controllers\CartController;
 use App\Http\Controllers\CatalogController;
 use App\Http\Controllers\DeclarationController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\LeadRequestController;
 use App\Http\Controllers\LineController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\SitemapController;
@@ -26,6 +27,13 @@ Route::delete('/cart/items/{item}', [CartController::class, 'destroy'])->name('c
 Route::post('/cart/gift', [CartController::class, 'chooseGift'])->name('cart.gift');
 
 Route::get('/partners', [PageController::class, 'partners'])->name('partners');
+
 Route::get('/contract-manufacturing', [PageController::class, 'contractManufacturing'])->name('contract');
+
+// Ограничение частоты вместо капчи: капча требует согласия на передачу данных
+// третьей стороне и решения заказчика, а спам ловится и приманкой в форме.
+Route::post('/contract-manufacturing', [LeadRequestController::class, 'storeContract'])
+    ->middleware('throttle:10,60')
+    ->name('contract.store');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');

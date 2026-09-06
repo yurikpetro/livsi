@@ -30,6 +30,9 @@
     @stack('head')
 </head>
 <body class="min-h-screen">
+    {{-- Полоса прогресса чтения — как в прототипе. Ширину задаёт скрипт. --}}
+    <div class="scroll-progress" data-scroll-progress aria-hidden="true"></div>
+
     @include('partials.header')
 
     <main>

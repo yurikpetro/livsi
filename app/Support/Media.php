@@ -38,6 +38,18 @@ final class Media
         return isset(self::manifest()[$path]);
     }
 
+    /**
+     * Есть ли вообще картинка — производная или хотя бы исходник.
+     *
+     * `has()` отвечает только за манифест, поэтому для «показывать блок
+     * или нет» он не годится: файл может лежать в `public`, а `npm run images`
+     * ещё не прогоняться.
+     */
+    public static function available(string $path): bool
+    {
+        return self::has($path) || is_file(public_path($path));
+    }
+
     /** `srcset` для формата: «img/derived/x-400.webp 400w, …». */
     public static function srcset(string $path, string $format): ?string
     {

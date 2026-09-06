@@ -8,12 +8,12 @@
     $available = $product->isAvailable();
 @endphp
 
-<article class="group relative flex flex-col border border-line bg-paper">
+<article {{ $attributes->class(["group relative flex flex-col border border-line bg-paper"]) }}>
     <a href="{{ route('catalog.show', $product) }}" class="relative block aspect-[4/5] overflow-hidden bg-shell">
         @if ($image)
             <x-img :path="$image->path" :alt="$image->alt"
                    sizes="(min-width: 1024px) 25vw, 50vw"
-                   class="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
+                   class="product-shot h-full w-full object-cover" />
         @endif
 
         @if ($product->badge)

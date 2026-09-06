@@ -3,9 +3,16 @@
   "configurations": [
     {
       "name": "livsi",
+      "url": "http://localhost:8000",
+      "port": 8000,
+      "autoPort": false
+    },
+    {
+      "name": "livsi-serve",
       "runtimeExecutable": "php",
       "runtimeArgs": ["artisan", "serve", "--port=8000"],
-      "port": 8000
+      "port": 8000,
+      "autoPort": false
     }
   ]
 }

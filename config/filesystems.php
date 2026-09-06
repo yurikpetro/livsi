@@ -38,6 +38,24 @@ return [
             'report' => false,
         ],
 
+        /*
+        | Диск для картинок, загружаемых из админки.
+        |
+        | Корень — сама папка public, чтобы сохранённый путь имел вид
+        | «img/catalog/foo.jpg»: ровно такой ждут asset() в шаблонах,
+        | App\Support\Media и конвейер `npm run images`, который читает
+        | public/img и собирает AVIF/WebP. При загрузке на стандартный
+        | диск public файлы легли бы в storage/app/public и ни витрина,
+        | ни конвейер их бы не увидели.
+        */
+        'public_images' => [
+            'driver'     => 'local',
+            'root'       => public_path(),
+            'url'        => env('APP_URL'),
+            'visibility' => 'public',
+            'throw'      => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

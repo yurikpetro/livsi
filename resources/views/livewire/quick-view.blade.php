@@ -29,8 +29,8 @@
 
             @if ($product)
                 <div x-show="$wire.open"
-                     x-transition:enter="transition ease-out duration-200"
-                     x-transition:enter-start="translate-y-6 opacity-0 sm:translate-y-0 sm:scale-95"
+                     x-transition:enter="transition duration-[380ms] ease-[cubic-bezier(0.2,0.8,0.2,1)]"
+                     x-transition:enter-start="translate-y-6 opacity-0 sm:translate-y-6 sm:scale-[0.98]"
                      x-transition:enter-end="translate-y-0 opacity-100 sm:scale-100"
                      class="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto bg-paper shadow-2xl">
 

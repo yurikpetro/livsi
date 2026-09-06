@@ -93,9 +93,9 @@
                 @endif
             </div>
         @else
-            <div class="mt-8 grid gap-3 grid-cols-2 md:gap-4 lg:grid-cols-4">
-                @foreach ($products as $product)
-                    <x-product-card :product="$product" />
+            <div class="reveal-stagger mt-8 grid gap-3 grid-cols-2 md:gap-4 lg:grid-cols-4" data-reveal>
+                @foreach ($products as $i => $product)
+                    <x-product-card :product="$product" style="--index: {{ $i }}" />
                 @endforeach
             </div>
 

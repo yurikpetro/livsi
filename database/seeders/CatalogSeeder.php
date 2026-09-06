@@ -366,30 +366,61 @@ class CatalogSeeder extends Seeder
         };
     }
 
+    /**
+     * Три отзыва блока на главной — ровно те, что в макете, и на своих местах.
+     * Композиция жёсткая, поэтому записи привязаны к местам (`slot`),
+     * а не просто отсортированы.
+     */
     private function seedReviews(): void
     {
         $rows = [
             [
-                'slug'   => 'multipenka-dlya-ruk-i-stop',
-                'author' => 'Алина',
-                'text'   => 'Пенка всегда стоит у рабочего стола: очищает быстро, не липнет и не сушит. Один из тех продуктов, которые заканчиваются первыми.',
+                'slot'         => 'main',
+                'accent'       => 'fresh',
+                'slug'         => 'multipenka-dlya-ruk-i-stop',
+                'author'       => 'Алина',
+                'caption'      => 'FRESH / Мультипенка',
+                'role_caption' => 'Подтверждённая покупка',
+                'text'         => 'Пенка всегда стоит у рабочего стола: очищает быстро, не липнет и не сушит. Один из тех продуктов, которые заканчиваются первыми.',
+                'image_path'   => 'img/reviews/main-product.png',
             ],
             [
-                'slug'   => 'krem-dlya-ruk-i-stop-25-urea',
-                'author' => 'Мария',
-                'text'   => 'С кремом уход наконец стал регулярным: быстро впитывается, а стопы заметно мягче уже после первых применений.',
+                'slot'         => 'top',
+                'accent'       => 'base',
+                'slug'         => 'krem-dlya-ruk-i-stop-25-urea',
+                'author'       => 'Мария',
+                'caption'      => 'BASE / Крем 25% Urea',
+                'role_caption' => 'Подтверждённая покупка',
+                'text'         => 'С кремом уход наконец стал регулярным: быстро впитывается, а стопы заметно мягче уже после первых применений.',
+                'image_path'   => 'img/reviews/top.jpg',
+            ],
+            [
+                'slot'         => 'bottom',
+                'accent'       => 'pro',
+                'slug'         => null,
+                'author'       => 'Екатерина',
+                'caption'      => 'PRO / Pedicure',
+                'role_caption' => 'Мастер педикюра',
+                'text'         => 'В работе важна предсказуемость. У LIVSI понятная последовательность, удобный формат и контролируемый результат.',
+                'image_path'   => 'img/reviews/bottom.jpg',
             ],
         ];
 
         $sort = 0;
 
         foreach ($rows as $row) {
-            $product = Product::where('slug', $row['slug'])->first();
+            $product = $row['slug'] ? Product::where('slug', $row['slug'])->first() : null;
 
             Review::updateOrCreate(
-                ['product_id' => $product?->id, 'author' => $row['author']],
+                ['slot' => $row['slot']],
                 [
+                    'product_id'   => $product?->id,
+                    'author'       => $row['author'],
+                    'caption'      => $row['caption'],
+                    'role_caption' => $row['role_caption'],
+                    'accent'       => $row['accent'],
                     'text'         => $row['text'],
+                    'image_path'   => $row['image_path'],
                     'rating'       => 5,
                     'source'       => 'ozon',
                     'source_label' => 'Ozon',
@@ -440,6 +471,16 @@ class CatalogSeeder extends Seeder
         Setting::put('work_hours', 'пн–пт, 09:00–18:00');
         Setting::put('telegram_url', '');
         Setting::put('whatsapp_url', '');
+
+        // Адрес для уведомлений о заявках. Заполняется реальным перед запуском.
+        Setting::put('manager_email', '');
+
+        // Шапка блока отзывов: цифра — это оценка с маркетплейсов, она меняется,
+        // поэтому живёт в настройках, а не в шаблоне.
+        Setting::put('reviews_eyebrow', 'Отзывы покупателей');
+        Setting::put('reviews_score', '4.9');
+        Setting::put('reviews_score_caption', 'Средняя оценка');
+        Setting::put('reviews_score_note', 'По отзывам покупателей LIVSI');
         // Ставку НДС подтверждает бухгалтер — см. docs/06-scope-v2.md §2.3.
         Setting::put('vat_rate_default', null);
     }

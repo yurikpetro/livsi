@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\LeadRequests;
 
-use App\Filament\Resources\LeadRequests\Pages\CreateLeadRequest;
 use App\Filament\Resources\LeadRequests\Pages\EditLeadRequest;
 use App\Filament\Resources\LeadRequests\Pages\ListLeadRequests;
 use App\Filament\Resources\LeadRequests\Schemas\LeadRequestForm;
@@ -30,6 +29,29 @@ class LeadRequestResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Заявки';
 
+    /**
+     * Заявки приходят только с сайта. Создание руками отключено: у такой
+     * записи не было бы подтверждённого согласия на обработку данных,
+     * а колонка `consent_at` обязательна.
+     */
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    /** Счётчик новых заявок в меню — чтобы их не приходилось искать. */
+    public static function getNavigationBadge(): ?string
+    {
+        $new = static::getModel()::where('status', LeadRequest::STATUS_NEW)->count();
+
+        return $new > 0 ? (string) $new : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'warning';
+    }
+
     public static function form(Schema $schema): Schema
     {
         return LeadRequestForm::configure($schema);
@@ -51,7 +73,6 @@ class LeadRequestResource extends Resource
     {
         return [
             'index' => ListLeadRequests::route('/'),
-            'create' => CreateLeadRequest::route('/create'),
             'edit' => EditLeadRequest::route('/{record}/edit'),
         ];
     }

@@ -37,7 +37,7 @@ class DeclarationForm
 
                 FileUpload::make('file_path')
                     ->label('Файл PDF')
-                    ->disk('public')
+                    ->disk('public_images')
                     ->directory('declarations')
                     ->acceptedFileTypes(['application/pdf'])
                     ->maxSize(20480)

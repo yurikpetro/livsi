@@ -25,4 +25,37 @@ final class Money
 
         return $formatted . "\u{00A0}₽";
     }
+
+    /**
+     * Рубли из копеек для полей ввода: «990.5».
+     *
+     * Админка показывает рубли, база хранит копейки. Без этой пары человек
+     * вводит 990 и получает товар за 9 рублей 90 копеек.
+     */
+    public static function toRubles(?int $kopecks): ?string
+    {
+        if ($kopecks === null) {
+            return null;
+        }
+
+        return rtrim(rtrim(number_format($kopecks / 100, 2, '.', ''), '0'), '.');
+    }
+
+    /** Копейки из введённых рублей. Принимает «1 990,50», «1990.5», «1990». */
+    public static function toKopecks(mixed $rubles): ?int
+    {
+        if ($rubles === null || $rubles === '') {
+            return null;
+        }
+
+        $normalized = str_replace([' ', "\xC2\xA0", ','], ['', '', '.'], (string) $rubles);
+
+        if (! is_numeric($normalized)) {
+            return null;
+        }
+
+        // round, а не приведение к int: 19.99 * 100 в двоичной арифметике
+        // даёт 1998.9999, и копейка потерялась бы.
+        return (int) round((float) $normalized * 100);
+    }
 }

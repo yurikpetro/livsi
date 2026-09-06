@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\Reviews;
 
-use App\Filament\Resources\Reviews\Pages\CreateReview;
 use App\Filament\Resources\Reviews\Pages\EditReview;
 use App\Filament\Resources\Reviews\Pages\ListReviews;
 use App\Filament\Resources\Reviews\Schemas\ReviewForm;
@@ -24,11 +23,30 @@ class ReviewResource extends Resource
 
     protected static ?int $navigationSort = 10;
 
-    protected static ?string $navigationLabel = 'Отзывы';
+    protected static ?string $navigationLabel = 'Отзывы на главной';
 
     protected static ?string $modelLabel = 'отзыв';
 
-    protected static ?string $pluralModelLabel = 'Отзывы';
+    protected static ?string $pluralModelLabel = 'Отзывы на главной';
+
+    /**
+     * Карточек ровно три, и они заданы макетом: ни добавить, ни удалить.
+     * Заказчик меняет только наполнение.
+     */
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    public static function canDelete($record): bool
+    {
+        return false;
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return false;
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -51,7 +69,6 @@ class ReviewResource extends Resource
     {
         return [
             'index' => ListReviews::route('/'),
-            'create' => CreateReview::route('/create'),
             'edit' => EditReview::route('/{record}/edit'),
         ];
     }

@@ -94,8 +94,8 @@
                     <div id="catalog-menu"
                          x-show="catalog"
                          x-cloak
-                         x-transition:enter="transition ease-out duration-150"
-                         x-transition:enter-start="-translate-y-1 opacity-0"
+                         x-transition:enter="transition duration-200 ease-[cubic-bezier(0.2,0.7,0.2,1)]"
+                         x-transition:enter-start="-translate-y-[7px] opacity-0"
                          x-transition:enter-end="translate-y-0 opacity-100"
                          class="absolute left-0 top-full w-72 border border-line bg-paper py-3 shadow-xl">
                         @foreach ($catalogMenu as $item)

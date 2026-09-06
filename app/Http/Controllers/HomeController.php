@@ -19,7 +19,7 @@ class HomeController extends Controller
                 ->orderBy('sort')
                 ->take(8)
                 ->get(),
-            'reviews'  => Review::featured()->with('product')->orderBy('sort')->get(),
+            'reviews'  => Review::homepageBlock(),
             'ugc'      => UgcItem::where('is_active', true)->orderBy('sort')->get(),
             'faq'      => FaqItem::where('is_active', true)->orderBy('sort')->get(),
         ]);

@@ -195,4 +195,687 @@
     .chip-active:hover {
         background: var(--color-neon);
     }
+
+    /* ---------------------------------------------------------------------
+       Поля форм. Прототип: подпись капсом сверху, поле с тонкой рамкой
+       #aaa9a2, прямые углы, тёмная кнопка отправки. Значения сняты
+       с живого прототипа, а не подобраны на глаз.
+       --------------------------------------------------------------------- */
+    .field {
+        display: block;
+    }
+
+    .field-label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-size: 0.625rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--color-muted);
+    }
+
+    .field-control {
+        display: block;
+        width: 100%;
+        min-height: 3rem;
+        padding: 0.75rem 0.875rem;
+        font-size: 0.875rem;
+        color: var(--color-ink);
+        background: var(--color-paper);
+        border: 1px solid #aaa9a2;
+        border-radius: 0;
+        transition: border-color 120ms ease;
+    }
+
+    .field-control::placeholder {
+        color: var(--color-muted);
+    }
+
+    .field-control:focus {
+        outline: 2px solid var(--color-ink);
+        outline-offset: -2px;
+        border-color: var(--color-ink);
+    }
+
+    /* Ошибку показываем не только цветом: на цвет полагаться нельзя. */
+    .field-control[aria-invalid='true'] {
+        border-color: var(--color-danger);
+        border-left-width: 3px;
+    }
+
+    .field-error {
+        margin-top: 0.375rem;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        color: var(--color-danger);
+    }
+
+    textarea.field-control {
+        min-height: 7rem;
+        resize: vertical;
+    }
+
+    select.field-control {
+        appearance: none;
+        background-image: linear-gradient(45deg, transparent 50%, var(--color-ink) 50%),
+            linear-gradient(135deg, var(--color-ink) 50%, transparent 50%);
+        background-position: calc(100% - 1.25rem) 1.35rem, calc(100% - 1rem) 1.35rem;
+        background-size: 5px 5px, 5px 5px;
+        background-repeat: no-repeat;
+        padding-right: 2.5rem;
+    }
+
+    .consent {
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-start;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        color: var(--color-muted);
+        cursor: pointer;
+    }
+
+    .consent input[type='checkbox'] {
+        flex: none;
+        width: 1.125rem;
+        height: 1.125rem;
+        margin-top: 0.0625rem;
+        accent-color: var(--color-ink);
+    }
+
+    /* ---------------------------------------------------------------------
+       Блок отзывов на главной.
+
+       Композиция макета: большая карточка слева на две строки и две узкие
+       справа. Значения — сетка 1.12fr/0.88fr, строки по 293px, зазор 12px,
+       поворот фотографии на 3° — сняты с живого прототипа. Имена классов
+       повторяют прототип, чтобы вёрстку можно было сверить с ним построчно.
+
+       Цвета взяты из токенов проекта: у прототипа они на пару единиц
+       отличаются от брендбука (#d0e64f против #d0dd56 и подобное),
+       а источником истины остаётся брендбук.
+       --------------------------------------------------------------------- */
+    .reviews-head {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        align-items: flex-end;
+        gap: 55px;
+        margin-bottom: 40px;
+    }
+
+    .reviews-head > div {
+        min-width: 0;
+    }
+
+    .reviews-eyebrow {
+        display: block;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--color-muted);
+    }
+
+    .reviews-title {
+        margin-top: 18px;
+        font-size: clamp(40px, 4.2vw, 60px);
+        font-weight: 900;
+        line-height: 1.02;
+        letter-spacing: -0.028em;
+    }
+
+    /* В финальной теме прототипа вторая строка заголовка не выделена
+       ни цветом, ни курсивом — только переносом. */
+    .reviews-title em {
+        font-style: normal;
+        color: inherit;
+    }
+
+    /* Ширину задаёт содержимое: в прототипе объявленный тут min-width
+       перебивается правилом .reviews-head > div { min-width: 0 } —
+       у того выше специфичность. Повторяем поведение, а не намерение,
+       иначе блок оценки встанет шире, чем в макете. */
+    .reviews-rating {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        justify-self: end;
+        padding: 20px 0;
+        border-top: 1px solid var(--color-line);
+        border-bottom: 1px solid var(--color-line);
+    }
+
+    .reviews-rating > b {
+        font-size: 70px;
+        line-height: 0.82;
+        letter-spacing: -0.07em;
+    }
+
+    .reviews-rating p {
+        display: flex;
+        flex-direction: column;
+        margin: 0;
+    }
+
+    .reviews-rating p > span {
+        font-size: 15px;
+        letter-spacing: 0.13em;
+        color: var(--color-green);
+    }
+
+    .reviews-rating strong {
+        margin-top: 7px;
+        font-size: 11px;
+        font-weight: 400;
+        line-height: 1;
+        text-transform: uppercase;
+    }
+
+    .reviews-rating small {
+        margin-top: 5px;
+        font-size: 11px;
+        font-weight: 400;
+        line-height: 1;
+        text-transform: uppercase;
+        color: var(--color-muted);
+    }
+
+    .reviews-grid {
+        display: grid;
+        grid-template-columns: 1.12fr 0.88fr;
+        grid-template-rows: repeat(2, 293px);
+        gap: 12px;
+    }
+
+    .review-card {
+        position: relative;
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid var(--color-line);
+        background: var(--color-paper);
+    }
+
+    .review-top {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .review-top span,
+    .review-top b {
+        font-size: 11px;
+        font-weight: 400;
+        line-height: 1;
+        text-transform: uppercase;
+    }
+
+    .review-card blockquote {
+        position: relative;
+        z-index: 2;
+        margin: 0;
+        font-weight: 650;
+        line-height: 1.2;
+        letter-spacing: -0.012em;
+    }
+
+    /* Большая карточка занимает обе строки сетки. */
+    .review-main {
+        grid-row: 1 / 3;
+        padding: 29px;
+    }
+
+    .review-main blockquote {
+        max-width: 67%;
+        margin-top: 69px;
+        font-size: clamp(24px, 2.02vw, 30px);
+        line-height: 1.14;
+    }
+
+    .review-main > img {
+        position: absolute;
+        right: -3%;
+        bottom: -9%;
+        width: 41%;
+        height: 78%;
+        object-fit: contain;
+        filter: drop-shadow(0 24px 28px rgb(0 0 0 / 0.22));
+        transform: rotate(3deg);
+        transition: transform 550ms ease;
+    }
+
+    .review-main:hover > img {
+        transform: rotate(0) translateY(-8px);
+    }
+
+    .reviewer {
+        position: absolute;
+        bottom: 30px;
+        left: 30px;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        gap: 11px;
+    }
+
+    .reviewer > i {
+        display: grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        font-size: 10px;
+        font-style: normal;
+        font-weight: 750;
+        border: 1px solid rgb(0 0 0 / 0.48);
+    }
+
+    .reviewer p {
+        display: flex;
+        flex-direction: column;
+        margin: 0;
+    }
+
+    .reviewer b {
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        text-transform: uppercase;
+    }
+
+    .reviewer small {
+        margin-top: 4px;
+        font-size: 10px;
+        font-weight: 400;
+        line-height: 1;
+        text-transform: uppercase;
+    }
+
+    /* Узкая карточка: текст слева, фотография колонкой 190px справа. */
+    .review-side {
+        display: grid;
+        grid-template-columns: 1fr 190px;
+    }
+
+    .review-side-copy {
+        position: relative;
+        padding: 24px;
+    }
+
+    .review-side blockquote {
+        margin-top: 38px;
+        font-size: 17px;
+        line-height: 1.15;
+    }
+
+    .review-side .reviewer {
+        bottom: 22px;
+        left: 24px;
+    }
+
+    .review-media {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .review-media::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(transparent 55%, rgb(0 0 0 / 0.34));
+    }
+
+    .review-media img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 550ms ease;
+    }
+
+    .review-side:hover .review-media img {
+        transform: scale(1.045);
+    }
+
+    /* Единственное цветовое отличие карточек в макете — звёзды у PRO. */
+    .review-card.pro .review-top b {
+        color: #466d82;
+    }
+
+    .review-card.pro .reviewer > i {
+        border-color: #aaa9a2;
+    }
+
+    .reviews-foot {
+        display: flex;
+        align-items: flex-end;
+        justify-content: flex-end;
+        min-height: 71px;
+        padding-top: 20px;
+    }
+
+    .reviews-foot a {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 34px;
+        width: min(100%, 312px);
+        min-height: 52px;
+        margin-bottom: 10px;
+        padding: 0 16px;
+        overflow: hidden;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
+        text-transform: uppercase;
+        color: var(--color-paper);
+        background: var(--color-ink);
+        transition: background 250ms ease, color 250ms ease;
+    }
+
+    .reviews-foot a b {
+        font-size: 13px;
+        transition: transform 250ms ease;
+    }
+
+    .reviews-foot a:hover {
+        color: var(--color-ink);
+        background: var(--color-neon);
+    }
+
+    .reviews-foot a:hover b {
+        transform: translateX(4px);
+    }
+
+    /* Планшет: сетка сохраняется, шапка складывается в колонку. */
+    @media (max-width: 1000px) {
+        .reviews-head {
+            grid-template-columns: 1fr;
+            gap: 29px;
+        }
+
+        .reviews-rating {
+            justify-self: start;
+        }
+
+        .reviews-grid {
+            grid-template-rows: repeat(2, 300px);
+        }
+    }
+
+    /* Телефон: карточки превращаются в горизонтальную ленту с прилипанием —
+       так же, как в прототипе. Двухстрочная сетка на 375px нечитаема. */
+    @media (max-width: 700px) {
+        .reviews-head {
+            display: block;
+            margin-bottom: 29px;
+        }
+
+        .reviews-title {
+            font-size: clamp(29px, 8vw, 35px);
+            line-height: 1.07;
+        }
+
+        .reviews-rating {
+            margin-top: 25px;
+        }
+
+        .reviews-rating > b {
+            font-size: 61px;
+        }
+
+        .reviews-grid {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            margin-right: -1rem;
+            padding-right: 1rem;
+        }
+
+        /* Без flex-shrink карточка растягивается по длине текста: в ленте
+           ширина не ограничена, и строка не переносится. Сжимаем до
+           min-width, как в прототипе. */
+        .review-card {
+            display: flex;
+            flex-direction: column;
+            min-width: 315px;
+            height: 500px;
+            scroll-snap-align: start;
+        }
+
+        .review-main {
+            padding: 21px;
+        }
+
+        .review-main blockquote {
+            max-width: 100%;
+            margin-top: 53px;
+            font-size: 24px;
+        }
+
+        .review-main > img {
+            right: -4%;
+            bottom: -6%;
+            width: 54%;
+            height: 56%;
+        }
+
+        .review-side {
+            grid-template-columns: 1fr;
+            grid-template-rows: 1fr 190px;
+        }
+
+        .review-media {
+            grid-row: 2;
+        }
+
+        .reviewer {
+            bottom: 22px;
+            left: 22px;
+        }
+
+        .reviews-foot {
+            align-items: stretch;
+            justify-content: stretch;
+            padding-top: 19px;
+        }
+
+        .reviews-foot a {
+            width: 100%;
+            margin-bottom: 0;
+        }
+    }
+
+    /* ---------------------------------------------------------------------
+       Движение и эффекты. Значения сняты с прототипа: длительности,
+       кривые и амплитуды — его, ничего не подобрано на глаз.
+
+       Общий принцип: без JavaScript страница остаётся полностью видимой.
+       Поэтому «спрятанное» состояние включает класс .reveal-armed, который
+       ставит скрипт, а не голый селектор [data-reveal].
+       --------------------------------------------------------------------- */
+
+    /* Полоса прогресса чтения вверху страницы. */
+    .scroll-progress {
+        position: fixed;
+        inset: 0 0 auto 0;
+        z-index: 100;
+        height: 3px;
+        pointer-events: none;
+    }
+
+    .scroll-progress::after {
+        content: '';
+        display: block;
+        width: var(--progress, 0%);
+        height: 100%;
+        background: var(--color-neon);
+        transition: width 80ms linear;
+    }
+
+    /* Появление секции при прокрутке. */
+    .reveal-armed {
+        opacity: 0;
+        transform: translateY(45px);
+        transition:
+            opacity 800ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            transform 800ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .reveal-armed.is-visible {
+        opacity: 1;
+        transform: none;
+    }
+
+    /* Карточки внутри появившегося блока выезжают по очереди.
+       Шаг задаётся переменной --index на самой карточке — так же,
+       как в прототипе: nth-child не работает, когда карточек
+       произвольное количество. */
+    .is-visible .reveal-stagger > *,
+    .is-visible.reveal-stagger > * {
+        animation: reveal-item var(--stagger-duration, 550ms) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+        animation-delay: calc(var(--stagger-step, 80ms) * var(--index, 0));
+    }
+
+    @keyframes reveal-item {
+        from { opacity: 0; transform: translateY(22px); }
+        to   { opacity: 1; transform: none; }
+    }
+
+    /* У отзывов свои значения: карточки крупнее и выезжают заметнее. */
+    .reviews-grid.reveal-stagger {
+        --stagger-duration: 720ms;
+    }
+
+    .reviews-grid.reveal-stagger > * {
+        animation-name: review-card-in;
+    }
+
+    .reviews-grid.reveal-stagger > *:nth-child(2) { animation-delay: 100ms; }
+    .reviews-grid.reveal-stagger > *:nth-child(3) { animation-delay: 180ms; }
+
+    @keyframes review-card-in {
+        from { opacity: 0; transform: translateY(30px); }
+        to   { opacity: 1; transform: none; }
+    }
+
+    /* ---------------------------------------------------------------------
+       Первый экран: фотография следует за курсором и медленно уезжает
+       при прокрутке. Смещение приходит из JS в переменных --mouse-*
+       и --scroll-y, а плавность делает transition.
+       --------------------------------------------------------------------- */
+    .hero {
+        --mouse-x: 0px;
+        --mouse-y: 0px;
+        --scroll-y: 0px;
+    }
+
+    .hero-photo {
+        position: absolute;
+        /* Вылет за края нужен, чтобы при сдвиге не открывался пустой угол. */
+        inset: -35px;
+        width: calc(100% + 70px);
+        height: calc(100% + 70px);
+        object-fit: cover;
+        object-position: center 47%;
+        transform: translate3d(var(--mouse-x), calc(var(--mouse-y) + var(--scroll-y)), 0) scale(1.025);
+        transition: transform 950ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        will-change: transform;
+    }
+
+    .hero-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center 47%;
+    }
+
+    /* Появление первого экрана при загрузке. */
+    .hero-photo {
+        animation: hero-image-in 1600ms cubic-bezier(0.2, 0.75, 0.2, 1) both;
+    }
+
+    @keyframes hero-image-in {
+        from { opacity: 0.25; transform: scale(1.12); }
+        to   { opacity: 1; }
+    }
+
+    .hero-copy > * {
+        animation: hero-copy-in 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    }
+
+    .hero-copy > *:nth-child(2) { animation-delay: 90ms; }
+    .hero-copy > *:nth-child(3) { animation-delay: 170ms; }
+    .hero-copy > *:nth-child(4) { animation-delay: 250ms; }
+
+    @keyframes hero-copy-in {
+        from { opacity: 0; transform: translateY(35px); }
+        to   { opacity: 1; transform: none; }
+    }
+
+    /* Наведение на карточку товара: снимок увеличивается и слегка
+       насыщается. Длительности из прототипа — 700 мс на масштаб
+       и 500 мс на цвет, движение намеренно медленное. */
+    .product-shot {
+        transition:
+            transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1),
+            filter 500ms ease;
+    }
+
+    .group:hover .product-shot {
+        transform: scale(1.045);
+        filter: saturate(1.08);
+    }
+
+    /* ---------------------------------------------------------------------
+       Вопросы и ответы.
+
+       В прототипе ответ раскрывается переходом max-height за 350 мс.
+       Здесь высоту измеряет Alpine: у прототипа max-height задан числом
+       (150px), и ответ длиннее этой высоты просто обрезается.
+       --------------------------------------------------------------------- */
+    .faq-item summary {
+        /* Стрелку у details в Safari убирает только это. */
+        list-style: none;
+    }
+
+    .faq-item summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .faq-item summary i {
+        font-style: normal;
+        transition: transform 250ms ease, color 250ms ease;
+    }
+
+    .faq-item[open] summary i {
+        transform: rotate(45deg);
+        color: var(--color-green);
+    }
+
+    /* Ответ прячется скриптом вместе с высотой самого <details>,
+       поэтому отдельных стилей ему не нужно. */
+
+    /* ---------------------------------------------------------------------
+       Уважение к системной настройке «меньше движения».
+
+       В прототипе этого нет, но крупные движущиеся области — известная
+       причина укачивания, а настройка выставляется человеком осознанно.
+       Переходы состояний (наведение, раскрытие) оставляем: они короткие
+       и несут смысл.
+       --------------------------------------------------------------------- */
+    @media (prefers-reduced-motion: reduce) {
+        .reveal-armed,
+        .is-visible .reveal-stagger > *,
+        .is-visible.reveal-stagger > *,
+        .hero-photo,
+        .hero-copy > * {
+            animation: none !important;
+            transition: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+        }
+    }
 }

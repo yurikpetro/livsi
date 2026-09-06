@@ -28,7 +28,7 @@
              aria-label="Корзина">
 
             <div x-show="$wire.open"
-                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter="transition ease-out duration-250"
                  x-transition:enter-start="opacity-0"
                  x-transition:enter-end="opacity-100"
                  x-transition:leave="transition ease-in duration-150"
@@ -38,10 +38,10 @@
                  class="absolute inset-0 bg-ink/40"></div>
 
             <aside x-show="$wire.open"
-                   x-transition:enter="transition ease-out duration-250"
+                   x-transition:enter="transition duration-400 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
                    x-transition:enter-start="translate-x-full"
                    x-transition:enter-end="translate-x-0"
-                   x-transition:leave="transition ease-in duration-200"
+                   x-transition:leave="transition duration-300 ease-[cubic-bezier(0.4,0,1,1)]"
                    x-transition:leave-start="translate-x-0"
                    x-transition:leave-end="translate-x-full"
                    class="absolute right-0 top-0 flex h-full w-full flex-col bg-paper shadow-2xl sm:w-[460px]">

@@ -66,9 +66,13 @@ for (const source of sources) {
 
     const entry = { width: meta.width, height: meta.height, avif: [], webp: [], jpg: [] };
 
-    for (const width of WIDTHS) {
-        // Апскейл не делаем: он только раздувает вес без выигрыша в качестве.
-        if (meta.width && width > meta.width) continue;
+    // Апскейл не делаем: он только раздувает вес без выигрыша в качестве.
+    // Но и обрезать до предыдущей ступени нельзя — картинка шириной 1464
+    // отдавалась бы вариантом на 1200 и растягивалась в вёрстке.
+    // Поэтому ступень выше исходника подменяется самим исходником.
+    const widths = [...new Set(WIDTHS.map((w) => (meta.width ? Math.min(w, meta.width) : w)))];
+
+    for (const width of widths) {
 
         for (const [format, options] of [
             // AVIF первым: он весит меньше всех, но кодируется медленно —

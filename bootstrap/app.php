@@ -12,7 +12,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Метки кампании запоминаются на первом визите: заявку человек
+        // оставляет позже и уже на другой странице.
+        $middleware->web(append: [
+            \App\Http\Middleware\CaptureUtm::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
