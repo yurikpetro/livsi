@@ -10,7 +10,8 @@ class LeadRequest extends Model
 
     protected $casts = [
         'utm'        => 'array',
-        'consent_at' => 'datetime',
+        'consent_at'           => 'datetime',
+        'marketing_consent_at' => 'datetime',
     ];
 
     public const TYPE_WHOLESALE = 'wholesale';

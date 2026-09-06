@@ -44,5 +44,7 @@
     {{-- Один экземпляр на страницу: карточки в листинге просто присылают
          ему событие quick-view с идентификатором товара. --}}
     @livewire('quick-view')
+
+    @include('partials.cookie-bar')
 </body>
 </html>

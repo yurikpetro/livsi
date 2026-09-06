@@ -59,6 +59,10 @@ class LeadRequestController extends Controller
             // Согласие фиксируем временем, а не галочкой: галочка ничего
             // не доказывает, а 152-ФЗ требует подтверждаемого факта.
             'consent_at' => now(),
+
+            // Рассылка — отдельный факт с отдельным временем: при проверке
+            // придётся показать, на что именно человек согласился.
+            'marketing_consent_at' => $request->boolean('marketing_consent') ? now() : null,
             'ip'         => $request->ip(),
             'user_agent' => mb_substr((string) $request->userAgent(), 0, 255),
             'utm'        => Utm::current($request),

@@ -48,7 +48,7 @@ class AdminSaveTest extends TestCase
     {
         $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->id])
+        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->getRouteKey()])
             ->fillForm(['title' => 'Скраб для тела обновлённый'])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -63,7 +63,7 @@ class AdminSaveTest extends TestCase
         $purposes = Purpose::limit(2)->pluck('id')->all();
         $tasks    = Task::limit(2)->pluck('id')->all();
 
-        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->id])
+        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->getRouteKey()])
             ->fillForm(['purposes' => $purposes, 'tasks' => $tasks])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -77,7 +77,7 @@ class AdminSaveTest extends TestCase
         $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
         $line    = ProductLine::where('code', 'warm')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->id])
+        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->getRouteKey()])
             ->fillForm(['product_line_id' => $line->id])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -90,7 +90,7 @@ class AdminSaveTest extends TestCase
     {
         $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->id])
+        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->getRouteKey()])
             ->fillForm(['title' => 'Кокосовый скраб'])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -103,7 +103,7 @@ class AdminSaveTest extends TestCase
         $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
         $other   = Product::where('slug', '!=', 'skrab-dlya-tela')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->id])
+        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->getRouteKey()])
             ->fillForm(['slug' => $other->slug])
             ->call('save')
             ->assertHasFormErrors(['slug']);
@@ -114,7 +114,7 @@ class AdminSaveTest extends TestCase
     {
         $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->id])
+        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->getRouteKey()])
             ->fillForm(['rating' => 4.8, 'reviews_count' => 10, 'reviews_source' => null])
             ->call('save')
             ->assertHasFormErrors(['reviews_source']);
@@ -138,7 +138,7 @@ class AdminSaveTest extends TestCase
     {
         $variant = ProductVariant::firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->id])
+        Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->getRouteKey()])
             // В поле должны стоять рубли записи, а не её копейки.
             ->assertFormSet(fn (array $state) => (float) $state['price'] === $variant->price / 100)
             ->fillForm(['price' => '1 249,50'])
@@ -152,7 +152,7 @@ class AdminSaveTest extends TestCase
     {
         $variant = ProductVariant::firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->id])
+        Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->getRouteKey()])
             ->fillForm(['weight_g' => 250, 'length_mm' => 60, 'width_mm' => 60, 'height_mm' => 180])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -166,7 +166,7 @@ class AdminSaveTest extends TestCase
         $variant = ProductVariant::firstOrFail();
 
         foreach (['990' => 99000, '1990.5' => 199050, '1 990,50' => 199050] as $typed => $expected) {
-            Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->id])
+            Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->getRouteKey()])
                 ->fillForm(['price' => (string) $typed])
                 ->call('save')
                 ->assertHasNoFormErrors();
@@ -179,7 +179,7 @@ class AdminSaveTest extends TestCase
     {
         $variant = ProductVariant::firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->id])
+        Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->getRouteKey()])
             ->fillForm(['price' => 'бесплатно'])
             ->call('save')
             ->assertHasFormErrors(['price']);
@@ -190,7 +190,7 @@ class AdminSaveTest extends TestCase
         $variant = ProductVariant::firstOrFail();
         $other   = ProductVariant::where('id', '!=', $variant->id)->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->id])
+        Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->getRouteKey()])
             ->fillForm(['sku' => $other->sku])
             ->call('save')
             ->assertHasFormErrors(['sku']);
@@ -202,7 +202,7 @@ class AdminSaveTest extends TestCase
     {
         $rule = PromoRule::where('type', 'gift')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\PromoRules\Pages\EditPromoRule::class, ['record' => $rule->id])
+        Livewire::test(\App\Filament\Resources\PromoRules\Pages\EditPromoRule::class, ['record' => $rule->getRouteKey()])
             ->assertFormSet(fn (array $state) => (float) $state['threshold'] === $rule->threshold / 100)
             ->fillForm(['threshold' => '4500'])
             ->call('save')
@@ -217,7 +217,7 @@ class AdminSaveTest extends TestCase
         $rule     = PromoRule::where('type', 'gift')->firstOrFail();
         $variants = ProductVariant::limit(2)->pluck('id')->all();
 
-        Livewire::test(\App\Filament\Resources\PromoRules\Pages\EditPromoRule::class, ['record' => $rule->id])
+        Livewire::test(\App\Filament\Resources\PromoRules\Pages\EditPromoRule::class, ['record' => $rule->getRouteKey()])
             ->fillForm(['gifts' => $variants])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -235,7 +235,7 @@ class AdminSaveTest extends TestCase
     {
         $review = Review::where('slot', 'main')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Reviews\Pages\EditReview::class, ['record' => $review->id])
+        Livewire::test(\App\Filament\Resources\Reviews\Pages\EditReview::class, ['record' => $review->getRouteKey()])
             ->fillForm([
                 'text'         => 'Беру уже третий раз.',
                 'author'       => 'Ольга',
@@ -269,7 +269,7 @@ class AdminSaveTest extends TestCase
     {
         $review = Review::where('slot', 'top')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Reviews\Pages\EditReview::class, ['record' => $review->id])
+        Livewire::test(\App\Filament\Resources\Reviews\Pages\EditReview::class, ['record' => $review->getRouteKey()])
             ->fillForm(['text' => '', 'author' => ''])
             ->call('save')
             ->assertHasFormErrors(['text', 'author']);
@@ -280,7 +280,7 @@ class AdminSaveTest extends TestCase
     {
         $review = Review::where('slot', 'bottom')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Reviews\Pages\EditReview::class, ['record' => $review->id])
+        Livewire::test(\App\Filament\Resources\Reviews\Pages\EditReview::class, ['record' => $review->getRouteKey()])
             ->fillForm(['text' => str_repeat('а', 400)])
             ->call('save')
             ->assertHasFormErrors(['text']);
@@ -309,7 +309,7 @@ class AdminSaveTest extends TestCase
     {
         $line = ProductLine::where('code', 'fresh')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\ProductLines\Pages\EditProductLine::class, ['record' => $line->id])
+        Livewire::test(\App\Filament\Resources\ProductLines\Pages\EditProductLine::class, ['record' => $line->getRouteKey()])
             ->fillForm(['subtitle' => 'Свежесть и чистота'])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -322,7 +322,7 @@ class AdminSaveTest extends TestCase
         $purpose = Purpose::firstOrFail();
         $other   = Purpose::where('id', '!=', $purpose->id)->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Purposes\Pages\EditPurpose::class, ['record' => $purpose->id])
+        Livewire::test(\App\Filament\Resources\Purposes\Pages\EditPurpose::class, ['record' => $purpose->getRouteKey()])
             ->fillForm(['code' => $other->code])
             ->call('save')
             ->assertHasFormErrors(['code']);
@@ -335,7 +335,7 @@ class AdminSaveTest extends TestCase
             'contact' => '@petr', 'consent_at' => now(),
         ]);
 
-        Livewire::test(\App\Filament\Resources\LeadRequests\Pages\EditLeadRequest::class, ['record' => $lead->id])
+        Livewire::test(\App\Filament\Resources\LeadRequests\Pages\EditLeadRequest::class, ['record' => $lead->getRouteKey()])
             ->fillForm(['status' => LeadRequest::STATUS_IN_PROGRESS, 'manager_comment' => 'Позвонил, ждёт КП'])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -354,7 +354,7 @@ class AdminSaveTest extends TestCase
             'contact' => '@petr', 'consent_at' => now(),
         ]);
 
-        Livewire::test(\App\Filament\Resources\LeadRequests\Pages\EditLeadRequest::class, ['record' => $lead->id])
+        Livewire::test(\App\Filament\Resources\LeadRequests\Pages\EditLeadRequest::class, ['record' => $lead->getRouteKey()])
             ->fillForm(['name' => 'Подменённое имя', 'status' => LeadRequest::STATUS_DONE])
             ->call('save');
 

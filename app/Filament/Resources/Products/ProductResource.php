@@ -22,7 +22,6 @@ class ProductResource extends Resource
 
     // На витрине товар адресуется slug'ом, в админке — неизменяемым id:
     // slug редактируется, и ссылки на записи не должны от него зависеть.
-    protected static ?string $recordRouteKeyName = 'id';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShoppingBag;
 

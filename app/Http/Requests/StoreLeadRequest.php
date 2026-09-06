@@ -29,6 +29,15 @@ abstract class StoreLeadRequest extends FormRequest
             'contact' => ['required', 'string', 'min:3', 'max:120'],
             'consent' => ['accepted'],
 
+            // Согласие на рассылку — отдельное и добровольное: обработка
+            // данных нужна, чтобы ответить, а рассылка — своя цель,
+            // и одной галочкой их объединять нельзя (152-ФЗ, ст. 9).
+            //
+            // `sometimes`, а не `nullable`: правило `accepted` неявное и
+            // срабатывает даже на отсутствующем поле, а `nullable` его
+            // не отменяет — снятая галочка блокировала бы всю форму.
+            'marketing_consent' => ['sometimes', 'accepted'],
+
             // Приманка для ботов: поле скрыто от людей и должно остаться пустым.
             'company_website' => ['nullable', 'prohibited'],
         ], $this->ownRules());

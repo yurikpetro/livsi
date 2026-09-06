@@ -5,6 +5,8 @@ use App\Http\Controllers\CatalogController;
 use App\Http\Controllers\DeclarationController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LeadRequestController;
+use App\Http\Controllers\LegalPageController;
+use App\Models\LegalPage;
 use App\Http\Controllers\LineController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\SitemapController;
@@ -39,5 +41,17 @@ Route::get('/contract-manufacturing', [PageController::class, 'contractManufactu
 Route::post('/contract-manufacturing', [LeadRequestController::class, 'storeContract'])
     ->middleware('throttle:10,60')
     ->name('contract.store');
+
+// Юридические и информационные документы. Адреса объявлены статически:
+// на них ссылаются чекбоксы согласий, чеки, письма и уведомление в РКН,
+// поэтому меняться из админки они не должны.
+foreach (array_keys(LegalPage::SLUGS) as $slug) {
+    // Замыкание здесь недопустимо: с ним перестаёт работать route:cache.
+    Route::get('/' . $slug, [LegalPageController::class, 'show'])
+        ->defaults('slug', $slug)
+        ->name('legal.' . $slug);
+}
+
+Route::get('/contacts', [PageController::class, 'contacts'])->name('contacts');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');

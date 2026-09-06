@@ -196,11 +196,27 @@
                             </label>
                         </div>
 
+                        {{-- Два раздельных согласия, оба без предзаполнения.
+                             Объединять их одной галочкой нельзя: обработка данных
+                             нужна, чтобы ответить на заявку, а рассылка —
+                             самостоятельная цель с добровольным согласием. --}}
                         <label class="consent">
                             <input type="checkbox" name="consent" value="1" required @checked(old('consent'))>
                             <span>
-                                Согласен на обработку персональных данных
+                                Согласен на <a href="{{ route('legal.consent') }}" target="_blank" class="underline hover:text-ink">обработку персональных данных</a>
+                                и принимаю <a href="{{ route('legal.privacy') }}" target="_blank" class="underline hover:text-ink">политику конфиденциальности</a>
                                 @error('consent')
+                                    <span class="field-error mt-1 block">{{ $message }}</span>
+                                @enderror
+                            </span>
+                        </label>
+
+                        <label class="consent">
+                            <input type="checkbox" name="marketing_consent" value="1" @checked(old('marketing_consent'))>
+                            <span>
+                                Согласен получать новости и предложения LIVSI — по желанию,
+                                на приём заявки не влияет
+                                @error('marketing_consent')
                                     <span class="field-error mt-1 block">{{ $message }}</span>
                                 @enderror
                             </span>

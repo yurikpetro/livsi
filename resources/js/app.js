@@ -201,11 +201,47 @@ function initFaq() {
     });
 }
 
+/**
+ * Баннер про файлы cookie.
+ *
+ * Решение хранится в куке на год и на сервер не отправляется: серверу оно
+ * пока не нужно, а лишний запрос ради баннера — плохой обмен. Баннер
+ * показывается только после проверки, иначе он моргал бы при каждой
+ * загрузке у тех, кто уже выбрал.
+ */
+function initCookieBar() {
+    const bar = document.querySelector('[data-cookie-bar]');
+
+    if (!bar) return;
+
+    const NAME = 'livsi_cookie_consent';
+
+    const stored = document.cookie
+        .split('; ')
+        .find((row) => row.startsWith(NAME + '='))
+        ?.split('=')[1];
+
+    if (stored === 'all' || stored === 'necessary') return;
+
+    bar.hidden = false;
+
+    bar.querySelectorAll('[data-cookie-choice]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const choice = button.dataset.cookieChoice;
+            const year = 60 * 60 * 24 * 365;
+
+            document.cookie = `${NAME}=${choice}; path=/; max-age=${year}; SameSite=Lax`;
+            bar.hidden = true;
+        });
+    });
+}
+
 function boot() {
     initReveal();
     initScrollEffects();
     initHeroParallax();
     initFaq();
+    initCookieBar();
 }
 
 if (document.readyState === 'loading') {

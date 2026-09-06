@@ -13,4 +13,11 @@ class PageController extends Controller
     {
         return view('pages.contract-manufacturing');
     }
+
+    public function contacts()
+    {
+        return view('pages.contacts', [
+            'seller' => \App\Models\SellerProfile::current(),
+        ]);
+    }
 }

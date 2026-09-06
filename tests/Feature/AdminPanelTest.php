@@ -27,6 +27,7 @@ class AdminPanelTest extends TestCase
         parent::setUp();
 
         $this->seed(CatalogSeeder::class);
+        $this->seed(\Database\Seeders\LegalPagesSeeder::class);
 
         $this->admin = User::factory()->create(['is_admin' => true]);
     }
@@ -76,7 +77,7 @@ class AdminPanelTest extends TestCase
         $product = \App\Models\Product::where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
 
         $this->actingAs($this->admin)
-            ->get('/admin/products/' . $product->id . '/edit')
+            ->get(\App\Filament\Resources\Products\ProductResource::getUrl('edit', ['record' => $product]))
             ->assertOk();
     }
 
@@ -151,5 +152,61 @@ class AdminPanelTest extends TestCase
 
         $this->assertNull($production['admin']['email']);
         $this->assertNull($production['admin']['password']);
+    }
+
+    /**
+     * Ссылка «Редактировать» из списка должна открываться.
+     *
+     * Filament строит адрес по ключу маршрута модели, а ищет запись по тому,
+     * что задано в ресурсе. Когда эти две вещи расходятся, кнопка правки
+     * ведёт в 404 — так было у товаров и документов, потому что у обеих
+     * моделей ключ маршрута slug, а в ресурсе стоял id.
+     *
+     * Тесты этого не ловили: они дёргали компонент напрямую и ходили
+     * по адресу с id, который админка никогда не генерирует.
+     */
+    public function test_edit_link_from_the_list_opens(): void
+    {
+        // Записи, которых нет в свежей базе: заявку создаёт посетитель,
+        // декларацию загружает заказчик. Создаём здесь, чтобы ни один
+        // ресурс не остался непроверенным.
+        \App\Models\LeadRequest::create([
+            'type' => 'contract', 'name' => 'Проверка', 'contact' => '@check', 'consent_at' => now(),
+        ]);
+        \App\Models\Declaration::create(['number' => 'ЕАЭС N RU Д-RU.РА01.В.00000/26']);
+
+        $broken  = [];
+        $skipped = [];
+
+        foreach (\Filament\Facades\Filament::getPanel('admin')->getResources() as $resource) {
+            if (! array_key_exists('edit', $resource::getPages())) {
+                continue;
+            }
+
+            $record = $resource::getModel()::query()->first();
+
+            // Молча пропускать ресурс нельзя: именно из-за этого проверка
+            // однажды не заметила сломанную кнопку — записей для неё
+            // просто не было в базе.
+            if (! $record) {
+                $skipped[] = class_basename($resource);
+
+                continue;
+            }
+
+            $url = $resource::getUrl('edit', ['record' => $record]);
+
+            if ($this->actingAs($this->admin)->get($url)->getStatusCode() !== 200) {
+                $broken[] = class_basename($resource) . ' → ' . parse_url($url, PHP_URL_PATH);
+            }
+        }
+
+        $this->assertSame([], $broken, 'Кнопка правки ведёт в 404: ' . implode(', ', $broken));
+
+        $this->assertSame(
+            [],
+            $skipped,
+            'Ресурс остался непроверенным из-за отсутствия записей: ' . implode(', ', $skipped),
+        );
     }
 }

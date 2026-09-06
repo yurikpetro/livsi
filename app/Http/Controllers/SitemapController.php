@@ -17,7 +17,18 @@ class SitemapController extends Controller
             ['loc' => route('declarations'), 'priority' => '0.7'],
             ['loc' => route('partners'), 'priority' => '0.6'],
             ['loc' => route('contract'), 'priority' => '0.6'],
+            ['loc' => route('contacts'), 'priority' => '0.5'],
         ];
+
+        // Юридические документы индексируются: на них ссылаются
+        // из чеков и писем, и они должны находиться поиском.
+        foreach (\App\Models\LegalPage::active()->orderBy('sort')->get() as $legal) {
+            $urls[] = [
+                'loc'      => route('legal.' . $legal->slug),
+                'priority' => '0.4',
+                'lastmod'  => $legal->updated_at?->toAtomString(),
+            ];
+        }
 
         foreach (ProductLine::active()->orderBy('sort')->get() as $line) {
             $urls[] = [
