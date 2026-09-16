@@ -200,11 +200,9 @@
                             Стоимость и срок доставки будут рассчитаны при оформлении.
                         </p>
 
-                        {{-- Оформление подключается вместе с оплатой и доставкой. --}}
-                        <button type="button" disabled
-                                class="btn btn-neon mt-4 w-full cursor-not-allowed justify-center opacity-40">
+                        <a href="{{ route('checkout.index') }}" class="btn btn-neon mt-4 w-full justify-center">
                             Перейти к оформлению <span aria-hidden="true">→</span>
-                        </button>
+                        </a>
                     </div>
                 @endif
             </aside>

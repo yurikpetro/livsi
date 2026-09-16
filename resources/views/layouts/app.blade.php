@@ -29,13 +29,24 @@
 
     @stack('head')
 </head>
-<body class="min-h-screen">
+{{-- Колонка во всю высоту экрана: без неё на коротких страницах — пустое
+     избранное, пустая корзина, короткий документ — подвал вставал посреди
+     экрана, а под ним оставалась белая полоса. --}}
+<body class="flex min-h-screen flex-col">
     {{-- Полоса прогресса чтения — как в прототипе. Ширину задаёт скрипт. --}}
     <div class="scroll-progress" data-scroll-progress aria-hidden="true"></div>
 
     @include('partials.header')
 
-    <main>
+    <main class="flex-1">
+        {{-- Короткие сообщения после перенаправления: «вы вышли», «корзина пуста».
+             До этого их флешили, но нигде не выводили. --}}
+        @if (session('status'))
+            <div class="site-container pt-8" role="status">
+                <p class="border-l-4 border-ink bg-shell px-5 py-4 text-sm">{{ session('status') }}</p>
+            </div>
+        @endif
+
         @yield('content')
     </main>
 

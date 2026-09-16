@@ -176,4 +176,16 @@ class CartService
     {
         return max(0, min($qty, $variant->available()));
     }
+
+    /**
+     * Опустошить корзину после оформления заказа.
+     *
+     * Саму корзину не удаляем: к ней привязана кука, и человек продолжит
+     * покупки в той же — незачем плодить записи на каждый заказ.
+     */
+    public function clear(Cart $cart): void
+    {
+        $cart->items()->delete();
+        $cart->setRelation('items', $cart->items()->getRelated()->newCollection());
+    }
 }

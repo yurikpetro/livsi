@@ -209,6 +209,54 @@ function initFaq() {
  * показывается только после проверки, иначе он моргал бы при каждой
  * загрузке у тех, кто уже выбрал.
  */
+/**
+ * Избранное.
+ *
+ * Форма работает и без этого: обычный POST с возвратом назад. Скрипт лишь
+ * убирает перезагрузку — от нажатия на сердечко страница прыгать не должна,
+ * особенно в середине длинного каталога.
+ */
+function initFavorites() {
+    const counter = document.querySelector('[data-favorites-count]');
+
+    document.querySelectorAll('form[data-favorite]').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const button = form.querySelector('button');
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': form.querySelector('[name=_token]').value,
+                        Accept: 'application/json',
+                    },
+                });
+
+                if (!response.ok) throw new Error(response.status);
+
+                const data = await response.json();
+
+                button.classList.toggle('liked', data.liked);
+                button.setAttribute('aria-pressed', String(data.liked));
+                button.setAttribute(
+                    'aria-label',
+                    data.liked ? 'Убрать из избранного' : 'Добавить в избранное',
+                );
+
+                if (counter) {
+                    counter.textContent = data.count;
+                    counter.classList.toggle('hidden', data.count === 0);
+                }
+            } catch {
+                // Сеть отвалилась — отправляем формой, как без скрипта.
+                form.submit();
+            }
+        });
+    });
+}
+
 function initCookieBar() {
     const bar = document.querySelector('[data-cookie-bar]');
 
@@ -242,6 +290,7 @@ function boot() {
     initHeroParallax();
     initFaq();
     initCookieBar();
+    initFavorites();
 }
 
 if (document.readyState === 'loading') {

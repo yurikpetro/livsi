@@ -14,6 +14,9 @@ class AppServiceProvider extends ServiceProvider
         // Одна корзина на запрос: сервис резолвится и в контроллере,
         // и в композере шапки — без scoped получились бы две разные корзины.
         $this->app->scoped(\App\Services\CartService::class);
+
+        // Провайдера меняют — витрина и заказы не должны о нём знать.
+        $this->app->bind(\App\Payments\PaymentGateway::class, \App\Payments\YooKassaGateway::class);
     }
 
     /**

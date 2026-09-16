@@ -1362,4 +1362,171 @@
             transform: none !important;
         }
     }
+
+    /* ---------------------------------------------------------------------
+       Экран входа.
+
+       Формат — карточка по центру, как принято в сервисах авторизации:
+       на этой странице нечего разглядывать, кроме способа войти.
+
+       Стиль — прототипа. Углы прямые: во всём макете нет ни одного скругления,
+       кроме окружностей (`border-radius: 50%`), поэтому радиус берётся из
+       токена `--radius-card`, который в дизайн-системе равен нулю. Захотим
+       скруглить — меняется одно значение и разом для всех карточек.
+
+       Тень взята из прототипа как есть: `0 25px 45px #00000024` — ею там
+       подняты всплывающие панели.
+       --------------------------------------------------------------------- */
+    .auth-screen {
+        display: grid;
+        place-items: center;
+        min-height: 68vh;
+        padding-block: 4rem;
+        /* Без боковых отступов карточка на телефоне упирается в края экрана
+           и перестаёт читаться как карточка. */
+        padding-inline: 1.25rem;
+        background: var(--color-shell);
+    }
+
+    .auth-card {
+        width: min(100%, 27rem);
+        padding: 2.5rem 2rem;
+        background: var(--color-paper);
+        border: 1px solid var(--color-line);
+        border-radius: var(--radius-card);
+        box-shadow: 0 25px 45px #00000024;
+    }
+
+    @media (min-width: 40rem) {
+        .auth-card {
+            padding: 3rem 2.5rem;
+        }
+    }
+
+    .auth-title {
+        margin-top: 0.75rem;
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: -0.02em;
+        text-transform: uppercase;
+    }
+
+    .auth-lede {
+        margin-top: 1rem;
+        font-size: 0.8125rem;
+        line-height: 1.6;
+        color: var(--color-muted);
+    }
+
+    /* Кнопка способа входа: во всю ширину карточки и по центру.
+       У обычной `.btn` содержимое разнесено по краям — это для «ТЕКСТ →». */
+    .auth-method {
+        width: 100%;
+        justify-content: center;
+        gap: 0.625rem;
+    }
+
+    /* Разделитель с подписью — «или», «скоро». */
+    .auth-divider {
+        display: flex;
+        align-items: center;
+        gap: 0.875rem;
+        margin-top: 2rem;
+        font-size: 0.625rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--color-muted);
+    }
+
+    .auth-divider::before,
+    .auth-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--color-line);
+    }
+
+    /* Способы, которых пока нет. Показаны текстом, а не выключенными
+       кнопками: по неактивной кнопке всё равно жмут, а потом пишут в поддержку. */
+    .auth-soon {
+        margin-top: 1rem;
+        font-size: 0.75rem;
+        line-height: 1.6;
+        color: var(--color-muted);
+        text-align: center;
+    }
+
+    .auth-note {
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--color-line);
+        font-size: 0.6875rem;
+        line-height: 1.6;
+        color: var(--color-muted);
+    }
+
+    /* Строка про согласие идёт следом за примечанием, без второй черты. */
+    .auth-fineprint {
+        margin-top: 1rem;
+        font-size: 0.6875rem;
+        line-height: 1.6;
+        color: var(--color-muted);
+    }
+
+    /* ---------------------------------------------------------------------
+       Сердечко на карточке товара.
+       Размеры и поведение — из CSS прототипа: 40×40 (37×37 на телефоне),
+       иконка 23×23 (20×20), `transition: opacity .2s`, наведение `.66`,
+       отмеченное состояние `#c22e55`.
+       --------------------------------------------------------------------- */
+    .product-favorite {
+        display: grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        margin: 8px;
+        border: 0;
+        background: none;
+        color: var(--color-ink);
+        cursor: pointer;
+    }
+
+    .product-favorite > svg {
+        width: 23px;
+        height: 23px;
+        transition: opacity 0.2s;
+        /* Отступление от прототипа. Там сердечко — тёмный контур без обводки,
+           и на его светлых карточках этого хватает. У нас фото разные: на зелёном
+           и на коже тонкая линия пропадает. Белый ореол вместо подложки —
+           он не спорит с «без скруглений и плашек» и читается на любом фоне. */
+        filter: drop-shadow(0 0 2px rgb(255 255 255 / 0.9));
+    }
+
+    .product-favorite:hover > svg {
+        opacity: 0.66;
+    }
+
+    .product-favorite.liked {
+        color: #c22e55;
+    }
+
+    .product-favorite.liked > svg {
+        fill: currentColor;
+    }
+
+    @media (max-width: 47.99rem) {
+        .product-favorite {
+            width: 37px;
+            height: 37px;
+            margin: 2px;
+        }
+
+        .product-favorite > svg {
+            width: 20px;
+            height: 20px;
+        }
+    }
 }

@@ -35,4 +35,52 @@ return [
     */
     'manager_email' => env('MANAGER_EMAIL'),
 
+    /*
+    | Вход через Яндекс ID.
+    |
+    | Redirect URI здесь не задаётся: он берётся из маршрута
+    | `auth.yandex.callback`. Адрес должен совпадать с зарегистрированным
+    | у провайдера посимвольно, а два источника правды рано или поздно
+    | разъезжаются.
+    */
+    'yandex' => [
+        'client_id'     => env('YANDEX_CLIENT_ID'),
+        'client_secret' => env('YANDEX_CLIENT_SECRET'),
+        'auth_url'      => env('YANDEX_AUTH_URL', 'https://oauth.yandex.ru/authorize'),
+        'token_url'     => env('YANDEX_TOKEN_URL', 'https://oauth.yandex.ru/token'),
+        'info_url'      => env('YANDEX_INFO_URL', 'https://login.yandex.ru/info'),
+    ],
+
+    /*
+    | Оплата через ЮKassa.
+    |
+    | Ключи выдаются в личном кабинете. У тестового магазина секретный ключ
+    | начинается с `test_` — по этому признаку определяется тестовый режим,
+    | отдельного флага заводить не нужно, и невозможно случайно принять
+    | боевые платежи, думая, что они тестовые.
+    */
+    'yookassa' => [
+        'shop_id'    => env('YOOKASSA_SHOP_ID'),
+        'secret_key' => env('YOOKASSA_SECRET_KEY'),
+        'api_url'    => env('YOOKASSA_API_URL', 'https://api.yookassa.ru/v3'),
+
+        /*
+        | Сети, из которых ЮKassa шлёт уведомления. Список опубликован
+        | в документации провайдера. Вебхук без этой проверки — открытая
+        | ручка, которой можно объявить любой заказ оплаченным.
+        */
+        'webhook_ips' => array_filter(array_map(
+            'trim',
+            explode(',', (string) env('YOOKASSA_WEBHOOK_IPS', implode(',', [
+                '185.71.76.0/27',
+                '185.71.77.0/27',
+                '77.75.153.0/25',
+                '77.75.156.11/32',
+                '77.75.156.35/32',
+                '77.75.154.128/25',
+                '2a02:5180::/32',
+            ]))),
+        )),
+    ],
+
 ];

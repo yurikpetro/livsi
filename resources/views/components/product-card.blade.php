@@ -1,11 +1,13 @@
 @props(['product'])
 
 @php
+    use App\Services\FavoriteService;
     use App\Support\Money;
 
     $variant   = $product->defaultVariant();
     $image     = $product->primaryImage();
     $available = $product->isAvailable();
+    $liked     = app(FavoriteService::class)->has($product);
 @endphp
 
 <article {{ $attributes->class(["group relative flex flex-col border border-line bg-paper"]) }}>
@@ -28,11 +30,28 @@
         @endif
 
         @unless ($available)
-            <span class="absolute right-3 top-3 bg-paper px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em]">
+            {{-- Снизу слева: сверху справа стоит сердечко, как в прототипе. --}}
+            <span class="absolute bottom-3 left-3 bg-paper px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em]">
                 Нет в наличии
             </span>
         @endunless
     </a>
+
+    {{-- Сердечко вынесено из ссылки на товар: вложенные интерактивные
+         элементы ломают и клавиатуру, и разметку. Без JavaScript это обычная
+         форма с возвратом назад, со скриптом — запрос в фоне. --}}
+    <form method="POST" action="{{ route('favorites.toggle', $product) }}"
+          class="absolute right-0 top-0 z-10" data-favorite>
+        @csrf
+        <button type="button" @class(['product-favorite', 'liked' => $liked])
+                aria-pressed="{{ $liked ? 'true' : 'false' }}"
+                aria-label="{{ $liked ? 'Убрать из избранного' : 'Добавить в избранное' }}"
+                onclick="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                <path d="M12 20.4S3.6 14.9 3.6 9.3a4.7 4.7 0 0 1 8.4-2.9 4.7 4.7 0 0 1 8.4 2.9c0 5.6-8.4 11.1-8.4 11.1Z"></path>
+            </svg>
+        </button>
+    </form>
 
     {{-- Быстрый просмотр. Кнопка вынесена из ссылки на товар: вложенные
          интерактивные элементы ломают и клавиатуру, и разметку. На тач-устройствах

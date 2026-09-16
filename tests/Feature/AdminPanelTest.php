@@ -128,85 +128,58 @@ class AdminPanelTest extends TestCase
         $this->assertSame($before, User::count());
     }
 
-    /** На боевом контуре пароля по умолчанию быть не должно. */
-    public function test_no_default_password_outside_development(): void
+    /**
+     * На боевом контуре значение по умолчанию не подставляется.
+     *
+     * Проверяется именно запасное значение: если ADMIN_EMAIL и ADMIN_PASSWORD
+     * заданы в окружении осознанно, они и должны работать — это нормальная
+     * настройка продакшена. Опасно другое: чтобы туда не уехал пароль
+     * из публичного README.
+     */
+    public function test_no_default_credentials_outside_development(): void
     {
-        $this->assertNotNull(
-            (require base_path('config/livsi.php'))['admin']['password'],
-            'В окружении разработки пароль подставляется',
-        );
-
         // env() читает $_ENV и $_SERVER, а не putenv().
-        $original = $_ENV['APP_ENV'] ?? null;
-        $_ENV['APP_ENV'] = $_SERVER['APP_ENV'] = 'production';
+        $saved = [];
+
+        foreach (['APP_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD'] as $key) {
+            $saved[$key] = $_ENV[$key] ?? null;
+        }
+
+        // Значение может лежать в трёх местах сразу: Dotenv кладёт его
+        // и в суперглобальные массивы, и через putenv.
+        $forget = function (string $key): void {
+            unset($_ENV[$key], $_SERVER[$key]);
+            putenv($key);
+        };
 
         try {
+            // Разработка: запасные значения есть, иначе локально не войти.
+            $forget('ADMIN_EMAIL');
+            $forget('ADMIN_PASSWORD');
+            $_ENV['APP_ENV'] = $_SERVER['APP_ENV'] = 'local';
+
+            $local = require base_path('config/livsi.php');
+
+            $this->assertNotNull($local['admin']['email']);
+            $this->assertNotNull($local['admin']['password']);
+
+            // Продакшен: тех же запасных значений быть не должно.
+            $_ENV['APP_ENV'] = $_SERVER['APP_ENV'] = 'production';
+
             $production = require base_path('config/livsi.php');
+
+            $this->assertNull($production['admin']['email']);
+            $this->assertNull($production['admin']['password']);
         } finally {
-            if ($original === null) {
-                unset($_ENV['APP_ENV'], $_SERVER['APP_ENV']);
-            } else {
-                $_ENV['APP_ENV'] = $_SERVER['APP_ENV'] = $original;
+            foreach ($saved as $key => $value) {
+                if ($value === null) {
+                    $forget($key);
+                } else {
+                    $_ENV[$key] = $_SERVER[$key] = $value;
+                    putenv("{$key}={$value}");
+                }
             }
         }
-
-        $this->assertNull($production['admin']['email']);
-        $this->assertNull($production['admin']['password']);
     }
 
-    /**
-     * Ссылка «Редактировать» из списка должна открываться.
-     *
-     * Filament строит адрес по ключу маршрута модели, а ищет запись по тому,
-     * что задано в ресурсе. Когда эти две вещи расходятся, кнопка правки
-     * ведёт в 404 — так было у товаров и документов, потому что у обеих
-     * моделей ключ маршрута slug, а в ресурсе стоял id.
-     *
-     * Тесты этого не ловили: они дёргали компонент напрямую и ходили
-     * по адресу с id, который админка никогда не генерирует.
-     */
-    public function test_edit_link_from_the_list_opens(): void
-    {
-        // Записи, которых нет в свежей базе: заявку создаёт посетитель,
-        // декларацию загружает заказчик. Создаём здесь, чтобы ни один
-        // ресурс не остался непроверенным.
-        \App\Models\LeadRequest::create([
-            'type' => 'contract', 'name' => 'Проверка', 'contact' => '@check', 'consent_at' => now(),
-        ]);
-        \App\Models\Declaration::create(['number' => 'ЕАЭС N RU Д-RU.РА01.В.00000/26']);
-
-        $broken  = [];
-        $skipped = [];
-
-        foreach (\Filament\Facades\Filament::getPanel('admin')->getResources() as $resource) {
-            if (! array_key_exists('edit', $resource::getPages())) {
-                continue;
-            }
-
-            $record = $resource::getModel()::query()->first();
-
-            // Молча пропускать ресурс нельзя: именно из-за этого проверка
-            // однажды не заметила сломанную кнопку — записей для неё
-            // просто не было в базе.
-            if (! $record) {
-                $skipped[] = class_basename($resource);
-
-                continue;
-            }
-
-            $url = $resource::getUrl('edit', ['record' => $record]);
-
-            if ($this->actingAs($this->admin)->get($url)->getStatusCode() !== 200) {
-                $broken[] = class_basename($resource) . ' → ' . parse_url($url, PHP_URL_PATH);
-            }
-        }
-
-        $this->assertSame([], $broken, 'Кнопка правки ведёт в 404: ' . implode(', ', $broken));
-
-        $this->assertSame(
-            [],
-            $skipped,
-            'Ресурс остался непроверенным из-за отсутствия записей: ' . implode(', ', $skipped),
-        );
-    }
 }

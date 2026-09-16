@@ -4,10 +4,14 @@ namespace App\Filament\Pages;
 
 use App\Filament\Support\MoneyField;
 use App\Models\Setting;
+use App\Payments\Vat;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\KeyValue;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
@@ -16,6 +20,7 @@ use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Icons\Heroicon;
@@ -64,6 +69,9 @@ class Settings extends Page implements HasForms
         'manager_email'           => '',
         'telegram_url'            => '',
         'whatsapp_url'            => '',
+        'vat_not_payer'           => false,
+        'vat_rate_default'        => null,
+        'vat_codes'               => Vat::DEFAULT_CODES,
         'reviews_eyebrow'         => 'Отзывы покупателей',
         'reviews_score'           => '4.9',
         'reviews_score_caption'   => 'Средняя оценка',
@@ -140,6 +148,37 @@ class Settings extends Page implements HasForms
                             ->helperText('Здесь стоит указать, где эти отзывы собраны.'),
                     ])
                     ->columns(4),
+
+                Section::make('Налоги и чеки')
+                    ->description('Ставка нужна для кассового чека: без неё платёж не создаётся. Пустое поле означает «не выяснили», а не «ноль» — угаданная ставка в чеке хуже, чем отказ в оплате.')
+                    ->schema([
+                        Toggle::make('vat_not_payer')
+                            ->label('Продавец не платит НДС')
+                            ->live()
+                            ->helperText('Тогда весь чек уходит с признаком «без НДС».'),
+
+                        TextInput::make('vat_rate_default')
+                            ->label('Ставка НДС по умолчанию, %')
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(100)
+                            ->step(0.01)
+                            ->visible(fn (Get $get) => ! $get('vat_not_payer'))
+                            ->helperText('Применяется к товарам, у которых своя ставка не задана. На УСН это чаще всего 5 % или 7 % — зависит от годового дохода.'),
+
+                        // Ставку в чек передают кодом, а не процентом, и коды
+                        // назначает ФНС. При изменении закона появляется новый
+                        // код — здесь его можно добавить, не дожидаясь выката.
+                        KeyValue::make('vat_codes')
+                            ->label('Коды ставок для чека')
+                            ->keyLabel('Ставка, %')
+                            ->valueLabel('Код в чеке')
+                            ->addActionLabel('Добавить ставку')
+                            ->visible(fn (Get $get) => ! $get('vat_not_payer'))
+                            ->columnSpanFull()
+                            ->helperText('Коды уже проставлены по документации ЮKassa: 0 % — 2, 10 % — 3, 20 % — 4, 5 % — 7, 7 % — 8, 22 % — 11. Обратите внимание: у ставки 5 % код 7, а у ставки 7 % код 8, их легко перепутать. Менять таблицу нужно только если закон введёт новую ставку — тогда добавьте строку и впишите код от провайдера. Строка с пустым кодом не работает: платёж по такой ставке не создастся.'),
+                    ])
+                    ->columns(2),
 
                 Section::make('Связь')
                     ->schema([

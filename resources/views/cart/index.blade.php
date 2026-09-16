@@ -124,14 +124,11 @@
                         <span class="text-2xl font-black">{{ Money::rub($subtotal) }}</span>
                     </div>
 
-                    {{-- Оформление подключается вместе с оплатой и доставкой: они ждут
-                         письма бухгалтера по НДС, ответа банка и габаритов SKU. --}}
-                    <button type="button" disabled
-                            class="btn btn-neon mt-6 w-full justify-center opacity-40 cursor-not-allowed">
+                    <a href="{{ route('checkout.index') }}" class="btn btn-neon mt-6 w-full justify-center">
                         Перейти к оформлению
-                    </button>
+                    </a>
                     <p class="mt-3 text-[10px] leading-relaxed text-muted">
-                        Оформление заказа появится вместе с оплатой и доставкой — следующий этап работ.
+                        Стоимость доставки рассчитывается отдельно и оплачивается при получении.
                     </p>
                 </aside>
             </div>

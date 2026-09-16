@@ -153,6 +153,35 @@
 
         <div class="flex items-center justify-end gap-4 md:gap-5">
             @livewire('search-box')
+
+            {{-- Избранное есть в прототипе и было пропущено в ревью
+                 (`07-design-review.md` § 12, п. 3). Гостю доступно так же,
+                 как корзина. --}}
+            @php $favoritesCount = app(\App\Services\FavoriteService::class)->count(); @endphp
+
+            <a href="{{ route('favorites') }}"
+               class="relative flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] hover:text-green"
+               aria-label="Избранное: {{ $favoritesCount }}">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                    <path d="M12 20.4S3.6 14.9 3.6 9.3a4.7 4.7 0 0 1 8.4-2.9 4.7 4.7 0 0 1 8.4 2.9c0 5.6-8.4 11.1-8.4 11.1Z"></path>
+                </svg>
+                <span class="hidden sm:inline">Избранное</span>
+                <span class="grid h-4 min-w-4 place-items-center rounded-full bg-neon px-1 text-[10px] font-bold text-ink @if ($favoritesCount === 0) hidden @endif"
+                      data-favorites-count>{{ $favoritesCount }}</span>
+            </a>
+
+            {{-- Кнопка профиля есть в прототипе. Гостю она ведёт на вход,
+                 но покупать по-прежнему можно без него. --}}
+            <a href="{{ auth()->check() ? route('account') : route('login') }}"
+               class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] hover:text-green"
+               aria-label="{{ auth()->check() ? 'Личный кабинет' : 'Вход' }}">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                    <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path>
+                    <path d="M4.5 20a7.5 7.5 0 0 1 15 0"></path>
+                </svg>
+                <span class="hidden sm:inline">{{ auth()->check() ? 'Профиль' : 'Вход' }}</span>
+            </a>
+
             @livewire('cart-drawer')
         </div>
     </div>
