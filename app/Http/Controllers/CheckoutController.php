@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreOrderRequest;
 use App\Payments\PaymentGateway;
 use App\Services\CartService;
+use App\Services\OrderMailer;
 use App\Services\OrderService;
 use App\Services\PaymentService;
 use App\Support\Text;
@@ -21,6 +22,7 @@ class CheckoutController extends Controller
         private readonly OrderService $orders,
         private readonly PaymentGateway $gateway,
         private readonly PaymentService $payments,
+        private readonly OrderMailer $mailer,
     ) {
     }
 
@@ -85,6 +87,11 @@ class CheckoutController extends Controller
         // Корзина очищается только после успешного создания платежа:
         // если провайдер отказал, человек возвращается к своим товарам.
         $this->carts->clear($cart);
+
+        // Письмо со ссылкой на заказ — гостю оно заменяет личный кабинет.
+        // Отправляем до перенаправления на оплату: человек может её не
+        // завершить, но заказ у него уже есть и открывается по ссылке.
+        $this->mailer->placed($order);
 
         return redirect()->away($payment->confirmation_url);
     }

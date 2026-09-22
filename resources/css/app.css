@@ -1529,4 +1529,413 @@
             height: 20px;
         }
     }
+
+    /* ---------------------------------------------------------------------
+       Карточка товара и быстрый просмотр.
+
+       Значения — из CSS прототипа, не на глаз. Там вся фотография является
+       кнопкой быстрого просмотра: при наведении по центру выезжает подпись,
+       снимок чуть приближается и насыщается, карточка приподнимается.
+       Страница товара открывается по заголовку — так две цели не спорят
+       за один клик.
+
+       Цвета взяты наши: у прототипа `--fresh` это #d0e64f, у нас неоновый
+       из брендбука #d0dd56. Серые линейки внутри модалки (#bbb) токена
+       не имеют и стоят как в прототипе — они темнее нашей `--color-line`.
+       --------------------------------------------------------------------- */
+    .product-card-lift {
+        transition: transform 0.28s;
+    }
+
+    @media (min-width: 64rem) {
+        .product-card-lift:hover {
+            transform: translateY(-7px);
+        }
+    }
+
+    .product-open {
+        display: block;
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        border: 0;
+        background: none;
+        overflow: hidden;
+        cursor: pointer;
+    }
+
+    /* x-img отдаёт <picture>, поэтому размер задаём обоим. Плавность
+       приближения снимка описана в .product-shot — теми же значениями
+       прототипа, второй раз её тут повторять не нужно. */
+    .product-open picture,
+    .product-modal-photo picture {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
+
+    .product-open img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .product-open::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: #00000014;
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+
+    .product-open i {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 150px;
+        height: 42px;
+        background: var(--color-ink);
+        color: var(--color-paper);
+        font-size: 11px;
+        font-style: normal;
+        font-weight: 750;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        opacity: 0;
+        transform: translate(-50%, -35%);
+        transition:
+            opacity 0.28s,
+            transform 0.28s;
+    }
+
+    .product-card-lift:hover .product-open::after {
+        opacity: 1;
+    }
+
+    .product-card-lift:hover .product-open i,
+    .product-open:focus-visible i {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+
+    /* На тач-устройствах наведения нет: подпись там только мешала бы,
+       а быстрый просмотр открывается нажатием по фотографии. */
+    @media (hover: none) {
+        .product-open i {
+            display: none;
+        }
+    }
+
+    /* ── Быстрый просмотр ─────────────────────────────────────────────── */
+
+    .product-modal-shell {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 28px;
+        background: #0000007a;
+        backdrop-filter: blur(5px);
+    }
+
+    .product-modal {
+        position: relative;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        width: min(1040px, 100%);
+        max-height: calc(100vh - 56px);
+        overflow: auto;
+        background: var(--color-paper);
+        box-shadow: 0 30px 100px #00000047;
+    }
+
+    .product-modal-close {
+        position: absolute;
+        top: 9px;
+        right: 10px;
+        z-index: 3;
+        width: 48px;
+        height: 48px;
+        border: 0;
+        background: #ffffffe6;
+        font-size: 35px;
+        font-weight: 250;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .product-modal-photo {
+        position: relative;
+        min-height: 680px;
+        overflow: hidden;
+        background: var(--color-shell);
+    }
+
+    .product-modal-photo img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .product-modal-copy {
+        display: flex;
+        flex-direction: column;
+        padding: 55px 42px 38px;
+    }
+
+    .modal-kicker {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        padding-bottom: 17px;
+        border-bottom: 1px solid #bbb;
+        font-size: 11px;
+    }
+
+    .modal-kicker span {
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .modal-kicker b {
+        font-weight: 650;
+        white-space: nowrap;
+    }
+
+    .product-modal h2 {
+        margin: 54px 0 18px;
+        font-size: clamp(39px, 4vw, 59px);
+        line-height: 0.92;
+        letter-spacing: -0.045em;
+        text-transform: none;
+    }
+
+    .modal-benefit {
+        max-width: 500px;
+        margin: 0;
+        font-size: 17px;
+        line-height: 1.4;
+    }
+
+    .modal-choice {
+        margin-top: 38px;
+    }
+
+    .modal-choice > span {
+        display: block;
+        margin-bottom: 10px;
+        font-size: 11px;
+        font-weight: 750;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .modal-choice button {
+        height: 44px;
+        padding-inline: 18px;
+        border: 1px solid var(--color-ink);
+        background: var(--color-paper);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .modal-choice button.active {
+        background: var(--color-ink);
+        color: var(--color-paper);
+    }
+
+    .modal-choice button:disabled {
+        opacity: 0.4;
+        text-decoration: line-through;
+        cursor: not-allowed;
+    }
+
+    .modal-facts {
+        display: grid;
+        grid-template-columns: 1fr;
+        margin-top: 24px;
+        border-top: 1px solid #bbb;
+    }
+
+    .modal-facts p {
+        display: grid;
+        grid-template-columns: 110px 1fr;
+        gap: 18px;
+        margin: 0;
+        padding: 14px 0;
+        border-bottom: 1px solid #bbb;
+    }
+
+    .modal-facts span {
+        color: #777;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .modal-facts b {
+        font-size: 12px;
+        line-height: 1.3;
+    }
+
+    .modal-buy {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        gap: 24px;
+        margin-top: auto;
+        padding-top: 34px;
+    }
+
+    .modal-buy > strong {
+        font-size: 25px;
+        white-space: nowrap;
+    }
+
+    .modal-buy > button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 56px;
+        padding-inline: 16px;
+        border: 0;
+        background: var(--color-neon);
+        color: var(--color-ink);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        cursor: pointer;
+    }
+
+    .modal-buy > button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    .modal-buy > button b {
+        font-size: 19px;
+        font-weight: 400;
+    }
+
+    .modal-more {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        height: 44px;
+        margin-top: 12px;
+        padding: 0;
+        color: inherit;
+        text-decoration: none;
+        border-top: 1px solid var(--color-ink);
+        border-bottom: 1px solid var(--color-ink);
+        background: var(--color-paper);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        cursor: pointer;
+    }
+
+    .modal-more b {
+        display: inline-block;
+        font-weight: 400;
+        transition: transform 0.2s;
+    }
+
+    .modal-more:hover b {
+        transform: translateX(3px);
+    }
+
+    @media (max-width: 63.99rem) {
+        .product-modal-photo {
+            min-height: 620px;
+        }
+
+        .product-modal-copy {
+            padding: 50px 30px 30px;
+        }
+    }
+
+    @media (max-width: 47.99rem) {
+        .product-modal-shell {
+            align-items: flex-end;
+            padding: 0;
+        }
+
+        .product-modal {
+            display: block;
+            width: 100%;
+            max-height: 94vh;
+        }
+
+        .product-modal-photo {
+            height: 390px;
+            min-height: 0;
+        }
+
+        .product-modal-copy {
+            padding: 27px 17px 24px;
+        }
+
+        .product-modal h2 {
+            margin: 34px 0 15px;
+            font-size: clamp(30px, 8.5vw, 38px);
+            line-height: 1.06;
+            letter-spacing: -0.018em;
+        }
+
+        .modal-benefit {
+            font-size: 15px;
+            line-height: 1.5;
+        }
+
+        .modal-facts p {
+            grid-template-columns: 86px 1fr;
+        }
+
+        .modal-facts b {
+            line-height: 1.5;
+        }
+
+        /* Кнопка покупки прилипает ко дну: на телефоне описание длинное,
+           и без этого до неё пришлось бы прокручивать. */
+        .modal-buy {
+            position: sticky;
+            bottom: -24px;
+            z-index: 2;
+            margin: 25px -17px 0;
+            padding: 12px 17px;
+            background: var(--color-paper);
+            box-shadow: 0 -10px 28px #0000001a;
+        }
+
+        .modal-buy > strong {
+            font-size: 20px;
+        }
+
+        .modal-buy > button {
+            height: 52px;
+        }
+
+        .modal-more,
+        .modal-buy > button {
+            white-space: normal;
+            line-height: 1.25;
+        }
+    }
 }

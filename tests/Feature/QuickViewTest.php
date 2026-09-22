@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Livewire\QuickView;
 use App\Models\Product;
+use App\Models\Setting;
+use App\Support\Money;
 use Database\Seeders\CatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -40,7 +42,7 @@ class QuickViewTest extends TestCase
             ->dispatch('quick-view', productId: $product->id)
             ->assertSet('open', true)
             ->assertSee($product->title)
-            ->assertSee('Открыть полную карточку');
+            ->assertSee('Состав · применение · отзывы');
     }
 
     public function test_default_variant_is_preselected(): void
@@ -138,6 +140,105 @@ class QuickViewTest extends TestCase
             ->assertSee('Нет в наличии')
             ->call('addToCart')
             ->assertNotDispatched('cart-add');
+    }
+
+    /**
+     * Содержимое модалки — как в макете.
+     *
+     * Объём выбирается, ниже три факта: аромат, эффект и порог бесплатной
+     * доставки. Подробное — состав, применение — спрятано за разворотом,
+     * чтобы быстрый просмотр оставался быстрым.
+     */
+    public function test_modal_shows_what_the_mockup_shows(): void
+    {
+        $product = Product::where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
+
+        Livewire::test(QuickView::class)
+            ->dispatch('quick-view', productId: $product->id)
+            ->assertSee('Объём')
+            ->assertSee('Аромат')
+            ->assertSee('Эффект')
+            ->assertSee('Доставка')
+            ->assertSee('Добавить в корзину')
+            ->assertSee('Состав · применение · отзывы');
+    }
+
+    /**
+     * Строка «Состав · применение · отзывы» — ссылка на страницу товара.
+     *
+     * Раньше она раскрывалась разворотом с копией текста. Копия означала
+     * два места для одного и того же; к тому же на странице товара этот
+     * текст идёт вместе с документами и микроразметкой.
+     */
+    public function test_details_row_leads_to_the_product_page(): void
+    {
+        $product = Product::where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
+
+        $html = Livewire::test(QuickView::class)
+            ->dispatch('quick-view', productId: $product->id)
+            ->html();
+
+        $marker = (int) strpos($html, 'modal-more');
+        $start  = (int) strrpos(substr($html, 0, $marker), '<');
+        $tag    = substr($html, $start, $marker - $start);
+
+        $this->assertStringStartsWith('<a ', $tag, 'Строка перестала быть ссылкой');
+        $this->assertStringContainsString(route('catalog.show', $product), $tag);
+        $this->assertStringNotContainsString('<details', $html, 'Разворот вернулся: текст снова дублируется');
+    }
+
+    /** Порог берётся из настроек: заказчик меняет его сам. */
+    public function test_delivery_threshold_comes_from_settings(): void
+    {
+        Setting::put('free_shipping_threshold', 250000);
+
+        $product = Product::where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
+
+        Livewire::test(QuickView::class)
+            ->dispatch('quick-view', productId: $product->id)
+            ->assertSee('Бесплатно в заказе от ' . Money::rub(250000));
+    }
+
+    /** В выборе стоит только объём: аромат показан отдельной строкой. */
+    public function test_choice_shows_the_volume_only(): void
+    {
+        $product = Product::with('variants')->where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
+        $variant = $product->variants->first();
+
+        $variant->update(['option_volume' => '180 мл', 'option_aroma' => 'грейпфрут']);
+
+        $html = Livewire::test(QuickView::class)
+            ->dispatch('quick-view', productId: $product->id)
+            ->html();
+
+        $this->assertStringContainsString('180 мл', $html);
+        $this->assertStringNotContainsString(
+            '180 мл · грейпфрут',
+            $html,
+            'В выборе объёма склеился аромат — он показывается отдельной строкой',
+        );
+    }
+
+    /**
+     * Фотография на карточке — кнопка быстрого просмотра, как в прототипе.
+     *
+     * Раньше снимок был ссылкой на страницу товара, а просмотр висел
+     * отдельной маленькой кнопкой. Теперь наведение показывает подпись,
+     * а страница товара открывается по заголовку: два действия не спорят
+     * за один клик.
+     */
+    public function test_card_photo_opens_the_quick_view_not_the_product_page(): void
+    {
+        $html = $this->get('/catalog')->assertOk()->getContent();
+
+        // Берём открывающий тег фотографии целиком: обработчик стоит в нём
+        // раньше класса, поэтому окно отсчитываем от начала тега.
+        $marker = (int) strpos($html, 'product-open');
+        $start  = (int) strrpos(substr($html, 0, $marker), '<');
+        $tag    = substr($html, $start, $marker - $start);
+
+        $this->assertStringStartsWith('<button', $tag, 'Фотография снова стала ссылкой на страницу товара');
+        $this->assertStringContainsString("Livewire.dispatch('quick-view'", $tag);
     }
 
     public function test_catalog_page_renders_quick_view_buttons(): void

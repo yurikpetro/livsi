@@ -22,6 +22,10 @@ use Illuminate\Support\Facades\Log;
  */
 class PaymentService
 {
+    public function __construct(private readonly OrderMailer $mailer)
+    {
+    }
+
     public function sync(Payment $payment): Order
     {
         return match ($payment->status) {
@@ -39,7 +43,7 @@ class PaymentService
             return $order;
         }
 
-        return DB::transaction(function () use ($order) {
+        $order = DB::transaction(function () use ($order) {
             // Резерв превращается в продажу: сначала снимаем резерв,
             // затем увеличиваем продано — иначе доступное количество
             // на мгновение окажется завышенным.
@@ -72,6 +76,17 @@ class PaymentService
 
             return $order->fresh();
         });
+
+        // Письма за пределами транзакции: очередь у нас в базе, и задание,
+        // поставленное внутри, исчезло бы вместе с откатом — а человек
+        // остался бы с оплаченным заказом и без письма.
+        //
+        // Место выбрано не случайно: сюда попадаем только на самом переходе
+        // в «оплачен». Вебхук провайдера приходит повторно, и письмо отсюда
+        // уходит ровно один раз.
+        $this->mailer->paid($order);
+
+        return $order;
     }
 
     public function markCancelled(Payment $payment): Order
@@ -95,7 +110,7 @@ class PaymentService
             return $order;
         }
 
-        return DB::transaction(function () use ($order) {
+        $order = DB::transaction(function () use ($order) {
             $this->releaseReserve($order);
 
             $order->update([
@@ -105,6 +120,10 @@ class PaymentService
 
             return $order->fresh();
         });
+
+        $this->mailer->cancelled($order);
+
+        return $order;
     }
 
     /** Вернуть зарезервированное в доступное — товар снова можно купить. */

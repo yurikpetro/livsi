@@ -10,16 +10,28 @@
     $liked     = app(FavoriteService::class)->has($product);
 @endphp
 
-<article {{ $attributes->class(["group relative flex flex-col border border-line bg-paper"]) }}>
-    <a href="{{ route('catalog.show', $product) }}" class="relative block aspect-[4/5] overflow-hidden bg-shell">
-        @if ($image)
-            <x-img :path="$image->path" :alt="$image->alt"
-                   sizes="(min-width: 1024px) 25vw, 50vw"
-                   class="product-shot h-full w-full object-cover" />
-        @endif
+<article {{ $attributes->class(['product-card-lift group relative flex flex-col border border-line bg-paper']) }}>
+    <div class="relative aspect-[4/5] overflow-hidden bg-shell">
+        {{-- Вся фотография — кнопка быстрого просмотра, как в прототипе:
+             при наведении по центру выезжает подпись, снимок приближается.
+             Страница товара открывается по заголовку, поэтому два действия
+             не спорят за один клик. --}}
+        <button type="button"
+                x-data
+                x-on:click="Livewire.dispatch('quick-view', { productId: {{ $product->id }} })"
+                class="product-open"
+                aria-label="Быстрый просмотр: {{ $product->title }}">
+            @if ($image)
+                <x-img :path="$image->path" :alt="$image->alt"
+                       sizes="(min-width: 1024px) 25vw, 50vw"
+                       class="product-shot" />
+            @endif
+
+            <i>Быстрый просмотр</i>
+        </button>
 
         @if ($product->badge)
-            <span class="absolute left-3 top-3 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em]
+            <span class="pointer-events-none absolute left-3 top-3 z-[2] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em]
                 @class([
                     'bg-neon' => $product->badge === 'new',
                     'bg-sand' => $product->badge === 'best',
@@ -30,40 +42,25 @@
         @endif
 
         @unless ($available)
-            {{-- Снизу слева: сверху справа стоит сердечко, как в прототипе. --}}
-            <span class="absolute bottom-3 left-3 bg-paper px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em]">
+            <span class="pointer-events-none absolute bottom-3 left-3 z-[2] bg-paper px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em]">
                 Нет в наличии
             </span>
         @endunless
-    </a>
 
-    {{-- Сердечко вынесено из ссылки на товар: вложенные интерактивные
-         элементы ломают и клавиатуру, и разметку. Без JavaScript это обычная
-         форма с возвратом назад, со скриптом — запрос в фоне. --}}
-    <form method="POST" action="{{ route('favorites.toggle', $product) }}"
-          class="absolute right-0 top-0 z-10" data-favorite>
-        @csrf
-        <button type="button" @class(['product-favorite', 'liked' => $liked])
-                aria-pressed="{{ $liked ? 'true' : 'false' }}"
-                aria-label="{{ $liked ? 'Убрать из избранного' : 'Добавить в избранное' }}"
-                onclick="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-                <path d="M12 20.4S3.6 14.9 3.6 9.3a4.7 4.7 0 0 1 8.4-2.9 4.7 4.7 0 0 1 8.4 2.9c0 5.6-8.4 11.1-8.4 11.1Z"></path>
-            </svg>
-        </button>
-    </form>
-
-    {{-- Быстрый просмотр. Кнопка вынесена из ссылки на товар: вложенные
-         интерактивные элементы ломают и клавиатуру, и разметку. На тач-устройствах
-         показываем всегда — там нет наведения. --}}
-    <div class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center pb-3 opacity-100 transition group-hover:opacity-100 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100"
-         style="top: auto">
-        <button type="button"
-                x-data
-                x-on:click="Livewire.dispatch('quick-view', { productId: {{ $product->id }} })"
-                class="pointer-events-auto bg-paper/95 px-3 py-2 text-[9px] font-bold uppercase tracking-[0.1em] shadow-sm hover:bg-paper">
-            Быстрый просмотр
-        </button>
+        {{-- Сердечко поверх кнопки просмотра: иначе нажатие по нему
+             открывало бы модалку. Без JavaScript это обычная форма. --}}
+        <form method="POST" action="{{ route('favorites.toggle', $product) }}"
+              class="absolute right-0 top-0 z-[4]" data-favorite>
+            @csrf
+            <button type="button" @class(['product-favorite', 'liked' => $liked])
+                    aria-pressed="{{ $liked ? 'true' : 'false' }}"
+                    aria-label="{{ $liked ? 'Убрать из избранного' : 'Добавить в избранное' }}"
+                    onclick="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                    <path d="M12 20.4S3.6 14.9 3.6 9.3a4.7 4.7 0 0 1 8.4-2.9 4.7 4.7 0 0 1 8.4 2.9c0 5.6-8.4 11.1-8.4 11.1Z"></path>
+                </svg>
+            </button>
+        </form>
     </div>
 
     <div class="flex flex-1 flex-col p-4">
@@ -97,7 +94,8 @@
 
             @if ($available && $variant)
                 {{-- У товара с несколькими вариантами кладём в корзину вариант
-                     по умолчанию: выбор объёма и аромата — на карточке товара. --}}
+                     по умолчанию: выбор объёма и аромата — в быстром просмотре
+                     и на карточке товара. --}}
                 {{-- Без JavaScript форма отправляется обычным POST и работает;
                      с Alpine перехватываем и открываем выдвижную корзину. --}}
                 <form method="POST" action="{{ route('cart.add') }}" x-data

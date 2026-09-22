@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Models\Product;
+use App\Models\Setting;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -74,6 +75,9 @@ class QuickView extends Component
     {
         return view('livewire.quick-view', [
             'product' => $this->product(),
+            // Порог бесплатной доставки заказчик меняет в настройках,
+            // поэтому в модалке он читается, а не вписан в шаблон.
+            'freeShipping' => (int) Setting::get('free_shipping_threshold', 0),
         ]);
     }
 
