@@ -6,7 +6,6 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Models\ProductVariant;
 use App\Models\Setting;
-use App\Models\StockQuota;
 use App\Payments\ReceiptBuilder;
 use App\Payments\Vat;
 use App\Services\CartService;
@@ -16,6 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
@@ -38,7 +38,7 @@ class CheckoutPaymentTest extends TestCase
         $this->seed(CatalogSeeder::class);
 
         config([
-            'livsi.yookassa.shop_id'    => '123456',
+            'livsi.yookassa.shop_id' => '123456',
             'livsi.yookassa.secret_key' => 'test_secret',
         ]);
 
@@ -63,21 +63,21 @@ class CheckoutPaymentTest extends TestCase
     {
         Http::fake([
             '*/payments' => Http::response([
-                'id'           => $id,
-                'status'       => $status,
-                'paid'         => false,
-                'confirmation' => ['type' => 'redirect', 'confirmation_url' => 'https://yoomoney.test/checkout/' . $id],
+                'id' => $id,
+                'status' => $status,
+                'paid' => false,
+                'confirmation' => ['type' => 'redirect', 'confirmation_url' => 'https://yoomoney.test/checkout/'.$id],
             ]),
         ]);
     }
 
-    private function checkout(array $overrides = []): \Illuminate\Testing\TestResponse
+    private function checkout(array $overrides = []): TestResponse
     {
         return $this->withUnencryptedCookie(CartService::COOKIE, $this->token)
             ->post(route('checkout.store'), array_merge([
-                'name'    => 'Мария',
-                'phone'   => '+7 900 000-00-00',
-                'email'   => 'maria@example.test',
+                'name' => 'Мария',
+                'phone' => '+7 900 000-00-00',
+                'email' => 'maria@example.test',
                 'consent' => '1',
             ], $overrides));
     }
@@ -140,6 +140,31 @@ class CheckoutPaymentTest extends TestCase
         $this->assertStringStartsWith('LV-', $order->number);
     }
 
+    /**
+     * Номер заказа выводится из id, а не из `max(id)` под блокировкой.
+     *
+     * Прежний вариант брал максимум с `lockForUpdate`, и PostgreSQL такой
+     * запрос отклоняет: `FOR UPDATE` нельзя сочетать с агрегатной функцией.
+     * Здесь тесты идут на SQLite, где блокировка игнорируется, поэтому
+     * ошибка вылезла только на боевом контуре. Проверяем следствие, которое
+     * видно и на SQLite: номер равен идентификатору, а временная заглушка
+     * не осталась в базе.
+     */
+    public function test_order_number_comes_from_the_id(): void
+    {
+        $this->fillCart(1);
+        $this->fakeCreated();
+        $this->checkout();
+
+        $order = Order::sole();
+
+        $this->assertSame(
+            'LV-'.str_pad((string) $order->id, 6, '0', STR_PAD_LEFT),
+            $order->number,
+        );
+        $this->assertStringNotContainsString('tmp-', $order->number);
+    }
+
     /** Позиция хранит снимок: цена и название меняются, заказ — нет. */
     public function test_order_item_keeps_a_snapshot(): void
     {
@@ -174,7 +199,7 @@ class CheckoutPaymentTest extends TestCase
     public function test_cart_survives_a_provider_failure(): void
     {
         $variant = $this->fillCart(2);
-        $before  = $variant->quota->fresh()->reserved;
+        $before = $variant->quota->fresh()->reserved;
 
         Http::fake(['*/payments' => Http::response(['type' => 'error'], 400)]);
 
@@ -204,7 +229,7 @@ class CheckoutPaymentTest extends TestCase
 
         Http::fake(fn () => throw new ConnectionException(
             'cURL error 60: SSL certificate problem: unable to get local issuer '
-            . 'certificate for https://api.yookassa.ru/v3/payments',
+            .'certificate for https://api.yookassa.ru/v3/payments',
         ));
 
         $this->checkout()->assertSessionHasErrors('payment');
@@ -264,8 +289,8 @@ class CheckoutPaymentTest extends TestCase
     public function test_order_reserves_the_quota(): void
     {
         $variant = $this->fillCart(2);
-        $quota   = $variant->quota;
-        $before  = $quota->reserved;
+        $quota = $variant->quota;
+        $before = $quota->reserved;
 
         $this->fakeCreated();
         $this->checkout();
@@ -413,18 +438,18 @@ class CheckoutPaymentTest extends TestCase
 
     // ─────────────────────────────────── вебхук
 
-    private function notify(string $externalId, string $status): \Illuminate\Testing\TestResponse
+    private function notify(string $externalId, string $status): TestResponse
     {
         Http::fake(['*/payments/*' => Http::response([
-            'id'             => $externalId,
-            'status'         => $status,
+            'id' => $externalId,
+            'status' => $status,
             'payment_method' => ['type' => 'sbp'],
         ])]);
 
         return $this->withServerVariables(['REMOTE_ADDR' => '185.71.76.1'])
             ->postJson(route('webhooks.yookassa'), [
-                'type'   => 'notification',
-                'event'  => 'payment.' . $status,
+                'type' => 'notification',
+                'event' => 'payment.'.$status,
                 'object' => ['id' => $externalId, 'status' => $status],
             ]);
     }

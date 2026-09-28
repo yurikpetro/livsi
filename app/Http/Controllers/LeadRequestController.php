@@ -8,24 +8,28 @@ use App\Mail\ContractLeadReceived;
 use App\Mail\WholesaleLeadReceived;
 use App\Models\LeadRequest;
 use App\Models\Setting;
+use App\Monitoring\BusinessNotifications;
 use App\Support\Text;
 use App\Support\Utm;
-use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 class LeadRequestController extends Controller
 {
+    public function __construct(private readonly BusinessNotifications $businessNotifications) {}
+
     /** Заявка на контрактное производство. */
     public function storeContract(StoreContractLeadRequest $request): RedirectResponse
     {
         $lead = $this->store($request, LeadRequest::TYPE_CONTRACT, [
             'product_category' => $request->input('product_category') ?: null,
-            'planned_volume'   => $this->clean($request, 'planned_volume'),
+            'planned_volume' => $this->clean($request, 'planned_volume'),
         ]);
 
+        $this->businessNotifications->queue('lead', $lead->id, 'leads');
         $this->notifyManager($lead, new ContractLeadReceived($lead));
 
         return $this->done('contract');
@@ -35,10 +39,11 @@ class LeadRequestController extends Controller
     public function storeWholesale(StoreWholesaleLeadRequest $request): RedirectResponse
     {
         $lead = $this->store($request, LeadRequest::TYPE_WHOLESALE, [
-            'city'         => $this->clean($request, 'city'),
+            'city' => $this->clean($request, 'city'),
             'sales_format' => $request->input('sales_format') ?: null,
         ]);
 
+        $this->businessNotifications->queue('lead', $lead->id, 'leads');
         $this->notifyManager($lead, new WholesaleLeadReceived($lead));
 
         return $this->done('partners');
@@ -51,8 +56,8 @@ class LeadRequestController extends Controller
     private function store(Request $request, string $type, array $own): LeadRequest
     {
         return LeadRequest::create(array_merge([
-            'type'    => $type,
-            'name'    => $this->clean($request, 'name'),
+            'type' => $type,
+            'name' => $this->clean($request, 'name'),
             'contact' => $this->clean($request, 'contact'),
             'comment' => $this->clean($request, 'comment'),
 
@@ -63,10 +68,10 @@ class LeadRequestController extends Controller
             // Рассылка — отдельный факт с отдельным временем: при проверке
             // придётся показать, на что именно человек согласился.
             'marketing_consent_at' => $request->boolean('marketing_consent') ? now() : null,
-            'ip'         => $request->ip(),
+            'ip' => $request->ip(),
             'user_agent' => mb_substr((string) $request->userAgent(), 0, 255),
-            'utm'        => Utm::current($request),
-            'status'     => LeadRequest::STATUS_NEW,
+            'utm' => Utm::current($request),
+            'status' => LeadRequest::STATUS_NEW,
         ], $own));
     }
 
@@ -105,7 +110,7 @@ class LeadRequestController extends Controller
         } catch (\Throwable $e) {
             Log::error('Не удалось поставить уведомление о заявке в очередь.', [
                 'lead_id' => $lead->id,
-                'error'   => $e->getMessage(),
+                'error' => $e->getMessage(),
             ]);
         }
     }

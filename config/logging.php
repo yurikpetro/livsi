@@ -1,5 +1,6 @@
 <?php
 
+use App\Monitoring\TelegramLogHandler;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -79,6 +80,21 @@ return [
             'level' => env('LOG_LEVEL', 'debug'),
             'max_files' => 3,
             'replace_placeholders' => true,
+        ],
+
+        /*
+        | Оповещения в рабочую группу Телеграма. Канал добавляется
+        | в LOG_STACK рядом с файловым — файл остаётся источником правды,
+        | Телеграм лишь сообщает, что в него пора заглянуть.
+        |
+        | Уровень по умолчанию — error: предупреждения вроде «вебхук
+        | с постороннего адреса» приходят пачками от чужих сканеров
+        | и быстро приучают не читать группу.
+        */
+        'telegram' => [
+            'driver' => 'monolog',
+            'handler' => TelegramLogHandler::class,
+            'level' => env('LOG_TELEGRAM_LEVEL', 'error'),
         ],
 
         'slack' => [

@@ -6,6 +6,7 @@ use App\Auth\SocialProfile;
 use App\Models\Order;
 use App\Models\SocialAccount;
 use App\Models\User;
+use App\Monitoring\BusinessNotifications;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -26,6 +27,8 @@ use RuntimeException;
  */
 class SocialAuthService
 {
+    public function __construct(private readonly BusinessNotifications $businessNotifications) {}
+
     public function login(SocialProfile $profile): User
     {
         return DB::transaction(function () use ($profile) {
@@ -49,7 +52,7 @@ class SocialAuthService
             }
 
             $user = User::create([
-                'name'  => $profile->name ?: 'Покупатель',
+                'name' => $profile->name ?: 'Покупатель',
                 'email' => $profile->email,
                 'phone' => $this->freePhone($profile->phone),
                 // Пароля у такого пользователя нет вовсе, и админка ему
@@ -59,10 +62,12 @@ class SocialAuthService
             ]);
 
             $user->socialAccounts()->create([
-                'provider'         => $profile->provider,
+                'provider' => $profile->provider,
                 'provider_user_id' => $profile->id,
-                'email'            => $profile->email,
+                'email' => $profile->email,
             ]);
+
+            $this->businessNotifications->queue('user', $user->id, 'users', $profile->provider);
 
             return $user;
         });

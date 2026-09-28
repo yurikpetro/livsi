@@ -23,8 +23,8 @@ return [
     | иначе администратор не создаётся вообще.
     */
     'admin' => [
-        'name'     => env('ADMIN_NAME', 'Администратор'),
-        'email'    => env('ADMIN_EMAIL', $isDev ? 'admin@livsi.shop' : null),
+        'name' => env('ADMIN_NAME', 'Администратор'),
+        'email' => env('ADMIN_EMAIL', $isDev ? 'admin@livsi.shop' : null),
         'password' => env('ADMIN_PASSWORD', $isDev ? 'livsi-admin' : null),
     ],
 
@@ -44,11 +44,11 @@ return [
     | разъезжаются.
     */
     'yandex' => [
-        'client_id'     => env('YANDEX_CLIENT_ID'),
+        'client_id' => env('YANDEX_CLIENT_ID'),
         'client_secret' => env('YANDEX_CLIENT_SECRET'),
-        'auth_url'      => env('YANDEX_AUTH_URL', 'https://oauth.yandex.ru/authorize'),
-        'token_url'     => env('YANDEX_TOKEN_URL', 'https://oauth.yandex.ru/token'),
-        'info_url'      => env('YANDEX_INFO_URL', 'https://login.yandex.ru/info'),
+        'auth_url' => env('YANDEX_AUTH_URL', 'https://oauth.yandex.ru/authorize'),
+        'token_url' => env('YANDEX_TOKEN_URL', 'https://oauth.yandex.ru/token'),
+        'info_url' => env('YANDEX_INFO_URL', 'https://login.yandex.ru/info'),
     ],
 
     /*
@@ -60,9 +60,9 @@ return [
     | боевые платежи, думая, что они тестовые.
     */
     'yookassa' => [
-        'shop_id'    => env('YOOKASSA_SHOP_ID'),
+        'shop_id' => env('YOOKASSA_SHOP_ID'),
         'secret_key' => env('YOOKASSA_SECRET_KEY'),
-        'api_url'    => env('YOOKASSA_API_URL', 'https://api.yookassa.ru/v3'),
+        'api_url' => env('YOOKASSA_API_URL', 'https://api.yookassa.ru/v3'),
 
         /*
         | Сети, из которых ЮKassa шлёт уведомления. Список опубликован
@@ -81,6 +81,87 @@ return [
                 '2a02:5180::/32',
             ]))),
         )),
+    ],
+
+    /*
+    | Оповещения о сбоях в Телеграм.
+    |
+    | Смысл простой: об ошибке на сайте узнавать не от покупателя. Бот
+    | пишет в рабочую группу, разобранную на топики, — у каждого топика
+    | свой номер, он же message_thread_id, и его видно в ссылке на топик.
+    |
+    | Идентификатор чата у супергруппы отрицательный, с приставкой -100:
+    | из ссылки https://t.me/c/4404612976/4 получается чат -1004404612976
+    | и топик 4.
+    |
+    | Уровень, с которого шлём, задаётся у канала лога (LOG_TELEGRAM_LEVEL),
+    | а не здесь: это дело журнала, а не бота.
+    */
+    'telegram' => [
+        'token' => env('TELEGRAM_BOT_TOKEN'),
+        'chat_id' => env('TELEGRAM_CHAT_ID'),
+        'api_url' => env('TELEGRAM_API_URL', 'https://api.telegram.org'),
+
+        /*
+        | Сколько ждать Телеграм. Эти секунды тратятся внутри запроса
+        | покупателя, поэтому их мало: лучше не отправить оповещение,
+        | чем заставить человека смотреть в белый экран.
+        |
+        | Соединение с боевого сервера устанавливается за 45 мс, так что
+        | двух секунд на него хватает с сорокакратным запасом, а сорванную
+        | попытку видно сразу — и остаётся время на повтор.
+        */
+        'timeout' => (float) env('TELEGRAM_TIMEOUT', 5),
+        'connect_timeout' => (float) env('TELEGRAM_CONNECT_TIMEOUT', 2),
+
+        /*
+        | Попытки соединиться.
+        |
+        | С боевого сервера каждое пятое TCP-рукопожатие с api.telegram.org
+        | пропадает: ICMP до него идёт без единой потери, а SYN на 443-й
+        | порт выборочно не доходит — похоже на фильтрацию по пути.
+        | Без повторов терялась бы пятая часть оповещений.
+        */
+        'tries' => (int) env('TELEGRAM_TRIES', 3),
+
+        /*
+        | Какой протокол использовать: v4, v6 или пусто — как решит система.
+        | На боевом сервере обязателен v6: IPv4 до api.telegram.org там
+        | не проходит вовсе, и без явного выбора curl половину попыток
+        | тратит на мёртвый адрес.
+        */
+        'ip_version' => env('TELEGRAM_IP_VERSION'),
+
+        /*
+        | Топики группы. Пока нужен один; остальные добавляются сюда
+        | и берутся по имени — App\Monitoring\Telegram::send($text, 'orders').
+        */
+        'topics' => [
+            'errors' => env('TELEGRAM_TOPIC_ERRORS'),
+            'payments' => env('TELEGRAM_TOPIC_PAYMENTS', 2),
+            'leads' => env('TELEGRAM_TOPIC_LEADS', 13),
+            'stock' => env('TELEGRAM_TOPIC_STOCK', 15),
+            'users' => env('TELEGRAM_TOPIC_USERS', 17),
+            'issues' => env('TELEGRAM_TOPIC_ISSUES', 19),
+        ],
+
+        'payments_connection' => env('TELEGRAM_PAYMENTS_CONNECTION', 'database'),
+
+        /*
+        | Окно молчания по одинаковым ошибкам, секунды. Сломанный шаг
+        | оформления за минуту даёт сотню одинаковых сообщений, и группу
+        | перестают читать ровно тогда, когда она нужнее всего.
+        */
+        'repeat_after' => (int) env('TELEGRAM_REPEAT_AFTER', 600),
+
+        /*
+        | Куда жаловаться, если оповещение не ушло. Обязательно канал
+        | с файлом и обязательно мимо стопки: через неё жалоба вернулась бы
+        | в тот же обработчик. Без этой записи несработавшее оповещение
+        | не оставляло бы следа вообще — то есть ровно та тишина,
+        | от которой всё и затевалось.
+        */
+        'fallback_channel' => env('TELEGRAM_FALLBACK_CHANNEL', 'daily'),
     ],
 
 ];

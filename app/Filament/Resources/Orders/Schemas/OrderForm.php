@@ -3,12 +3,14 @@
 namespace App\Filament\Resources\Orders\Schemas;
 
 use App\Models\Order;
+use App\Models\OrderIssue;
 use App\Support\Money;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Support\HtmlString;
 
 /**
  * Карточка заказа.
@@ -28,7 +30,10 @@ class OrderForm
                             ->label('Статус')
                             ->options(Order::statuses())
                             ->selectablePlaceholder(false)
-                            ->required(),
+                            ->required()
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->helperText('Финансовый статус меняется после подтверждения платёжной системы.'),
 
                         Textarea::make('comment')
                             ->label('Комментарий покупателя')
@@ -57,20 +62,20 @@ class OrderForm
                     ->schema([
                         Placeholder::make('items')
                             ->hiddenLabel()
-                            ->content(fn (Order $record) => new \Illuminate\Support\HtmlString(
+                            ->content(fn (Order $record) => new HtmlString(
                                 $record->items
                                     ->map(fn ($i) => e($i->label())
-                                        . ' × ' . $i->quantity
-                                        . ' — ' . e(Money::rub($i->total))
-                                        . ($i->is_gift ? ' (подарок)' : ''))
+                                        .' × '.$i->quantity
+                                        .' — '.e(Money::rub($i->total))
+                                        .($i->is_gift ? ' (подарок)' : ''))
                                     ->implode('<br>'),
                             ))
                             ->columnSpanFull(),
 
                         Placeholder::make('totals')->label('Суммы')
-                            ->content(fn (Order $record) => 'Товары ' . Money::rub($record->items_total)
-                                . ($record->discount_total > 0 ? ' · скидка −' . Money::rub($record->discount_total) : '')
-                                . ' · итого ' . Money::rub($record->total))
+                            ->content(fn (Order $record) => 'Товары '.Money::rub($record->items_total)
+                                .($record->discount_total > 0 ? ' · скидка −'.Money::rub($record->discount_total) : '')
+                                .' · итого '.Money::rub($record->total))
                             ->columnSpanFull(),
                     ]),
 
@@ -78,17 +83,29 @@ class OrderForm
                     ->schema([
                         Placeholder::make('payments')
                             ->hiddenLabel()
-                            ->content(fn (Order $record) => new \Illuminate\Support\HtmlString(
+                            ->content(fn (Order $record) => new HtmlString(
                                 $record->payments->isEmpty()
                                     ? 'Попыток оплаты не было'
                                     : $record->payments
                                         ->map(fn ($p) => e($p->statusLabel())
-                                            . ' · ' . e(Money::rub($p->amount))
-                                            . ' · ' . e($p->external_id ?? 'без номера')
-                                            . ' · ' . $p->created_at->format('d.m.Y H:i'))
+                                            .' · '.e(Money::rub($p->amount))
+                                            .' · '.e($p->external_id ?? 'без номера')
+                                            .' · '.$p->created_at->format('d.m.Y H:i'))
                                         ->implode('<br>'),
                             ))
                             ->columnSpanFull(),
+                    ])
+                    ->collapsed(),
+
+                Section::make('Обращения по возврату и доставке')
+                    ->schema([
+                        Placeholder::make('issues')->hiddenLabel()
+                            ->content(fn (Order $record) => new HtmlString(
+                                $record->issues()->latest()->get()->map(fn (OrderIssue $issue) => e(OrderIssue::kinds()[$issue->kind] ?? $issue->kind)
+                                    .' · '.e($issue->created_at->format('d.m.Y H:i'))
+                                    .' — '.e($issue->details)
+                                )->implode('<br>') ?: 'Обращений пока нет'
+                            )),
                     ])
                     ->collapsed(),
 

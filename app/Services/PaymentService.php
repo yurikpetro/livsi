@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Models\StockQuota;
 use App\Models\StockQuotaMovement;
+use App\Monitoring\PaymentNotifications;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -22,31 +23,31 @@ use Illuminate\Support\Facades\Log;
  */
 class PaymentService
 {
-    public function __construct(private readonly OrderMailer $mailer)
-    {
-    }
+    public function __construct(
+        private readonly OrderMailer $mailer,
+        private readonly PaymentNotifications $notifications,
+    ) {}
 
     public function sync(Payment $payment): Order
     {
         return match ($payment->status) {
             Payment::STATUS_SUCCEEDED => $this->markPaid($payment),
-            Payment::STATUS_CANCELED  => $this->markCancelled($payment),
-            default                   => $payment->order,
+            Payment::STATUS_CANCELED => $this->markCancelled($payment),
+            default => $payment->order,
         };
     }
 
     public function markPaid(Payment $payment): Order
     {
-        $order = $payment->order;
-
-        if ($order->isPaid()) {
-            return $order;
-        }
-
-        $order = DB::transaction(function () use ($order) {
-            // Резерв превращается в продажу: сначала снимаем резерв,
-            // затем увеличиваем продано — иначе доступное количество
-            // на мгновение окажется завышенным.
+        [$order, $changed] = DB::transaction(function () use ($payment) {
+            // Вебхук и возврат из платёжной формы могут прийти одновременно.
+            // Проверяем свежую запись под блокировкой, а не кеш связи модели.
+            $order = Order::query()->lockForUpdate()->findOrFail($payment->order_id);
+            if ($order->isPaid()) {
+                return [$order, false];
+            }
+            // Переводим резерв в продажу одним обновлением: промежуточное
+            // увеличение «доступно» создало бы ложное повторное предупреждение.
             foreach ($order->items as $item) {
                 $quota = StockQuota::where('product_variant_id', $item->product_variant_id)
                     ->lockForUpdate()
@@ -56,25 +57,27 @@ class PaymentService
                     continue;
                 }
 
-                $quota->decrement('reserved', min($item->quantity, $quota->reserved));
-                $quota->increment('sold', $item->quantity);
+                $quota->update([
+                    'reserved' => $quota->reserved - min($item->quantity, $quota->reserved),
+                    'sold' => $quota->sold + $item->quantity,
+                ]);
 
                 StockQuotaMovement::create([
                     'stock_quota_id' => $quota->id,
-                    'type'           => 'sell',
-                    'qty'            => $item->quantity,
-                    'comment'        => 'Оплачен заказ ' . $order->number,
+                    'type' => 'sell',
+                    'qty' => $item->quantity,
+                    'comment' => 'Оплачен заказ '.$order->number,
                 ]);
             }
 
             $order->update([
-                'status'  => Order::STATUS_PAID,
+                'status' => Order::STATUS_PAID,
                 'paid_at' => now(),
             ]);
 
             Log::info('Заказ оплачен.', ['order' => $order->number]);
 
-            return $order->fresh();
+            return [$order->fresh(), true];
         });
 
         // Письма за пределами транзакции: очередь у нас в базе, и задание,
@@ -84,7 +87,12 @@ class PaymentService
         // Место выбрано не случайно: сюда попадаем только на самом переходе
         // в «оплачен». Вебхук провайдера приходит повторно, и письмо отсюда
         // уходит ровно один раз.
-        $this->mailer->paid($order);
+        if ($changed) {
+            DB::afterCommit(function () use ($order, $payment) {
+                $this->notifications->queue($payment);
+                $this->mailer->paid($order);
+            });
+        }
 
         return $order;
     }
@@ -114,7 +122,7 @@ class PaymentService
             $this->releaseReserve($order);
 
             $order->update([
-                'status'       => Order::STATUS_CANCELLED,
+                'status' => Order::STATUS_CANCELLED,
                 'cancelled_at' => now(),
             ]);
 
@@ -143,9 +151,9 @@ class PaymentService
 
             StockQuotaMovement::create([
                 'stock_quota_id' => $quota->id,
-                'type'           => 'release',
-                'qty'            => -$release,
-                'comment'        => 'Снят резерв по заказу ' . $order->number,
+                'type' => 'release',
+                'qty' => -$release,
+                'comment' => 'Снят резерв по заказу '.$order->number,
             ]);
         }
     }

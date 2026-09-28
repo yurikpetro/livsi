@@ -11,25 +11,28 @@ class Order extends Model
     protected $guarded = [];
 
     protected $casts = [
-        'utm'                  => 'array',
-        'consent_at'           => 'datetime',
+        'utm' => 'array',
+        'consent_at' => 'datetime',
         'marketing_consent_at' => 'datetime',
-        'paid_at'              => 'datetime',
-        'cancelled_at'         => 'datetime',
+        'paid_at' => 'datetime',
+        'cancelled_at' => 'datetime',
     ];
 
     public const STATUS_AWAITING_PAYMENT = 'awaiting_payment';
-    public const STATUS_PAID             = 'paid';
-    public const STATUS_CANCELLED        = 'cancelled';
-    public const STATUS_REFUNDED         = 'refunded';
+
+    public const STATUS_PAID = 'paid';
+
+    public const STATUS_CANCELLED = 'cancelled';
+
+    public const STATUS_REFUNDED = 'refunded';
 
     public static function statuses(): array
     {
         return [
             self::STATUS_AWAITING_PAYMENT => 'Ждёт оплаты',
-            self::STATUS_PAID             => 'Оплачен',
-            self::STATUS_CANCELLED        => 'Отменён',
-            self::STATUS_REFUNDED         => 'Возвращён',
+            self::STATUS_PAID => 'Оплачен',
+            self::STATUS_CANCELLED => 'Отменён',
+            self::STATUS_REFUNDED => 'Возвращён',
         ];
     }
 
@@ -41,6 +44,11 @@ class Order extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    public function issues(): HasMany
+    {
+        return $this->hasMany(OrderIssue::class);
     }
 
     public function user(): BelongsTo

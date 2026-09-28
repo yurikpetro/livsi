@@ -27,9 +27,7 @@ use RuntimeException;
  */
 class OrderService
 {
-    public function __construct(private readonly PromoService $promo)
-    {
-    }
+    public function __construct(private readonly PromoService $promo) {}
 
     public function createFromCart(Cart $cart, array $customer): Order
     {
@@ -46,20 +44,26 @@ class OrderService
             // между добавлением подарка и оформлением человек мог убрать товар.
             $subtotal = $cart->subtotal();
             $giftValid = $gift && $this->promo->isGiftUnlocked($subtotal);
-            $discount  = $giftValid ? (int) $gift->variant->price : 0;
+            $discount = $giftValid ? (int) $gift->variant->price : 0;
 
             // Скидка не может быть больше самой корзины.
             $discount = min($discount, $subtotal);
 
             $order = Order::create(array_merge($customer, [
-                'number'         => $this->nextNumber(),
-                'items_total'    => $subtotal,
+                // Настоящий номер проставляется сразу после вставки: он
+                // выводится из id, которого до неё ещё нет. Заглушка
+                // случайная, потому что на колонке уникальный индекс
+                // и два одновременных заказа не должны столкнуться.
+                'number' => 'tmp-'.Str::random(24),
+                'items_total' => $subtotal,
                 'discount_total' => $discount,
-                'total'          => $subtotal - $discount,
+                'total' => $subtotal - $discount,
                 'gift_variant_id' => $giftValid ? $gift->product_variant_id : null,
-                'status'         => Order::STATUS_AWAITING_PAYMENT,
-                'access_token'   => Str::random(48),
+                'status' => Order::STATUS_AWAITING_PAYMENT,
+                'access_token' => Str::random(48),
             ]));
+
+            $order->forceFill(['number' => $this->numberFor($order->id)])->save();
 
             $shares = $this->spread($discount, $items->map(fn (CartItem $i) => $i->lineTotal())->values()->all());
 
@@ -89,15 +93,15 @@ class OrderService
 
         return $order->items()->create([
             'product_variant_id' => $variant->id,
-            'sku'          => $variant->sku,
-            'title'        => $product->title,
+            'sku' => $variant->sku,
+            'title' => $product->title,
             'option_label' => $variant->storefrontLabel(),
-            'unit_price'   => $isGift ? 0 : $variant->price,
-            'quantity'     => $item->qty,
-            'discount'     => $discount,
-            'total'        => max(0, $lineTotal - $discount),
-            'vat_rate'     => $product->vat_rate ?? Vat::defaultRate(),
-            'is_gift'      => $isGift,
+            'unit_price' => $isGift ? 0 : $variant->price,
+            'quantity' => $item->qty,
+            'discount' => $discount,
+            'total' => max(0, $lineTotal - $discount),
+            'vat_rate' => $product->vat_rate ?? Vat::defaultRate(),
+            'is_gift' => $isGift,
         ]);
     }
 
@@ -173,18 +177,32 @@ class OrderService
 
             StockQuotaMovement::create([
                 'stock_quota_id' => $quota->id,
-                'type'           => 'reserve',
-                'qty'            => $item->quantity,
-                'comment'        => 'Заказ ' . $order->number,
+                'type' => 'reserve',
+                'qty' => $item->quantity,
+                'comment' => 'Заказ '.$order->number,
             ]);
         }
     }
 
-    /** Номер вида LV-000123: человеку его диктуют по телефону. */
-    private function nextNumber(): string
+    /**
+     * Номер вида LV-000123: человеку его диктуют по телефону.
+     *
+     * Выводится из id, а не из `max(id) + 1`. Прежний вариант брал максимум
+     * под `lockForUpdate`, и PostgreSQL такой запрос отклоняет: `FOR UPDATE`
+     * нельзя сочетать с агрегатной функцией. На SQLite, где идёт разработка,
+     * блокировка игнорируется, поэтому ошибка вылезла только на боевом.
+     *
+     * Блокировать строку вместо агрегата тоже не выход: пока один заказ
+     * держит последнюю строку, второй дождётся её, прочитает тот же id
+     * и упрётся в уникальный индекс. Идентификатор выдаёт последовательность
+     * базы — она атомарна, и гонки не остаётся вовсе.
+     *
+     * Плата за это — возможные пропуски в нумерации: откатившаяся транзакция
+     * забирает значение последовательности с собой. Для номера, который
+     * диктуют по телефону, это безразлично.
+     */
+    private function numberFor(int $id): string
     {
-        $last = Order::query()->lockForUpdate()->max('id') ?? 0;
-
-        return 'LV-' . str_pad((string) ($last + 1), 6, '0', STR_PAD_LEFT);
+        return 'LV-'.str_pad((string) $id, 6, '0', STR_PAD_LEFT);
     }
 }

@@ -111,7 +111,10 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
+        // Даже если пустая переменная присутствует в .env, письмо должно
+        // получить валидный From. Когда задан SMTP-логин, используем его:
+        // Яндекс требует, чтобы адрес отправителя совпадал с ящиком.
+        'address' => env('MAIL_FROM_ADDRESS') ?: env('MAIL_USERNAME') ?: 'shop@livsi.shop',
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
     ],
 

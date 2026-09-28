@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Resources\LegalPages\Pages\EditLegalPage;
 use App\Models\LeadRequest;
 use App\Models\LegalPage;
 use App\Models\SellerProfile;
+use App\Models\Setting;
 use App\Models\User;
 use App\Support\CookieConsent;
 use Database\Seeders\CatalogSeeder;
@@ -42,18 +44,18 @@ class LegalTest extends TestCase
     public static function documents(): array
     {
         return [
-            'оферта'   => ['offer', 'Публичная оферта'],
+            'оферта' => ['offer', 'Публичная оферта'],
             'политика' => ['privacy', 'Политика конфиденциальности'],
             'согласие' => ['consent', 'Согласие на обработку персональных данных'],
             'доставка' => ['delivery', 'Доставка и оплата'],
-            'возврат'  => ['returns', 'Возврат товара'],
+            'возврат' => ['returns', 'Возврат товара'],
         ];
     }
 
     #[DataProvider('documents')]
     public function test_document_opens_at_its_own_address(string $slug, string $title): void
     {
-        $this->get('/' . $slug)
+        $this->get('/'.$slug)
             ->assertOk()
             ->assertSee($title)
             ->assertSee('Редакция от');
@@ -111,7 +113,7 @@ class LegalTest extends TestCase
         $html = $this->get('/offer')->assertOk()->getContent();
 
         foreach (['privacy', 'consent', 'delivery', 'returns'] as $slug) {
-            $this->assertStringContainsString(route('legal.' . $slug), $html);
+            $this->assertStringContainsString(route('legal.'.$slug), $html);
         }
     }
 
@@ -122,11 +124,11 @@ class LegalTest extends TestCase
         SellerProfile::query()->update(['is_default' => false]);
 
         SellerProfile::create([
-            'code'       => 'test',
+            'code' => 'test',
             'legal_name' => 'ИП Тестов Тест Тестович',
-            'inn'        => '260000000000',
-            'ogrn'       => '300000000000000',
-            'address'    => 'Ставрополь, ул. Тестовая, 1',
+            'inn' => '260000000000',
+            'ogrn' => '300000000000000',
+            'address' => 'Ставрополь, ул. Тестовая, 1',
             'is_default' => true,
         ]);
 
@@ -153,7 +155,7 @@ class LegalTest extends TestCase
             $html = $this->get($url)->assertOk()->getContent();
 
             foreach (array_keys(LegalPage::SLUGS) as $slug) {
-                $this->assertStringContainsString(route('legal.' . $slug), $html, "На {$url} нет ссылки на /{$slug}");
+                $this->assertStringContainsString(route('legal.'.$slug), $html, "На {$url} нет ссылки на /{$slug}");
             }
 
             $this->assertStringContainsString(route('contacts'), $html);
@@ -192,9 +194,9 @@ class LegalTest extends TestCase
     public function test_contacts_page_without_data_says_so(): void
     {
         SellerProfile::query()->delete();
-        \App\Models\Setting::put('manager_email', '');
-        \App\Models\Setting::put('telegram_url', '');
-        \App\Models\Setting::put('whatsapp_url', '');
+        Setting::put('manager_email', '');
+        Setting::put('telegram_url', '');
+        Setting::put('whatsapp_url', '');
 
         $this->get('/contacts')
             ->assertOk()
@@ -259,12 +261,12 @@ class LegalTest extends TestCase
     {
         return [
             'контрактное производство' => ['/contract-manufacturing', 'contract.store'],
-            'оптовые партнёры'         => ['/partners', 'partners.store'],
+            'оптовые партнёры' => ['/partners', 'partners.store'],
         ];
     }
 
     #[DataProvider('forms')]
-    public function test_form_has_two_separate_consents(string $url): void
+    public function test_form_has_two_separate_consents(string $url, string $route): void
     {
         $html = $this->get($url)->assertOk()->getContent();
 
@@ -277,13 +279,13 @@ class LegalTest extends TestCase
     }
 
     #[DataProvider('forms')]
-    public function test_neither_consent_is_pre_checked(string $url): void
+    public function test_neither_consent_is_pre_checked(string $url, string $route): void
     {
         $html = $this->get($url)->assertOk()->getContent();
 
         foreach (['name="consent"', 'name="marketing_consent"'] as $field) {
             $position = strpos($html, $field);
-            $chunk    = substr($html, $position, 120);
+            $chunk = substr($html, $position, 120);
 
             $this->assertStringNotContainsString('checked', $chunk, "Согласие {$field} предзаполнено");
         }
@@ -337,7 +339,7 @@ class LegalTest extends TestCase
         $response = $this->get('/sitemap.xml')->assertOk();
 
         foreach (array_keys(LegalPage::SLUGS) as $slug) {
-            $response->assertSee(route('legal.' . $slug));
+            $response->assertSee(route('legal.'.$slug));
         }
 
         $response->assertSee(route('contacts'));
@@ -349,7 +351,7 @@ class LegalTest extends TestCase
 
         $page = LegalPage::where('slug', 'delivery')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\LegalPages\Pages\EditLegalPage::class, ['record' => $page->getRouteKey()])
+        Livewire::test(EditLegalPage::class, ['record' => $page->getRouteKey()])
             ->fillForm(['title' => 'Доставка, оплата и сроки'])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -365,7 +367,7 @@ class LegalTest extends TestCase
 
         $page = LegalPage::where('slug', 'offer')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\LegalPages\Pages\EditLegalPage::class, ['record' => $page->getRouteKey()])
+        Livewire::test(EditLegalPage::class, ['record' => $page->getRouteKey()])
             ->fillForm(['slug' => 'publichnaya-oferta'])
             ->call('save');
 
