@@ -4,7 +4,9 @@ namespace App\Filament\Resources\Orders\Tables;
 
 use App\Models\Order;
 use App\Support\Money;
+use Filament\Actions\Action;
 use Filament\Actions\EditAction;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -41,10 +43,10 @@ class OrdersTable
                     ->badge()
                     ->formatStateUsing(fn (string $state) => Order::statuses()[$state] ?? $state)
                     ->color(fn (string $state) => match ($state) {
-                        Order::STATUS_PAID             => 'success',
+                        Order::STATUS_PAID => 'success',
                         Order::STATUS_AWAITING_PAYMENT => 'warning',
-                        Order::STATUS_CANCELLED        => 'danger',
-                        default                        => 'gray',
+                        Order::STATUS_CANCELLED => 'danger',
+                        default => 'gray',
                     }),
 
                 TextColumn::make('payment')
@@ -61,6 +63,11 @@ class OrdersTable
             ])
             ->recordActions([
                 EditAction::make(),
+                Action::make('print')
+                    ->label('Распечатать')
+                    ->icon(Heroicon::OutlinedPrinter)
+                    ->url(fn (Order $record): string => route('admin.orders.print', $record))
+                    ->openUrlInNewTab(),
             ]);
     }
 }

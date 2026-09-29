@@ -9,6 +9,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Validation\ValidationException;
 
 class EditOrder extends EditRecord
@@ -19,6 +20,12 @@ class EditOrder extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('print')
+                ->label('Распечатать заказ')
+                ->icon(Heroicon::OutlinedPrinter)
+                ->url(fn (): string => route('admin.orders.print', $this->record))
+                ->openUrlInNewTab(),
+
             Action::make('reportIssue')
                 ->label('Записать обращение')
                 ->schema([

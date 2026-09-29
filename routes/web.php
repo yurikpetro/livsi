@@ -1,21 +1,24 @@
 <?php
 
-use App\Http\Controllers\Auth\YandexAuthController;
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\Auth\YandexAuthController;
 use App\Http\Controllers\CartController;
-use App\Http\Controllers\FavoriteController;
-use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\CatalogController;
+use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\DeclarationController;
+use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LeadRequestController;
 use App\Http\Controllers\LegalPageController;
-use App\Http\Controllers\OrderController;
-use App\Http\Controllers\PaymentWebhookController;
-use App\Models\LegalPage;
 use App\Http\Controllers\LineController;
+use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PageController;
+use App\Http\Controllers\PaymentWebhookController;
+use App\Http\Controllers\PrintOrderController;
 use App\Http\Controllers\SitemapController;
+use App\Http\Middleware\CaptureUtm;
+use App\Models\LegalPage;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
@@ -53,9 +56,9 @@ Route::post('/contract-manufacturing', [LeadRequestController::class, 'storeCont
 // поэтому меняться из админки они не должны.
 foreach (array_keys(LegalPage::SLUGS) as $slug) {
     // Замыкание здесь недопустимо: с ним перестаёт работать route:cache.
-    Route::get('/' . $slug, [LegalPageController::class, 'show'])
+    Route::get('/'.$slug, [LegalPageController::class, 'show'])
         ->defaults('slug', $slug)
-        ->name('legal.' . $slug);
+        ->name('legal.'.$slug);
 }
 
 Route::get('/contacts', [PageController::class, 'contacts'])->name('contacts');
@@ -69,12 +72,15 @@ Route::post('/checkout', [CheckoutController::class, 'store'])
 // Заказ открывается по номеру и токену из письма: кабинета у гостя нет.
 Route::get('/order/{order}', [OrderController::class, 'show'])->name('order.show');
 
+// Внутренний лист для комплектации заказа: проверка прав — в контроллере.
+Route::get('/admin/orders/{order}/print', PrintOrderController::class)->name('admin.orders.print');
+
 // Вебхук провайдера: без сессии и без проверки CSRF — запрос приходит
 // не из браузера. Защита — список адресов и перепроверка статуса по API.
 Route::post('/webhooks/yookassa', PaymentWebhookController::class)
     ->withoutMiddleware([
-        \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
-        \App\Http\Middleware\CaptureUtm::class,
+        PreventRequestForgery::class,
+        CaptureUtm::class,
     ])
     ->name('webhooks.yookassa');
 
