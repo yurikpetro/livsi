@@ -20,6 +20,9 @@ interface PaymentGateway
     /** Спросить у провайдера актуальный статус — на случай потерянного вебхука. */
     public function refreshStatus(Payment $payment): Payment;
 
+    /** Отменить двухстадийный платёж в статусе waiting_for_capture. */
+    public function cancelPayment(Payment $payment): Payment;
+
     /** Настроен ли шлюз: без ключей платежи создавать нельзя. */
     public function isConfigured(): bool;
 }

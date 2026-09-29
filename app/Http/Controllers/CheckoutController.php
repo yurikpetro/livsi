@@ -23,8 +23,7 @@ class CheckoutController extends Controller
         private readonly PaymentGateway $gateway,
         private readonly PaymentService $payments,
         private readonly OrderMailer $mailer,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request)
     {
@@ -35,10 +34,10 @@ class CheckoutController extends Controller
         }
 
         return view('pages.checkout', [
-            'cart'    => $cart,
+            'cart' => $cart,
             'gateway' => $this->gateway,
             // Личная страница: в поиске ей делать нечего.
-            'robots'  => 'noindex, nofollow',
+            'robots' => 'noindex, nofollow',
         ]);
     }
 
@@ -52,16 +51,16 @@ class CheckoutController extends Controller
 
         try {
             $order = $this->orders->createFromCart($cart, [
-                'user_id'        => $request->user()?->id,
-                'customer_name'  => Text::utf8($request->string('name')->trim()->value()),
+                'user_id' => $request->user()?->id,
+                'customer_name' => Text::utf8($request->string('name')->trim()->value()),
                 'customer_phone' => Text::utf8($request->string('phone')->trim()->value()),
                 'customer_email' => Text::utf8($request->string('email')->trim()->value()),
-                'comment'        => Text::utf8($request->string('comment')->trim()->value()) ?: null,
-                'consent_at'     => now(),
+                'comment' => Text::utf8($request->string('comment')->trim()->value()) ?: null,
+                'consent_at' => now(),
                 'marketing_consent_at' => $request->boolean('marketing_consent') ? now() : null,
-                'ip'             => $request->ip(),
-                'user_agent'     => mb_substr((string) $request->userAgent(), 0, 255),
-                'utm'            => Utm::current($request),
+                'ip' => $request->ip(),
+                'user_agent' => mb_substr((string) $request->userAgent(), 0, 255),
+                'utm' => Utm::current($request),
             ]);
         } catch (Throwable $e) {
             // Заказ не создан — корзину не трогаем, человек может поправить
@@ -74,7 +73,7 @@ class CheckoutController extends Controller
         } catch (Throwable $e) {
             // Заказ уже есть, а платёж не создан: снимаем резерв, чтобы товар
             // не завис недоступным.
-            $this->payments->releaseReserve($order);
+            $this->payments->cancelIfNoLivePayment($order->id, notify: false);
 
             Log::error('Не удалось создать платёж.', [
                 'order' => $order->number,
@@ -114,7 +113,7 @@ class CheckoutController extends Controller
         $message = 'Оплата сейчас недоступна. Мы уже знаем о сбое — попробуйте позже или напишите нам.';
 
         return config('app.debug')
-            ? $message . ' [' . $e->getMessage() . ']'
+            ? $message.' ['.$e->getMessage().']'
             : $message;
     }
 }

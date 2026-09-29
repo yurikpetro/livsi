@@ -99,37 +99,32 @@ class PaymentService
 
     public function markCancelled(Payment $payment): Order
     {
-        $order = $payment->order;
+        return $this->cancelIfNoLivePayment($payment->order_id);
+    }
 
-        // Оплаченный заказ отменять по вебхуку нельзя: сначала приходит
-        // успех, потом может прийти отмена по другой попытке оплаты.
-        if ($order->isPaid() || $order->status === Order::STATUS_CANCELLED) {
-            return $order;
-        }
+    /** Снимает резерв ровно один раз и только когда все попытки оплаты завершены. */
+    public function cancelIfNoLivePayment(int $orderId, bool $notify = true): Order
+    {
+        [$order, $changed] = DB::transaction(function () use ($orderId) {
+            $order = Order::query()->lockForUpdate()->findOrFail($orderId);
 
-        // Пока есть другая живая попытка оплаты, заказ остаётся в ожидании:
-        // человек мог закрыть первую страницу и оплатить со второй.
-        $hasPending = $order->payments()
-            ->whereNotIn('status', [Payment::STATUS_CANCELED])
-            ->where('id', '!=', $payment->id)
-            ->exists();
+            if ($order->status !== Order::STATUS_AWAITING_PAYMENT
+                || $order->payments()->whereNotIn('status', [Payment::STATUS_CANCELED])->exists()) {
+                return [$order, false];
+            }
 
-        if ($hasPending) {
-            return $order;
-        }
-
-        $order = DB::transaction(function () use ($order) {
             $this->releaseReserve($order);
-
             $order->update([
                 'status' => Order::STATUS_CANCELLED,
                 'cancelled_at' => now(),
             ]);
 
-            return $order->fresh();
+            return [$order->fresh(), true];
         });
 
-        $this->mailer->cancelled($order);
+        if ($changed && $notify) {
+            DB::afterCommit(fn () => $this->mailer->cancelled($order));
+        }
 
         return $order;
     }
@@ -137,8 +132,8 @@ class PaymentService
     /** Вернуть зарезервированное в доступное — товар снова можно купить. */
     public function releaseReserve(Order $order): void
     {
-        foreach ($order->items as $item) {
-            $quota = StockQuota::where('product_variant_id', $item->product_variant_id)
+        foreach ($order->items->groupBy('product_variant_id') as $variantId => $items) {
+            $quota = StockQuota::where('product_variant_id', $variantId)
                 ->lockForUpdate()
                 ->first();
 
@@ -146,7 +141,18 @@ class PaymentService
                 continue;
             }
 
-            $release = min($item->quantity, $quota->reserved);
+            $alreadyReleased = -(int) StockQuotaMovement::query()
+                ->where('stock_quota_id', $quota->id)
+                ->where('type', 'release')
+                ->where('comment', 'Снят резерв по заказу '.$order->number)
+                ->sum('qty');
+            $remaining = $items->sum('quantity') - $alreadyReleased;
+            $release = min(max(0, $remaining), $quota->reserved);
+
+            if ($release < 1) {
+                continue;
+            }
+
             $quota->decrement('reserved', $release);
 
             StockQuotaMovement::create([

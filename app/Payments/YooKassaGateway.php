@@ -42,30 +42,30 @@ class YooKassaGateway implements PaymentGateway
         $amount = $receipt->total();
 
         $payment = $order->payments()->create([
-            'gateway'         => 'yookassa',
+            'gateway' => 'yookassa',
             'idempotence_key' => (string) Str::uuid(),
-            'status'          => Payment::STATUS_PENDING,
-            'amount'          => $amount,
+            'status' => Payment::STATUS_PENDING,
+            'amount' => $amount,
         ]);
 
         $response = $this->client()
             ->withHeaders(['Idempotence-Key' => $payment->idempotence_key])
             ->post('/payments', [
                 'amount' => [
-                    'value'    => number_format($amount / 100, 2, '.', ''),
+                    'value' => number_format($amount / 100, 2, '.', ''),
                     'currency' => 'RUB',
                 ],
                 // Списываем сразу: двухстадийная схема нужна там, где товар
                 // может не поехать, а у нас есть квота и резерв под заказ.
-                'capture'      => true,
-                'description'  => 'Заказ ' . $order->number,
+                'capture' => true,
+                'description' => 'Заказ '.$order->number,
                 'confirmation' => [
-                    'type'       => 'redirect',
+                    'type' => 'redirect',
                     'return_url' => $order->accessUrl(),
                 ],
-                'receipt'  => $receipt->build(),
+                'receipt' => $receipt->build(),
                 'metadata' => [
-                    'order_id'     => (string) $order->id,
+                    'order_id' => (string) $order->id,
                     'order_number' => $order->number,
                 ],
             ]);
@@ -74,16 +74,16 @@ class YooKassaGateway implements PaymentGateway
             // Запись оставляем: по ней видно, что попытка была, и в поддержке
             // провайдера её можно найти по ключу идемпотентности.
             $payment->update([
-                'status'  => Payment::STATUS_CANCELED,
+                'status' => Payment::STATUS_CANCELED,
                 'payload' => $response->json() ?: ['http_status' => $response->status()],
                 'cancellation_reason' => 'Провайдер отклонил создание платежа',
-                'cancelled_at'        => now(),
+                'cancelled_at' => now(),
             ]);
 
             Log::error('ЮKassa не приняла платёж.', [
-                'order'  => $order->number,
+                'order' => $order->number,
                 'status' => $response->status(),
-                'body'   => $response->body(),
+                'body' => $response->body(),
             ]);
 
             throw new RuntimeException('Платёж создать не удалось. Попробуйте ещё раз или напишите нам.');
@@ -100,12 +100,36 @@ class YooKassaGateway implements PaymentGateway
             return $payment;
         }
 
-        $response = $this->client()->get('/payments/' . $payment->external_id);
+        $response = $this->client()->get('/payments/'.$payment->external_id);
 
         if ($response->failed()) {
             Log::warning('Не удалось получить статус платежа.', [
                 'payment' => $payment->id,
-                'status'  => $response->status(),
+                'status' => $response->status(),
+            ]);
+
+            return $payment;
+        }
+
+        return $this->apply($payment, $response->json());
+    }
+
+    public function cancelPayment(Payment $payment): Payment
+    {
+        $this->guard();
+
+        if (! $payment->external_id || $payment->status !== Payment::STATUS_WAITING_FOR_CAPTURE) {
+            return $payment;
+        }
+
+        $response = $this->client()
+            ->withHeaders(['Idempotence-Key' => (string) Str::uuid()])
+            ->post('/payments/'.$payment->external_id.'/cancel', []);
+
+        if ($response->failed()) {
+            Log::warning('ЮKassa не подтвердила отмену просроченного платежа.', [
+                'payment' => $payment->id,
+                'status' => $response->status(),
             ]);
 
             return $payment;
@@ -125,11 +149,11 @@ class YooKassaGateway implements PaymentGateway
         $status = $data['status'] ?? $payment->status;
 
         $payment->fill([
-            'external_id'      => $data['id'] ?? $payment->external_id,
-            'status'           => $status,
+            'external_id' => $data['id'] ?? $payment->external_id,
+            'status' => $status,
             'confirmation_url' => $data['confirmation']['confirmation_url'] ?? $payment->confirmation_url,
-            'payment_method'   => $data['payment_method']['type'] ?? $payment->payment_method,
-            'payload'          => $data,
+            'payment_method' => $data['payment_method']['type'] ?? $payment->payment_method,
+            'payload' => $data,
         ]);
 
         if ($status === Payment::STATUS_SUCCEEDED && ! $payment->paid_at) {
@@ -169,7 +193,7 @@ class YooKassaGateway implements PaymentGateway
         if (! Vat::isConfigured()) {
             throw new RuntimeException(
                 'Не определена ставка НДС — чек сформировать нельзя. '
-                . 'Задайте её в настройках сайта.',
+                .'Задайте её в настройках сайта.',
             );
         }
     }

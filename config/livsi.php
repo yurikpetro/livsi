@@ -83,6 +83,8 @@ return [
         )),
     ],
 
+    'order_reserve_minutes' => (int) env('ORDER_RESERVE_MINUTES', 1440),
+
     /*
     | Оповещения о сбоях в Телеграм.
     |
