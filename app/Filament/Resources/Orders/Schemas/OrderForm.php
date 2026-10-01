@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Orders\Schemas;
 
 use App\Models\Order;
 use App\Models\OrderIssue;
+use App\Services\DeliverySelection;
 use App\Support\Money;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -57,6 +58,30 @@ class OrderForm
                             ->columnSpanFull(),
                     ])
                     ->columns(3),
+
+                Section::make('Доставка')
+                    ->schema([
+                        Placeholder::make('delivery_method')->label('Способ')
+                            ->content(fn (Order $record) => DeliverySelection::label($record->delivery_method)),
+                        Placeholder::make('delivery_city')->label('Город')
+                            ->content(fn (Order $record) => $record->delivery_city ?: '—'),
+                        Placeholder::make('delivery_region')->label('Регион')
+                            ->content(fn (Order $record) => $record->delivery_region ?: '—'),
+                        Placeholder::make('delivery_address')->label('Адрес курьера')
+                            ->content(fn (Order $record) => $record->delivery_address ?: '—'),
+                        Placeholder::make('delivery_point_hint')->label('Пожелание по ПВЗ')
+                            ->content(fn (Order $record) => $record->delivery_point_hint ?: '—'),
+                        Placeholder::make('delivery_point_address')->label('Предпочтительный ПВЗ ApiShip')
+                            ->content(fn (Order $record) => $record->delivery_point_address
+                                ? $record->delivery_point_address.' (ApiShip ID '.$record->delivery_point_id.')'
+                                : '—'),
+                        Placeholder::make('delivery_price_status')->label('Стоимость')
+                            ->content(fn (Order $record) => $record->delivery_price > 0
+                                ? Money::rub($record->delivery_price)
+                                : 'Не рассчитана. Связаться с покупателем и согласовать отдельно.')
+                            ->columnSpanFull(),
+                    ])
+                    ->columns(2),
 
                 Section::make('Состав')
                     ->schema([

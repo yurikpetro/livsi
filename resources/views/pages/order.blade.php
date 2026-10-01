@@ -4,6 +4,7 @@
 
 @php
     use App\Models\Order;
+    use App\Services\DeliverySelection;
     use App\Support\Money;
 
     $state = match ($order->status) {
@@ -27,6 +28,8 @@
 
 @section('content')
     <section class="site-container py-16 md:py-24">
+        <x-development-notice />
+
         <div class="eyebrow">Заказ {{ $order->number }} от {{ $order->created_at->translatedFormat('j F Y') }}</div>
 
         <div class="mt-6 border-l-4 {{ $state[2] }} bg-shell p-6 md:p-8" role="status">
@@ -109,6 +112,26 @@
                         <div><dt>Оплата</dt><dd>{{ $payment->statusLabel() }}</dd></div>
                     @endif
                 </dl>
+
+                <div class="eyebrow mt-8">Доставка</div>
+                <dl class="legal-requisites mt-5">
+                    <div><dt>Способ</dt><dd>{{ DeliverySelection::label($order->delivery_method) }}</dd></div>
+                    @if ($order->delivery_city)
+                        <div><dt>Город</dt><dd>{{ $order->delivery_city }}</dd></div>
+                    @endif
+                    @if ($order->delivery_region)
+                        <div><dt>Регион</dt><dd>{{ $order->delivery_region }}</dd></div>
+                    @endif
+                    @if ($order->delivery_address)
+                        <div><dt>Адрес</dt><dd>{{ $order->delivery_address }}</dd></div>
+                    @endif
+                    @if ($order->delivery_point_address)
+                        <div><dt>Предпочтительный ПВЗ</dt><dd>{{ $order->delivery_point_address }}</dd></div>
+                    @elseif ($order->delivery_point_hint)
+                        <div><dt>Пожелание по ПВЗ</dt><dd>{{ $order->delivery_point_hint }}</dd></div>
+                    @endif
+                </dl>
+                <p class="mt-4 text-xs leading-relaxed text-muted">{{ $order->delivery_point_id ? 'Доступность выбранного ПВЗ и срок доставки подтвердит менеджер.' : 'Стоимость доставки и пункт выдачи согласуем отдельно.' }} В оплату выше включены только товары.</p>
 
                 <p class="mt-6 text-xs leading-relaxed text-muted">
                     Сохраните ссылку на эту страницу — по ней заказ открывается без входа.

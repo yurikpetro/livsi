@@ -51,6 +51,15 @@
 <header x-data="{ menu: false, catalog: false, sub: null }"
         x-on:keydown.escape.window="menu = false; catalog = false; sub = null"
         class="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
+    <div class="city-strip border-b border-line/60">
+        <div class="site-container">
+            <button type="button" class="city-strip-button" data-city-open aria-label="Выбрать город доставки" aria-expanded="false" aria-controls="site-city-dialog">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                <span data-city-label>Выберите город</span>
+                <span aria-hidden="true">⌄</span>
+            </button>
+        </div>
+    </div>
     <div class="site-container grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-3 md:h-16 md:gap-4">
         <div class="flex items-center">
             <button type="button" x-on:click="menu = !menu"

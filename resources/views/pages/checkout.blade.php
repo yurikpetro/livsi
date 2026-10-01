@@ -4,6 +4,7 @@
 
 @php
     use App\Support\Money;
+    use App\Services\DeliverySelection;
 
     $gift = $cart->giftItem();
 @endphp
@@ -54,11 +55,19 @@
                 </div>
 
                 <p class="mt-2 text-xs leading-relaxed text-muted">
-                    Стоимость доставки рассчитывается отдельно и оплачивается при получении.
+                    @if ($remainingToFreeShipping === 0)
+                        Для этого заказа доставка бесплатная. Сейчас оплачиваются только товары; способ, пункт выдачи и срок менеджер подтвердит отдельно.
+                    @elseif ($remainingToFreeShipping !== null)
+                        До бесплатной доставки осталось {{ Money::rub($remainingToFreeShipping) }}. Сейчас оплачиваются только товары; стоимость и пункт выдачи менеджер согласует отдельно.
+                    @else
+                        Сейчас оплачиваются только товары. Стоимость и пункт выдачи менеджер согласует отдельно.
+                    @endif
                 </p>
             </div>
 
             <div>
+                <x-development-notice />
+
                 @unless ($gateway->isConfigured())
                     {{-- Честное состояние вместо кнопки, которая ничего не сделает. --}}
                     <div class="mb-6 border-l-4 border-danger bg-paper p-5 text-sm leading-relaxed" role="alert">
@@ -97,6 +106,78 @@
                         @error('email')<span class="field-error">{{ $message }}</span>@enderror
                         <span class="mt-1 block text-[11px] text-muted">На этот адрес придёт кассовый чек — этого требует закон.</span>
                     </label>
+
+                    <label class="field field-wide" for="delivery-city">
+                        <span class="field-label">Город или населённый пункт <span aria-hidden="true">*</span></span>
+                        <input id="delivery-city" type="text" name="delivery_city" value="{{ old('delivery_city') }}" required
+                               placeholder="Начните вводить город или село" autocomplete="off" class="field-control">
+                        @error('delivery_city')<span class="field-error">{{ $message }}</span>@enderror
+                        <span class="mt-1 block text-[11px] leading-relaxed text-muted">Город можно изменить здесь или в шапке сайта. <a href="{{ route('legal.privacy') }}" target="_blank" class="underline">Как обрабатываются данные</a></span>
+                    </label>
+                    <input type="hidden" name="delivery_region" value="{{ old('delivery_region') }}">
+
+                    <div class="field field-wide" data-delivery-methods @if (mb_strlen(trim((string) old('delivery_city'))) < 2) hidden @endif>
+                        <span class="field-label">Куда доставить? <span aria-hidden="true">*</span></span>
+                        <div class="delivery-choices">
+                            <label class="delivery-choice">
+                                <input type="radio" name="delivery_method" value="{{ DeliverySelection::PICKUP_POINT }}" required
+                                       @checked(old('delivery_method') === DeliverySelection::PICKUP_POINT || in_array(old('delivery_method'), DeliverySelection::pickupMethods(), true))>
+                                <span><strong>В пункт выдачи</strong><small>{{ $mapsApiKey ? 'Все доступные службы на одной карте' : 'Все доступные службы в общем списке' }}</small></span>
+                            </label>
+                            <label class="delivery-choice" data-delivery-courier>
+                                <input type="radio" name="delivery_method" value="{{ DeliverySelection::STAVROPOL_COURIER }}" required
+                                       @disabled(! DeliverySelection::isStavropol((string) old('delivery_city')))
+                                       @checked(old('delivery_method') === DeliverySelection::STAVROPOL_COURIER)>
+                                <span><strong>Курьер по Ставрополю</strong><small>Доступен только в Ставрополе</small></span>
+                            </label>
+                        </div>
+                        @error('delivery_method')<span class="field-error">{{ $message }}</span>@enderror
+                    </div>
+
+                    <label class="field field-wide" data-delivery-address>
+                        <span class="field-label">Адрес для курьера по Ставрополю</span>
+                        <input type="text" name="delivery_address" value="{{ old('delivery_address') }}"
+                               placeholder="Улица, дом, квартира" autocomplete="street-address" class="field-control">
+                        @error('delivery_address')<span class="field-error">{{ $message }}</span>@enderror
+                    </label>
+
+                    <input type="hidden" name="delivery_point_hint" value="{{ old('delivery_point_hint') }}">
+
+                    <div class="field field-wide" data-delivery-points
+                         data-courier-city="{{ config('livsi.delivery.origin_city') }}"
+                         data-url="{{ route('delivery.points') }}"
+                         data-geocode-url="{{ route('delivery.city.geocode') }}"
+                         data-free-shipping="{{ $remainingToFreeShipping === 0 ? '1' : '0' }}"
+                         data-methods="{{ implode(',', $pointMethods) }}"
+                         data-maps-key="{{ $mapsApiKey }}" data-suggest-key="{{ $suggestApiKey }}">
+                        <p class="mb-2 text-xs leading-relaxed text-muted" data-points-instruction></p>
+                        <button type="button" class="btn btn-outline" data-points-search hidden>Выбрать пункт выдачи на карте</button>
+                        <p class="text-xs text-muted" role="status" data-points-status hidden></p>
+                        <p class="mt-2 text-sm font-semibold" data-point-selected hidden></p>
+                        <dialog class="pickup-dialog" data-points-dialog aria-label="Выбор пункта выдачи">
+                            <div class="pickup-dialog-head">
+                                <div><span class="pickup-dialog-kicker">ДОСТАВКА LIVSI</span><h2>Выберите пункт выдачи</h2><p data-points-location></p></div>
+                                <button type="button" class="pickup-dialog-close" data-points-close aria-label="Закрыть карту">×</button>
+                            </div>
+                            <div class="pickup-dialog-body">
+                                <aside class="pickup-sidebar">
+                                    <label class="sr-only" for="pickup-filter">Поиск пункта выдачи</label>
+                                    <input id="pickup-filter" type="search" class="pickup-filter" data-points-filter placeholder="Адрес, населённый пункт или служба">
+                                    <p class="pickup-count" data-points-count></p>
+                                    <div class="pickup-list" data-points-list></div>
+                                    <button type="button" class="pickup-more" data-points-more hidden>Показать ещё пункты</button>
+                                </aside>
+                                <div class="pickup-map-wrap">
+                                    <div class="delivery-map" data-points-map hidden aria-label="Карта пунктов выдачи"></div>
+                                    <p class="pickup-map-fallback" data-points-map-fallback hidden>Карта сейчас недоступна. Выберите пункт в списке слева.</p>
+                                </div>
+                            </div>
+                        </dialog>
+                        <input type="hidden" name="delivery_point_id" value="{{ old('delivery_point_id') }}" data-point-id>
+                        <input type="hidden" name="delivery_point_method" value="{{ old('delivery_point_method') }}" data-point-method>
+                        <p class="mt-2 text-[11px] leading-relaxed text-muted" data-ozon-notice hidden>Для Ozon номер получателя должен быть привязан к Ozon ID. Если это не так, менеджер предложит другой способ.</p>
+                        @error('delivery_point_id')<span class="field-error">{{ $message }}</span>@enderror
+                    </div>
 
                     <label class="field field-wide">
                         <span class="field-label">Комментарий</span>

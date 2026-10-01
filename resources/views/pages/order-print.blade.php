@@ -87,10 +87,22 @@
                     @if ($order->paid_at)
                         <div><dt>Оплачен</dt><dd>{{ $order->paid_at->timezone('Europe/Moscow')->format('d.m.Y в H:i') }} МСК</dd></div>
                     @endif
-                    <div><dt>Доставка</dt><dd>{{ $order->delivery_method ?: 'Не согласована' }}</dd></div>
+                    <div><dt>Доставка</dt><dd>{{ \App\Services\DeliverySelection::label($order->delivery_method) }}</dd></div>
+                    @if ($order->delivery_city)
+                        <div><dt>Город</dt><dd>{{ $order->delivery_city }}</dd></div>
+                    @endif
+                    @if ($order->delivery_region)
+                        <div><dt>Регион</dt><dd>{{ $order->delivery_region }}</dd></div>
+                    @endif
                     @if ($order->delivery_address)
                         <div><dt>Адрес</dt><dd>{{ $order->delivery_address }}</dd></div>
                     @endif
+                    @if ($order->delivery_point_address)
+                        <div><dt>Предпочтительный ПВЗ</dt><dd>{{ $order->delivery_point_address }}</dd></div>
+                    @elseif ($order->delivery_point_hint)
+                        <div><dt>Пожелание по ПВЗ</dt><dd>{{ $order->delivery_point_hint }}</dd></div>
+                    @endif
+                    <div><dt>Стоимость доставки</dt><dd>{{ $order->delivery_price > 0 ? \App\Support\Money::rub($order->delivery_price) : 'Не согласована' }}</dd></div>
                 </dl>
             </section>
         </div>

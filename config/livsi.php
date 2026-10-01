@@ -85,6 +85,20 @@ return [
 
     'order_reserve_minutes' => (int) env('ORDER_RESERVE_MINUTES', 1440),
 
+    'delivery' => [
+        'country_code' => env('DELIVERY_COUNTRY_CODE', 'RU'),
+        'origin_city' => env('DELIVERY_ORIGIN_CITY', 'Ставрополь'),
+        'maps_api_key' => env('YANDEX_MAPS_API_KEY'),
+        'suggest_api_key' => env('YANDEX_SUGGEST_API_KEY'),
+        'geocoder_api_key' => env('YANDEX_GEOCODER_API_KEY'),
+    ],
+
+    'apiship' => [
+        'token' => env('APISHIP_TOKEN'),
+        'api_url' => env('APISHIP_API_URL', 'https://api.apiship.ru/v1'),
+        'active_providers' => array_filter(array_map('trim', explode(',', (string) env('APISHIP_ACTIVE_PROVIDERS', 'ozonlog')))),
+    ],
+
     /*
     | Оповещения о сбоях в Телеграм.
     |

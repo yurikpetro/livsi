@@ -40,7 +40,7 @@ class OrderMailTest extends TestCase
         $this->seed(CatalogSeeder::class);
 
         config([
-            'livsi.yookassa.shop_id'    => '123456',
+            'livsi.yookassa.shop_id' => '123456',
             'livsi.yookassa.secret_key' => 'test_secret',
         ]);
 
@@ -57,26 +57,26 @@ class OrderMailTest extends TestCase
     private function order(array $overrides = []): Order
     {
         $order = Order::create(array_merge([
-            'number'         => 'L-' . Str::upper(Str::random(6)),
-            'customer_name'  => 'Иван',
+            'number' => 'L-'.Str::upper(Str::random(6)),
+            'customer_name' => 'Иван',
             'customer_phone' => '+79001112233',
             'customer_email' => 'buyer@example.com',
-            'items_total'    => 90000,
-            'total'          => 90000,
-            'consent_at'     => now(),
-            'access_token'   => Str::random(48),
+            'items_total' => 90000,
+            'total' => 90000,
+            'consent_at' => now(),
+            'access_token' => Str::random(48),
         ], $overrides));
 
         $variant = ProductVariant::whereHas('quota', fn ($q) => $q->where('allocated', '>', 5))->firstOrFail();
 
         $order->items()->create([
             'product_variant_id' => $variant->id,
-            'sku'                => $variant->sku ?? 'SKU',
-            'title'              => $variant->product->title,
-            'option_label'       => $variant->storefrontLabel(),
-            'unit_price'         => 45000,
-            'quantity'           => 2,
-            'total'              => 90000,
+            'sku' => $variant->sku ?? 'SKU',
+            'title' => $variant->product->title,
+            'option_label' => $variant->storefrontLabel(),
+            'unit_price' => 45000,
+            'quantity' => 2,
+            'total' => 90000,
         ]);
 
         return $order->fresh('items');
@@ -85,11 +85,11 @@ class OrderMailTest extends TestCase
     private function payment(Order $order, string $status = Payment::STATUS_SUCCEEDED): Payment
     {
         return $order->payments()->create([
-            'gateway'         => 'yookassa',
+            'gateway' => 'yookassa',
             'idempotence_key' => (string) Str::uuid(),
-            'status'          => $status,
-            'amount'          => $order->total,
-            'external_id'     => 'pay_' . Str::random(6),
+            'status' => $status,
+            'amount' => $order->total,
+            'external_id' => 'pay_'.Str::random(6),
         ]);
     }
 
@@ -103,15 +103,17 @@ class OrderMailTest extends TestCase
             ->post(route('cart.add'), ['variant_id' => $variant->id, 'qty' => 1]);
 
         Http::fake(['*/payments' => Http::response([
-            'id'           => 'pay_1',
-            'status'       => Payment::STATUS_PENDING,
+            'id' => 'pay_1',
+            'status' => Payment::STATUS_PENDING,
             'confirmation' => ['confirmation_url' => 'https://example.test/pay'],
         ])]);
 
         $this->withUnencryptedCookie(CartService::COOKIE, $this->token)->post(route('checkout.store'), [
-            'name'    => 'Иван',
-            'phone'   => '+79001112233',
-            'email'   => 'buyer@example.com',
+            'name' => 'Иван',
+            'phone' => '+79001112233',
+            'email' => 'buyer@example.com',
+            'delivery_method' => 'cdek_point',
+            'delivery_city' => 'Москва',
             'consent' => '1',
         ])->assertRedirect();
 
@@ -139,7 +141,7 @@ class OrderMailTest extends TestCase
      */
     public function test_paid_letter_is_sent_once_however_many_times_the_webhook_arrives(): void
     {
-        $order   = $this->order();
+        $order = $this->order();
         $payment = $this->payment($order);
 
         $service = app(PaymentService::class);

@@ -5,7 +5,9 @@ use App\Http\Controllers\Auth\YandexAuthController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CatalogController;
 use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\CityGeocodeController;
 use App\Http\Controllers\DeclarationController;
+use App\Http\Controllers\DeliveryPointsController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LeadRequestController;
@@ -65,6 +67,12 @@ Route::get('/contacts', [PageController::class, 'contacts'])->name('contacts');
 
 // Оформление заказа и оплата.
 Route::get('/checkout', [CheckoutController::class, 'index'])->name('checkout.index');
+Route::get('/delivery/points', DeliveryPointsController::class)
+    ->middleware('throttle:30,1')
+    ->name('delivery.points');
+Route::post('/delivery/city/geocode', CityGeocodeController::class)
+    ->middleware('throttle:10,1')
+    ->name('delivery.city.geocode');
 Route::post('/checkout', [CheckoutController::class, 'store'])
     ->middleware('throttle:20,60')
     ->name('checkout.store');

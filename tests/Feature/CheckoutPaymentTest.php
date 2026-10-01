@@ -78,6 +78,8 @@ class CheckoutPaymentTest extends TestCase
                 'name' => 'Мария',
                 'phone' => '+7 900 000-00-00',
                 'email' => 'maria@example.test',
+                'delivery_method' => 'cdek_point',
+                'delivery_city' => 'Москва',
                 'consent' => '1',
             ], $overrides));
     }

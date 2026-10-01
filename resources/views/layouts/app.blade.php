@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <title>@yield('title', 'LIVSI — уход, который чувствует тебя')</title>
     <meta name="description" content="@yield('description', 'Косметика для дома и профессионалов. Средства для понятного ежедневного ухода и точных профессиональных протоколов.')">
@@ -37,6 +38,7 @@
     <div class="scroll-progress" data-scroll-progress aria-hidden="true"></div>
 
     @include('partials.header')
+    @include('partials.city-selector')
 
     <main class="flex-1">
         {{-- Короткие сообщения после перенаправления: «вы вышли», «корзина пуста».

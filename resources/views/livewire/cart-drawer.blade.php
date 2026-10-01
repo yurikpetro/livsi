@@ -197,7 +197,7 @@
                         </div>
 
                         <p class="mt-2 text-[10px] leading-relaxed text-muted">
-                            Стоимость и срок доставки будут рассчитаны при оформлении.
+                            Стоимость и срок доставки менеджер подтвердит после оформления.
                         </p>
 
                         <a href="{{ route('checkout.index') }}" class="btn btn-neon mt-4 w-full justify-center">

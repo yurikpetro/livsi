@@ -13,6 +13,16 @@
 </p>
 
 <p>
+    Доставка: {{ \App\Services\DeliverySelection::label($order->delivery_method) }}<br>
+    @if ($order->delivery_city)Город: {{ $order->delivery_city }}<br>@endif
+    @if ($order->delivery_region)Регион: {{ $order->delivery_region }}<br>@endif
+    @if ($order->delivery_address)Адрес: {{ $order->delivery_address }}<br>@endif
+    @if ($order->delivery_point_address)Предпочтительный ПВЗ: {{ $order->delivery_point_address }}<br>
+    @elseif ($order->delivery_point_hint)Пожелание по ПВЗ: {{ $order->delivery_point_hint }}<br>@endif
+    Стоимость и пункт выдачи нужно согласовать отдельно.
+</p>
+
+<p>
     Состав:<br>
     @foreach ($order->items as $item)
         {{ $item->label() }} × {{ $item->quantity }} — {{ Money::rub($item->total) }}@if ($item->is_gift) (подарок)@endif<br>
