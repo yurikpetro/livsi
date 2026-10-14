@@ -107,18 +107,18 @@
                         <span class="mt-1 block text-[11px] text-muted">На этот адрес придёт кассовый чек — этого требует закон.</span>
                     </label>
 
-                    <label class="field field-wide" for="delivery-city">
-                        <span class="field-label">Город или населённый пункт <span aria-hidden="true">*</span></span>
-                        <input id="delivery-city" type="text" name="delivery_city" value="{{ old('delivery_city') }}" required
-                               placeholder="Начните вводить город или село" autocomplete="off" class="field-control">
-                        @error('delivery_city')<span class="field-error">{{ $message }}</span>@enderror
-                        <span class="mt-1 block text-[11px] leading-relaxed text-muted">Город запрашивается только при оформлении заказа. Для предложения города Яндекс получает IP-адрес и технические сведения браузера. <a href="{{ route('legal.privacy') }}" target="_blank" class="underline">Как обрабатываются данные</a></span>
-                    </label>
                     <div class="field field-wide">
-                        <button type="button" class="cursor-pointer text-left text-xs underline" data-city-open aria-expanded="false" aria-controls="site-city-dialog">
-                            Выбрать город: <span data-city-label>указать населённый пункт</span>
+                        <button type="button" class="checkout-city-button" data-city-open aria-haspopup="dialog" aria-expanded="false" aria-controls="site-city-dialog"
+                                @error('delivery_city') aria-invalid="true" aria-describedby="delivery-city-error" @enderror>
+                            <span class="checkout-city-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                            </span>
+                            <span class="checkout-city-text">Выбрать город: <strong data-city-label>{{ old('delivery_city') ?: 'указать населённый пункт' }}</strong></span>
+                            <span class="checkout-city-arrow" aria-hidden="true">→</span>
                         </button>
+                        @error('delivery_city')<span id="delivery-city-error" class="field-error" role="alert">{{ $message }}</span>@enderror
                     </div>
+                    <input id="delivery-city" type="hidden" name="delivery_city" value="{{ old('delivery_city') }}">
                     <input type="hidden" name="delivery_region" value="{{ old('delivery_region') }}">
 
                     <div class="field field-wide" data-delivery-methods @if (mb_strlen(trim((string) old('delivery_city'))) < 2) hidden @endif>

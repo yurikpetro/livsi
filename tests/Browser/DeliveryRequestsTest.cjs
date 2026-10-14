@@ -134,11 +134,11 @@ test('Delivery request deduplication and rate-limit fallback', async (t) => {
                 await page.locator('[name="delivery_method"][value="pickup_point"]').check();
                 await page.waitForFunction(() => deliveryRequestTest.pending.length === 1 && document.querySelectorAll('.pickup-item').length === 3);
                 await page.locator('[data-points-close]').click();
-                await page.locator('[name="delivery_city"]').fill('Краснодар');
-                await page.evaluate(() => {
-                    document.querySelector('[name="delivery_region"]').value = 'Краснодарский край';
-                    document.querySelector('[name="delivery_city"]').dispatchEvent(new Event('change', { bubbles: true }));
-                });
+                await page.locator('[data-city-open]').click();
+                await page.locator('[data-popular-city="Краснодар"]').click();
+                assert.equal(await page.locator('[name="delivery_city"]').inputValue(), 'Краснодар');
+                assert.equal(await page.locator('[name="delivery_region"]').inputValue(), 'Краснодарский край');
+                assert.equal(await page.locator('[data-city-label]').textContent(), 'Краснодар');
                 await page.waitForFunction(() => deliveryRequestTest.pending.length === 2 && document.querySelectorAll('.pickup-item').length === 3);
                 const response = page.waitForResponse((item) => item.url().endsWith('/delivery/city/geocode'));
                 await page.evaluate(() => deliveryRequestTest.pending.forEach((reject) => reject(new Error('Test: unavailable'))));

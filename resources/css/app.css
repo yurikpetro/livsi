@@ -909,6 +909,31 @@
         color: var(--color-ink);
     }
 
+    .checkout-city-button {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        min-height: 60px;
+        padding: 12px 16px;
+        border: 1px solid var(--color-ink);
+        background: var(--color-shell);
+        color: var(--color-ink);
+        text-align: left;
+        font-size: 14px;
+        line-height: 1.5;
+        cursor: pointer;
+        transition: background-color 150ms ease;
+    }
+
+    .checkout-city-button:hover { background: var(--color-neon); }
+    .checkout-city-button:focus-visible { outline: 2px solid var(--color-ink); outline-offset: 3px; }
+    .checkout-city-button[aria-invalid='true'] { border-color: var(--color-danger); }
+    .checkout-city-icon { display: grid; place-items: center; flex: 0 0 32px; height: 32px; border-radius: 50%; background: var(--color-neon); }
+    .checkout-city-icon svg { width: 18px; height: 18px; }
+    .checkout-city-text { min-width: 0; overflow-wrap: anywhere; }
+    .checkout-city-arrow { flex: none; margin-left: auto; font-size: 22px; }
+
     /* Кнопка на всю ширину формы на мобильном и не больше 310px на десктопе. */
     .lead-form button[type='submit'] {
         width: 100%;

@@ -36,7 +36,7 @@
                     <button type="button" data-popular-city="{{ $city }}" data-popular-region="{{ $region }}">{{ $city }}</button>
                 @endforeach
             </div>
-            <p class="city-dialog-copy">Город влияет на список пунктов выдачи при оформлении заказа. <a href="{{ route('legal.privacy') }}">Обработка данных</a></p>
         </div>
+        <p class="city-dialog-copy">Город запрашивается только при оформлении заказа. Для предложения города Яндекс получает IP-адрес и технические сведения браузера. <a href="{{ route('legal.privacy') }}" target="_blank">Как обрабатываются данные</a></p>
     </section>
 </div>

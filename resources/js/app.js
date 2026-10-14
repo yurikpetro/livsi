@@ -909,7 +909,7 @@ function initDeliveryPoints() {
 
     let cityToolsReady = false;
     const setupCityTools = (ymaps) => {
-        if (!ymaps || cityToolsReady) return;
+        if (!ymaps || cityToolsReady || city.type === 'hidden') return;
         cityToolsReady = true;
         if (root.dataset.suggestKey) {
             const suggest = new ymaps.SuggestView(city.id, { results: 8 });
