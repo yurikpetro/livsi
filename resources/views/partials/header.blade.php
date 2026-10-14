@@ -18,13 +18,13 @@
             'key'      => 'care',
             'children' => $siteLines->map(fn ($line) => [
                 'label' => $line->title,
-                'url'   => route('catalog.line', $line),
+                'url'   => route('catalog.index', ['line' => $line->code]),
                 'color' => $line->color_bg,
             ])->all(),
         ],
         [
             'label'    => 'PRO',
-            'url'      => route('catalog.pro'),
+            'url'      => route('catalog.index', ['tab' => 'pro']),
             'key'      => 'pro',
             'children' => [
                 [
@@ -51,16 +51,7 @@
 <header x-data="{ menu: false, catalog: false, sub: null }"
         x-on:keydown.escape.window="menu = false; catalog = false; sub = null"
         class="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
-    <div class="city-strip border-b border-line/60">
-        <div class="site-container">
-            <button type="button" class="city-strip-button" data-city-open aria-label="Выбрать город доставки" aria-expanded="false" aria-controls="site-city-dialog">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
-                <span data-city-label>Выберите город</span>
-                <span aria-hidden="true">⌄</span>
-            </button>
-        </div>
-    </div>
-    <div class="site-container grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-3 md:h-16 md:gap-4">
+    <div class="site-container grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-3 md:h-20 md:gap-4">
         <div class="flex items-center">
             <button type="button" x-on:click="menu = !menu"
                     class="-ml-1 p-1 md:hidden"
@@ -79,7 +70,7 @@
                 </svg>
             </button>
 
-            <nav class="hidden items-center gap-7 text-[11px] font-bold uppercase tracking-[0.08em] md:flex">
+            <nav class="header-nav hidden items-center gap-7 uppercase md:flex">
                 {{-- «Каталог» — раскрывающееся меню: наведением на десктопе
                      и по клику с клавиатуры. Сам пункт остаётся ссылкой,
                      чтобы работал и без JavaScript, и в поиске. --}}
@@ -157,38 +148,21 @@
         </div>
 
         <a href="{{ route('home') }}" class="justify-self-center" aria-label="LIVSI — на главную">
-            <img src="{{ asset('img/logo.svg') }}" alt="LIVSI" class="h-6 w-auto md:h-7">
+            <img src="{{ asset('img/logo.svg') }}" alt="LIVSI" class="h-6 w-auto brightness-0 md:h-7">
         </a>
 
         <div class="flex items-center justify-end gap-4 md:gap-5">
             @livewire('search-box')
-
-            {{-- Избранное есть в прототипе и было пропущено в ревью
-                 (`07-design-review.md` § 12, п. 3). Гостю доступно так же,
-                 как корзина. --}}
-            @php $favoritesCount = app(\App\Services\FavoriteService::class)->count(); @endphp
-
-            <a href="{{ route('favorites') }}"
-               class="relative flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] hover:text-green"
-               aria-label="Избранное: {{ $favoritesCount }}">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-                    <path d="M12 20.4S3.6 14.9 3.6 9.3a4.7 4.7 0 0 1 8.4-2.9 4.7 4.7 0 0 1 8.4 2.9c0 5.6-8.4 11.1-8.4 11.1Z"></path>
-                </svg>
-                <span class="hidden sm:inline">Избранное</span>
-                <span class="grid h-4 min-w-4 place-items-center rounded-full bg-neon px-1 text-[10px] font-bold text-ink @if ($favoritesCount === 0) hidden @endif"
-                      data-favorites-count>{{ $favoritesCount }}</span>
-            </a>
 
             {{-- Кнопка профиля есть в прототипе. Гостю она ведёт на вход,
                  но покупать по-прежнему можно без него. --}}
             <a href="{{ auth()->check() ? route('account') : route('login') }}"
                class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] hover:text-green"
                aria-label="{{ auth()->check() ? 'Личный кабинет' : 'Вход' }}">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-                    <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path>
-                    <path d="M4.5 20a7.5 7.5 0 0 1 15 0"></path>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                    <circle cx="12" cy="7.5" r="4.2"></circle>
+                    <path d="M4 21c.3-4.7 3.4-7.6 8-7.6s7.7 2.9 8 7.6" stroke-linecap="round"></path>
                 </svg>
-                <span class="hidden sm:inline">{{ auth()->check() ? 'Профиль' : 'Вход' }}</span>
             </a>
 
             @livewire('cart-drawer')

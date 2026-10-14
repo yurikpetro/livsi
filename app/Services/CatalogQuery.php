@@ -6,8 +6,8 @@ use App\Models\Product;
 use App\Models\ProductLine;
 use App\Models\ProductVariant;
 use App\Models\Purpose;
-use App\Support\Text;
 use App\Models\Task;
+use App\Support\Text;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -27,22 +27,22 @@ class CatalogQuery
     public const PER_PAGE = 24;
 
     public const SORTS = [
-        'popular'    => 'По популярности',
-        'price_asc'  => 'Сначала дешевле',
+        'popular' => 'По популярности',
+        'price_asc' => 'Сначала дешевле',
         'price_desc' => 'Сначала дороже',
-        'rating'     => 'По рейтингу',
+        'rating' => 'По рейтингу',
     ];
 
     public const TABS = [
-        'new'     => 'Новинки',
-        'best'    => 'Бестселлеры',
+        'new' => 'Новинки',
+        'best' => 'Бестселлеры',
         'bundles' => 'Наборы',
         // «Уход» в прототипе стоит рядом с «Наборами» и отдельно от PRO,
         // поэтому читаем его как «отдельные средства для дома»: не набор
         // и не профессиональная линейка. Толкование требует подтверждения —
         // это часть открытого вопроса по таксономии (docs/07-design-review.md §5.6).
-        'care'    => 'Уход',
-        'pro'     => 'PRO',
+        'care' => 'Уход',
+        'pro' => 'PRO',
     ];
 
     public string $q = '';
@@ -61,14 +61,14 @@ class CatalogQuery
 
     public static function fromRequest(Request $request): self
     {
-        $self = new self();
+        $self = new self;
 
-        $self->q        = trim(Text::utf8((string) $request->query('q', '')));
-        $self->line     = $request->query('line') ?: null;
+        $self->q = trim(Text::utf8((string) $request->query('q', '')));
+        $self->line = $request->query('line') ?: null;
         $self->purposes = array_values(array_filter((array) $request->query('purpose', [])));
-        $self->tasks    = array_values(array_filter((array) $request->query('task', [])));
-        $self->tab      = (string) ($request->query('tab') ?: '');
-        $self->sort     = array_key_exists((string) $request->query('sort'), self::SORTS)
+        $self->tasks = array_values(array_filter((array) $request->query('task', [])));
+        $self->tab = (string) ($request->query('tab') ?: '');
+        $self->sort = array_key_exists((string) $request->query('sort'), self::SORTS)
             ? (string) $request->query('sort')
             : 'popular';
 
@@ -115,7 +115,7 @@ class CatalogQuery
         $chips = collect();
 
         if ($this->q !== '') {
-            $chips->push(['label' => '«' . $this->q . '»', 'url' => $this->urlWithout('q')]);
+            $chips->push(['label' => '«'.$this->q.'»', 'url' => $this->urlWithout('q')]);
         }
 
         if ($this->tab !== '' && isset(self::TABS[$this->tab])) {
@@ -143,6 +143,12 @@ class CatalogQuery
 
     // ─────────────────────────────────────── адреса
 
+    /** @param array{tab?: string, line?: string, purpose?: array<string>} $filters */
+    public function urlForCategory(array $filters = []): string
+    {
+        return $this->url(['q' => $this->q, 'sort' => $this->sort, ...$filters]);
+    }
+
     /** Адрес с добавленным или снятым значением оси. */
     public function urlToggle(string $axis, string $value): string
     {
@@ -151,8 +157,8 @@ class CatalogQuery
         if ($axis === 'line' || $axis === 'tab') {
             $params[$axis] = ($params[$axis] ?? null) === $value ? null : $value;
         } else {
-            $key      = $axis === 'purpose' ? 'purpose' : 'task';
-            $current  = $params[$key] ?? [];
+            $key = $axis === 'purpose' ? 'purpose' : 'task';
+            $current = $params[$key] ?? [];
             $params[$key] = in_array($value, $current, true)
                 ? array_values(array_diff($current, [$value]))
                 : [...$current, $value];
@@ -193,11 +199,11 @@ class CatalogQuery
     public function isActive(string $axis, string $value): bool
     {
         return match ($axis) {
-            'line'    => $this->line === $value,
-            'tab'     => $this->tab === $value,
+            'line' => $this->line === $value,
+            'tab' => $this->tab === $value,
             'purpose' => in_array($value, $this->purposes, true),
-            'task'    => in_array($value, $this->tasks, true),
-            default   => false,
+            'task' => in_array($value, $this->tasks, true),
+            default => false,
         };
     }
 
@@ -216,12 +222,12 @@ class CatalogQuery
     private function toArray(): array
     {
         return [
-            'q'       => $this->q ?: null,
-            'line'    => $this->line,
+            'q' => $this->q ?: null,
+            'line' => $this->line,
             'purpose' => $this->purposes,
-            'task'    => $this->tasks,
-            'tab'     => $this->tab ?: null,
-            'sort'    => $this->sort,
+            'task' => $this->tasks,
+            'tab' => $this->tab ?: null,
+            'sort' => $this->sort,
         ];
     }
 
@@ -251,12 +257,12 @@ class CatalogQuery
         }
 
         match ($this->tab) {
-            'pro'     => $query->where('is_pro', true),
+            'pro' => $query->where('is_pro', true),
             'bundles' => $query->where('is_bundle', true),
-            'care'    => $query->where('is_pro', false)->where('is_bundle', false),
-            'new'     => $query->where('badge', 'new'),
-            'best'    => $query->where('badge', 'best'),
-            default   => null,
+            'care' => $query->where('is_pro', false)->where('is_bundle', false),
+            'new' => $query->where('badge', 'new'),
+            'best' => $query->where('badge', 'best'),
+            default => null,
         };
 
         return $query;
@@ -270,9 +276,9 @@ class CatalogQuery
     private function applySearch(Builder $query): void
     {
         foreach (Product::searchTerms($this->q) as $term) {
-            $like = '%' . $term . '%';
+            $like = '%'.$term.'%';
 
-            $query->where(function ($q) use ($term, $like) {
+            $query->where(function ($q) use ($like) {
                 $q->where('search_text', 'like', $like)
                     ->orWhereHas('line', fn ($l) => $l->whereRaw('lower(code) like ?', [$like]))
                     ->orWhereHas('purposes', fn ($p) => $p->where('code', 'like', $like))
@@ -291,10 +297,10 @@ class CatalogQuery
             ->limit(1);
 
         match ($this->sort) {
-            'price_asc'  => $query->orderBy($cheapest),
+            'price_asc' => $query->orderBy($cheapest),
             'price_desc' => $query->orderByDesc($cheapest),
-            'rating'     => $query->orderByDesc('rating'),
-            default      => $query->orderBy('sort'),
+            'rating' => $query->orderByDesc('rating'),
+            default => $query->orderBy('sort'),
         };
     }
 }

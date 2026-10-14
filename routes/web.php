@@ -68,10 +68,10 @@ Route::get('/contacts', [PageController::class, 'contacts'])->name('contacts');
 // Оформление заказа и оплата.
 Route::get('/checkout', [CheckoutController::class, 'index'])->name('checkout.index');
 Route::get('/delivery/points', DeliveryPointsController::class)
-    ->middleware('throttle:30,1')
+    ->middleware('throttle:delivery-points')
     ->name('delivery.points');
 Route::post('/delivery/city/geocode', CityGeocodeController::class)
-    ->middleware('throttle:10,1')
+    ->middleware('throttle:delivery-geocode')
     ->name('delivery.city.geocode');
 Route::post('/checkout', [CheckoutController::class, 'store'])
     ->middleware('throttle:20,60')

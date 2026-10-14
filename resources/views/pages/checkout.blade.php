@@ -10,11 +10,11 @@
 @endphp
 
 @section('content')
-    <section class="lead-section">
+    <section class="lead-section checkout-page">
         <div class="site-container lead-layout py-16 md:py-24">
             <div>
-                <div><span class="lead-eyebrow">Оформление заказа</span></div>
-                <h1 class="lead-title">Почти<br>готово</h1>
+                <div><span class="lead-eyebrow">Последний шаг</span></div>
+                <h1 class="lead-title">Оформление<br>заказа.</h1>
                 <p class="lead-lede">
                     Оставьте контакты — после оплаты отправим кассовый чек на почту
                     и ссылку на заказ.
@@ -112,8 +112,13 @@
                         <input id="delivery-city" type="text" name="delivery_city" value="{{ old('delivery_city') }}" required
                                placeholder="Начните вводить город или село" autocomplete="off" class="field-control">
                         @error('delivery_city')<span class="field-error">{{ $message }}</span>@enderror
-                        <span class="mt-1 block text-[11px] leading-relaxed text-muted">Город можно изменить здесь или в шапке сайта. <a href="{{ route('legal.privacy') }}" target="_blank" class="underline">Как обрабатываются данные</a></span>
+                        <span class="mt-1 block text-[11px] leading-relaxed text-muted">Город запрашивается только при оформлении заказа. Для предложения города Яндекс получает IP-адрес и технические сведения браузера. <a href="{{ route('legal.privacy') }}" target="_blank" class="underline">Как обрабатываются данные</a></span>
                     </label>
+                    <div class="field field-wide">
+                        <button type="button" class="cursor-pointer text-left text-xs underline" data-city-open aria-expanded="false" aria-controls="site-city-dialog">
+                            Выбрать город: <span data-city-label>указать населённый пункт</span>
+                        </button>
+                    </div>
                     <input type="hidden" name="delivery_region" value="{{ old('delivery_region') }}">
 
                     <div class="field field-wide" data-delivery-methods @if (mb_strlen(trim((string) old('delivery_city'))) < 2) hidden @endif>

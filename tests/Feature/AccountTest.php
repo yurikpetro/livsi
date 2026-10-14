@@ -29,7 +29,7 @@ class AccountTest extends TestCase
         $this->seed(CatalogSeeder::class);
 
         config([
-            'livsi.yandex.client_id'     => 'test-client',
+            'livsi.yandex.client_id' => 'test-client',
             'livsi.yandex.client_secret' => 'test-secret',
         ]);
 
@@ -40,23 +40,23 @@ class AccountTest extends TestCase
     private function customer(array $overrides = []): User
     {
         return User::create(array_merge([
-            'name'  => 'Иван',
-            'email' => 'ivan+' . Str::random(6) . '@example.com',
+            'name' => 'Иван',
+            'email' => 'ivan+'.Str::random(6).'@example.com',
         ], $overrides));
     }
 
     private function order(?User $user = null, array $overrides = []): Order
     {
         return Order::create(array_merge([
-            'number'         => 'L-' . Str::upper(Str::random(6)),
-            'user_id'        => $user?->id,
-            'customer_name'  => 'Иван',
+            'number' => 'L-'.Str::upper(Str::random(6)),
+            'user_id' => $user?->id,
+            'customer_name' => 'Иван',
             'customer_phone' => '+79001112233',
             'customer_email' => 'ivan@example.com',
-            'items_total'    => 90000,
-            'total'          => 90000,
-            'consent_at'     => now(),
-            'access_token'   => Str::random(48),
+            'items_total' => 90000,
+            'total' => 90000,
+            'consent_at' => now(),
+            'access_token' => Str::random(48),
         ], $overrides));
     }
 
@@ -64,13 +64,13 @@ class AccountTest extends TestCase
     {
         $order->items()->create([
             'product_variant_id' => $variant->id,
-            'sku'                => $variant->sku ?? 'SKU',
-            'title'              => $variant->product->title,
-            'option_label'       => $variant->storefrontLabel(),
-            'unit_price'         => 45000,
-            'quantity'           => $qty,
-            'total'              => $gift ? 0 : 45000 * $qty,
-            'is_gift'            => $gift,
+            'sku' => $variant->sku ?? 'SKU',
+            'title' => $variant->product->title,
+            'option_label' => $variant->storefrontLabel(),
+            'unit_price' => 45000,
+            'quantity' => $qty,
+            'total' => $gift ? 0 : 45000 * $qty,
+            'is_gift' => $gift,
         ]);
     }
 
@@ -108,22 +108,26 @@ class AccountTest extends TestCase
 
     public function test_header_shows_the_profile_link_when_logged_in(): void
     {
-        $this->get(route('home'))->assertOk()->assertSee('Вход');
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertSee('href="'.route('login').'"', false)
+            ->assertSee('aria-label="Вход"', false);
 
         $this->actingAs($this->customer())
             ->get(route('home'))
             ->assertOk()
-            ->assertSee('Профиль');
+            ->assertSee('href="'.route('account').'"', false)
+            ->assertSee('aria-label="Личный кабинет"', false);
     }
 
     // ─────────────────────────────────── свои заказы и только свои
 
     public function test_account_lists_own_orders_only(): void
     {
-        $me      = $this->customer();
+        $me = $this->customer();
         $someone = $this->customer();
 
-        $mine   = $this->order($me);
+        $mine = $this->order($me);
         $theirs = $this->order($someone);
 
         $this->actingAs($me)
@@ -136,7 +140,7 @@ class AccountTest extends TestCase
     /** Владельцу токен не нужен: он уже вошёл. */
     public function test_owner_opens_their_order_without_a_token(): void
     {
-        $me    = $this->customer();
+        $me = $this->customer();
         $order = $this->order($me);
 
         $this->actingAs($me)
@@ -168,8 +172,8 @@ class AccountTest extends TestCase
 
     public function test_repeat_puts_the_order_back_into_the_cart(): void
     {
-        $me      = $this->customer();
-        $order   = $this->order($me);
+        $me = $this->customer();
+        $order = $this->order($me);
         $variant = $this->variant();
 
         $this->item($order, $variant, 2);
@@ -201,7 +205,7 @@ class AccountTest extends TestCase
      */
     public function test_repeat_does_not_copy_the_gift(): void
     {
-        $me    = $this->customer();
+        $me = $this->customer();
         $order = $this->order($me);
 
         $variants = ProductVariant::whereHas('quota', fn ($q) => $q->where('allocated', '>', 5))->take(2)->get();
@@ -218,8 +222,8 @@ class AccountTest extends TestCase
     /** Снятое с продажи пропускается, и об этом говорится вслух. */
     public function test_repeat_reports_what_is_no_longer_available(): void
     {
-        $me      = $this->customer();
-        $order   = $this->order($me);
+        $me = $this->customer();
+        $order = $this->order($me);
         $variant = $this->variant();
 
         $this->item($order, $variant, 1);

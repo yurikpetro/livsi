@@ -2,11 +2,78 @@
 
 namespace Tests\Feature;
 
+use GuzzleHttp\Promise\PromiseInterface;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class ApiShipPointsTest extends TestCase
 {
+    public static function outgoingAddresses(): array
+    {
+        return [
+            'default interface' => [null, []],
+            'configured source IP' => ['192.0.2.10', [CURLOPT_INTERFACE => '192.0.2.10']],
+        ];
+    }
+
+    #[DataProvider('outgoingAddresses')]
+    public function test_apiship_uses_the_optional_outgoing_address(?string $sourceIp, array $expectedOptions): void
+    {
+        config([
+            'livsi.apiship.token' => 'example-token',
+            'livsi.apiship.active_providers' => ['cdek'],
+            'livsi.apiship.source_ip' => $sourceIp,
+        ]);
+        $optionsSent = [];
+        Http::preventStrayRequests();
+        Http::fake(['*/lists/points*' => function (Request $request, array $options) use (&$optionsSent): PromiseInterface {
+            $optionsSent = $options;
+
+            return Http::response(['rows' => [], 'meta' => ['total' => 0]]);
+        }]);
+
+        $this->getJson(route('delivery.points', ['method' => 'cdek_point', 'city' => 'Ставрополь']))->assertOk();
+
+        $this->assertSame($expectedOptions, $optionsSent['curl'] ?? []);
+        Http::assertSentCount(1);
+    }
+
+    public function test_connected_cdek_points_are_available_on_the_regional_map_without_private_fields(): void
+    {
+        config([
+            'livsi.apiship.token' => 'example-token',
+            'livsi.apiship.active_providers' => ['cdek', 'ozonlog', 'yataxi'],
+        ]);
+        Http::preventStrayRequests();
+        Http::fake(['*/lists/points*' => Http::response([
+            'rows' => [[
+                'id' => '27948', 'providerKey' => 'cdek', 'countryCode' => 'RU',
+                'city' => 'Ставрополь', 'region' => 'Ставропольский',
+                'availableOperation' => 3, 'enabled' => true,
+                'name' => 'СДЭК Пирогова', 'address' => 'Ставрополь, ул. Пирогова, 59',
+                'lat' => 45.004807, 'lng' => 41.91164, 'phone' => 'private-provider-phone',
+            ]],
+            'meta' => ['total' => 1],
+        ])]);
+
+        $this->getJson(route('delivery.points', [
+            'method' => 'cdek_point', 'city' => 'Александровское', 'region' => 'Ставропольский край',
+        ]))->assertOk()->assertJsonCount(1, 'points')
+            ->assertJsonPath('points.0.id', '27948')
+            ->assertJsonPath('points.0.provider', 'cdek')
+            ->assertJsonPath('points.0.address', 'Ставрополь, ул. Пирогова, 59')
+            ->assertJsonPath('points.0.lat', 45.004807)
+            ->assertJsonPath('points.0.lng', 41.91164)
+            ->assertDontSee('example-token')
+            ->assertDontSee('private-provider-phone');
+
+        Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'example-token')
+            && str_contains(urldecode($request->url()), 'providerKey=cdek')
+            && str_contains(urldecode($request->url()), 'region%Ставропольский'));
+    }
+
     public function test_connected_ozon_points_are_filtered_and_returned_without_secrets(): void
     {
         config([

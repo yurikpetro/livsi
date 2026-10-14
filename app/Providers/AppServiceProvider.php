@@ -2,6 +2,12 @@
 
 namespace App\Providers;
 
+use App\Payments\PaymentGateway;
+use App\Payments\YooKassaGateway;
+use App\Services\CartService;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -13,10 +19,10 @@ class AppServiceProvider extends ServiceProvider
     {
         // Одна корзина на запрос: сервис резолвится и в контроллере,
         // и в композере шапки — без scoped получились бы две разные корзины.
-        $this->app->scoped(\App\Services\CartService::class);
+        $this->app->scoped(CartService::class);
 
         // Провайдера меняют — витрина и заказы не должны о нём знать.
-        $this->app->bind(\App\Payments\PaymentGateway::class, \App\Payments\YooKassaGateway::class);
+        $this->app->bind(PaymentGateway::class, YooKassaGateway::class);
     }
 
     /**
@@ -24,6 +30,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        RateLimiter::for('delivery-points', fn (Request $request): Limit => Limit::perMinute(30)->by($request->ip()));
+        RateLimiter::for('delivery-geocode', fn (Request $request): Limit => Limit::perMinute(10)->by($request->ip()));
     }
 }

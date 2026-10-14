@@ -335,6 +335,7 @@ function initCitySelector() {
     if (!root || !trigger) return;
 
     const label = trigger.querySelector('[data-city-label]');
+    const checkoutCity = document.querySelector('[name="delivery_city"]');
     const confirm = root.querySelector('[data-city-confirm-screen]');
     const choose = root.querySelector('[data-city-choose-screen]');
     const search = root.querySelector('[data-city-search]');
@@ -464,6 +465,7 @@ function initCitySelector() {
 
     const saved = readSaved();
     if (saved) { label.textContent = saved.city; return; }
+    if (checkoutCity?.value.trim()) { label.textContent = checkoutCity.value.trim(); return; }
     try { if (localStorage.getItem(CITY_PROMPTED)) return; } catch { /* Первый визит. */ }
 
     loadYandexMaps(root.dataset.mapsKey, root.dataset.suggestKey)
@@ -487,7 +489,7 @@ function initCitySelector() {
             return response.json();
         })
         .then((place) => {
-            if (readSaved() || root.hidden === false) return;
+            if (readSaved() || checkoutCity?.value.trim() || root.hidden === false) return;
             try { if (localStorage.getItem(CITY_PROMPTED)) return; } catch { /* Продолжаем. */ }
             if (place?.city) {
                 candidate = { city: place.city, region: place.region || '' };
@@ -497,17 +499,23 @@ function initCitySelector() {
                 open('choose');
             }
         })
-        .catch(() => { if (!readSaved() && root.hidden) open('choose'); });
+        .catch(() => { if (!readSaved() && !checkoutCity?.value.trim() && root.hidden) open('choose'); });
 }
 
 function initDeliveryPoints() {
     const root = document.querySelector('[data-delivery-points]');
 
-    if (!root) return;
+    if (!root || root.dataset.deliveryPointsReady === '1') return;
+    root.dataset.deliveryPointsReady = '1';
 
     const methods = root.dataset.methods.split(',').filter(Boolean);
     const labels = { cdek_point: 'СДЭК', yandex_point: 'Яндекс', ozon_point: 'Ozon' };
     const colors = { cdek_point: '#1f9d55', yandex_point: '#e43b2f', ozon_point: '#2464ce' };
+    const icons = {
+        cdek_point: '/img/delivery-cdek.svg',
+        yandex_point: '/img/delivery-yandex.svg',
+        ozon_point: '/img/delivery-ozon.svg',
+    };
     const radios = [...document.querySelectorAll('[name="delivery_method"]')];
     const deliveryMethods = document.querySelector('[data-delivery-methods]');
     const city = document.querySelector('[name="delivery_city"]');
@@ -537,7 +545,13 @@ function initDeliveryPoints() {
     let cityCenter = null;
     let visibleCount = 0;
     let loading = false;
+    let requestedLocation = null;
+    let loadedLocation = null;
+    let pointsRetryAt = 0;
+    let deliveryInteracted = false;
     const currentMethod = () => radios.find((radio) => radio.checked)?.value;
+    const locationKey = () => JSON.stringify([city.value.trim().toLocaleLowerCase('ru'), region.value.trim().toLocaleLowerCase('ru')]);
+    const retrySeconds = () => Math.max(0, Math.ceil((pointsRetryAt - Date.now()) / 1000));
 
     const loadMaps = () => loadYandexMaps(root.dataset.mapsKey, root.dataset.suggestKey);
 
@@ -570,6 +584,9 @@ function initDeliveryPoints() {
         controller?.abort();
         controller = null;
         loading = false;
+        requestedLocation = null;
+        loadedLocation = null;
+        deliveryInteracted = false;
         if (selectedAddress && hint.value === selectedAddress) hint.value = '';
         selectedAddress = null;
         pointId.value = '';
@@ -631,7 +648,8 @@ function initDeliveryPoints() {
             const empty = document.createElement('p');
             empty.className = 'pickup-count';
             empty.textContent = loading ? 'Подождите, загружаем адреса региона.'
-                : 'По этому запросу пунктов нет. Измените поиск.';
+                : retrySeconds() ? `Список временно недоступен. Повторите выбор через ${retrySeconds()} сек.`
+                    : 'По этому запросу пунктов нет. Измените поиск.';
             list.append(empty);
         }
 
@@ -661,9 +679,10 @@ function initDeliveryPoints() {
         more.hidden = visibleCount >= matches.length;
     };
 
-    const resolveCityCenter = async (cityName, regionName) => {
+    const resolveCityCenter = async (cityName, regionName, signal) => {
         try {
             const ymaps = await loadMaps();
+            if (signal.aborted) return null;
             if (ymaps) {
                 const result = await ymaps.geocode([cityName, regionName, 'Россия'].filter(Boolean).join(', '), {
                     results: 1,
@@ -673,7 +692,7 @@ function initDeliveryPoints() {
             }
         } catch { /* Серверный Геокодер остаётся доступен, если JS API не ответил. */ }
 
-        if (!regionName) return null;
+        if (!regionName || signal.aborted) return null;
         try {
             const response = await fetch(root.dataset.geocodeUrl, {
                 method: 'POST',
@@ -682,6 +701,7 @@ function initDeliveryPoints() {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
                 },
                 body: JSON.stringify({ city: cityName, region: regionName }),
+                signal,
             });
             if (!response.ok) return null;
             const coordinates = await response.json();
@@ -707,7 +727,10 @@ function initDeliveryPoints() {
         const zoom = cityCenter || cityPoint ? 12 : 9;
         if (!map) {
             map = new ymaps.Map(mapElement, { center, zoom, controls: ['zoomControl'] });
-            clusterer = new ymaps.Clusterer({ preset: 'islands#invertedVioletClusterIcons' });
+            clusterer = new ymaps.Clusterer({
+                preset: 'islands#invertedVioletClusterIcons',
+                clusterBalloonContentLayout: 'cluster#balloonAccordion',
+            });
             map.geoObjects.add(clusterer);
         }
         map.container.fitToViewport();
@@ -716,7 +739,21 @@ function initDeliveryPoints() {
             const method = carrierForPoint(point);
             const mark = new ymaps.Placemark([Number(point.lat), Number(point.lng)], {
                 hintContent: `${labels[method]} · ${escapeHtml(point.address)}`,
-            }, { preset: 'islands#circleDotIcon', iconColor: colors[method] });
+                clusterCaption: `${labels[method]} · ${escapeHtml(point.address)}`,
+                balloonContentHeader: labels[method],
+                balloonContentBody: `<div class="pickup-balloon-address">${escapeHtml(point.address)}</div>`
+                    + (point.timetable ? `<div class="pickup-balloon-hours">${escapeHtml(point.timetable)}</div>` : ''),
+                balloonContentFooter: `<button type="button" class="pickup-balloon-select"`
+                    + ` data-pickup-balloon-id="${escapeHtml(point.id)}" data-pickup-balloon-method="${method}">`
+                    + `Выбрать ${labels[method]}</button>`,
+            }, {
+                iconLayout: 'default#image',
+                iconImageHref: icons[method],
+                iconImageSize: [27, 27],
+                iconImageOffset: [-13.5, -13.5],
+                iconImageShape: { type: 'Circle', coordinates: [0, 0], radius: 13.5 },
+                iconColor: colors[method],
+            });
             mark.events.add('click', () => choosePoint(point, method));
             return mark;
         }));
@@ -725,15 +762,24 @@ function initDeliveryPoints() {
 
     const load = async () => {
         if (currentMethod() !== 'pickup_point' || city.value.trim().length < 2 || !methods.length) return;
+        const requestKey = locationKey();
+        if ((controller && requestedLocation === requestKey) || loadedLocation === requestKey) return;
+        if (retrySeconds()) {
+            status.hidden = false;
+            status.textContent = `Слишком много запросов. Повторите выбор ПВЗ через ${retrySeconds()} сек.`;
+            renderList();
+            return;
+        }
         controller?.abort();
         const requestController = new AbortController();
         controller = requestController;
+        requestedLocation = requestKey;
         loading = true;
         status.hidden = false;
         status.textContent = 'Загружаем пункты выдачи региона…';
         const requestedCity = city.value.trim();
         const requestedRegion = region.value.trim();
-        const centerPromise = resolveCityCenter(requestedCity, requestedRegion);
+        const centerPromise = resolveCityCenter(requestedCity, requestedRegion, requestController.signal);
         const found = [];
         let failed = 0;
 
@@ -748,6 +794,11 @@ function initDeliveryPoints() {
                         if (requestedRegion) url.searchParams.set('region', requestedRegion);
                         url.searchParams.set('offset', String(offset));
                         const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: requestController.signal });
+                        if (response.status === 429) {
+                            const delay = Number(response.headers.get('Retry-After'));
+                            pointsRetryAt = Math.max(pointsRetryAt, Date.now() + (Number.isFinite(delay) && delay > 0 ? delay : 60) * 1000);
+                            throw new Error('Слишком много запросов.');
+                        }
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.message || 'Пункты выдачи недоступны.');
                         found.push(...data.points);
@@ -760,8 +811,8 @@ function initDeliveryPoints() {
             }));
 
             if (requestController.signal.aborted) return;
-            cityCenter = await centerPromise;
-            if (requestController.signal.aborted) return;
+            loading = false;
+            loadedLocation = failed === 0 ? requestKey : null;
             points = found.filter((point) => carrierForPoint(point));
             points.sort((a, b) => distanceFromCity(a) - distanceFromCity(b)
                 || (labels[carrierForPoint(a)] + a.address).localeCompare(labels[carrierForPoint(b)] + b.address, 'ru'));
@@ -772,18 +823,33 @@ function initDeliveryPoints() {
             renderList();
             status.textContent = points.length
                 ? `${points.length} ПВЗ ${requestedRegion ? `по региону «${requestedRegion}»` : `в населённом пункте «${requestedCity}»`}. ${root.dataset.freeShipping === '1' ? 'Доставка бесплатная.' : 'Стоимость доставки менеджер подтвердит отдельно.'}${failed ? ' Часть служб сейчас недоступна.' : ''}`
-                : 'ПВЗ не найдены или временно недоступны. Пожелания по доставке можно оставить в комментарии к заказу.';
+                : retrySeconds() ? `Слишком много запросов. Повторите выбор ПВЗ через ${retrySeconds()} сек.`
+                    : 'ПВЗ не найдены или временно недоступны. Пожелания по доставке можно оставить в комментарии к заказу.';
             try { await drawMap(); } catch { mapFallback.hidden = false; }
+            cityCenter = await centerPromise;
+            if (requestController.signal.aborted) return;
+            if (cityCenter && !deliveryInteracted && !map?.balloon?.isOpen()) {
+                points.sort((a, b) => distanceFromCity(a) - distanceFromCity(b)
+                    || (labels[carrierForPoint(a)] + a.address).localeCompare(labels[carrierForPoint(b)] + b.address, 'ru'));
+                renderList();
+                if (map && dialog.open) map.setCenter(cityCenter, 12);
+            }
         } catch (error) {
             if (error.name !== 'AbortError') {
                 status.textContent = 'Список ПВЗ временно недоступен. Пожелания по доставке можно оставить в комментарии к заказу.';
             }
         } finally {
-            if (controller === requestController) loading = false;
+            if (controller === requestController) {
+                loading = false;
+                controller = null;
+                requestedLocation = null;
+                renderList();
+            }
         }
     };
 
     const cityChanged = () => {
+        if (locationKey() === requestedLocation || locationKey() === loadedLocation) return;
         reset();
     };
 
@@ -804,7 +870,7 @@ function initDeliveryPoints() {
         });
         radio.addEventListener('click', () => {
             if (radio.value === 'pickup_point' && radio.checked) {
-                queueMicrotask(() => { if (!dialog.open) openPointsDialog(); });
+                setTimeout(() => { if (radio.checked && !dialog.open) openPointsDialog(); }, 0);
             }
         });
     });
@@ -823,6 +889,19 @@ function initDeliveryPoints() {
         if (currentMethod() === 'pickup_point') load();
     });
     search.addEventListener('click', openPointsDialog);
+    dialog.addEventListener('pointerdown', () => { deliveryInteracted = true; });
+    dialog.addEventListener('wheel', () => { deliveryInteracted = true; }, { passive: true });
+    dialog.addEventListener('keydown', () => { deliveryInteracted = true; });
+    root.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-pickup-balloon-id]');
+        if (!button) return;
+        const point = points.find((item) => String(item.id) === button.dataset.pickupBalloonId
+            && carrierForPoint(item) === button.dataset.pickupBalloonMethod);
+        if (!point) return;
+        event.preventDefault();
+        event.stopPropagation();
+        choosePoint(point, carrierForPoint(point));
+    }, true);
     root.querySelector('[data-points-close]').addEventListener('click', () => dialog.close());
     filter.addEventListener('input', () => { visibleCount = 80; renderList(); });
     filter.addEventListener('keydown', (event) => { if (event.key === 'Enter') event.preventDefault(); });
@@ -859,10 +938,188 @@ function initDeliveryPoints() {
     if (currentMethod() === 'pickup_point' && city.value.trim().length >= 2) load();
 }
 
+function initShowcase() {
+    const hero = document.querySelector('[data-hero]');
+    let selectedLine = null;
+    const shelfFilters = [];
+    hero?.querySelectorAll('[data-hero-select]').forEach((button) => {
+        button.addEventListener('click', () => {
+            selectedLine = button.dataset.heroSelect;
+            hero.querySelectorAll('[data-hero-slide]').forEach((slide) => { slide.hidden = slide.dataset.heroSlide !== button.dataset.heroSelect; });
+            hero.querySelectorAll('[data-hero-select]').forEach((tab) => { tab.setAttribute('aria-pressed', String(tab === button)); });
+            shelfFilters.forEach((filter) => filter());
+        });
+    });
+    document.querySelectorAll('[data-product-shelf]').forEach((shelf) => {
+        const track = shelf.querySelector('[data-shelf-track]');
+        const previous = shelf.querySelector('[data-shelf-prev]');
+        const next = shelf.querySelector('[data-shelf-next]');
+        let selectedBadge = 'all';
+        const update = () => {
+            previous.disabled = track.scrollLeft < 2;
+            next.disabled = track.scrollLeft + track.clientWidth >= track.scrollWidth - 2;
+        };
+        previous.addEventListener('click', () => track.scrollBy({ left: -track.clientWidth, behavior: reduceMotion.matches ? 'instant' : 'smooth' }));
+        next.addEventListener('click', () => track.scrollBy({ left: track.clientWidth, behavior: reduceMotion.matches ? 'instant' : 'smooth' }));
+        track.addEventListener('scroll', update, { passive: true });
+        new ResizeObserver(update).observe(track);
+        const filter = () => {
+            track.querySelectorAll('[data-shelf-line]').forEach((card) => {
+                card.hidden = (selectedLine !== null && card.dataset.shelfLine !== selectedLine)
+                    || (selectedBadge !== 'all' && card.dataset.badge !== selectedBadge);
+            });
+            shelf.querySelector('[data-shelf-empty]').hidden = !!track.querySelector('[data-shelf-line]:not([hidden])');
+            track.scrollTo({ left: 0, behavior: 'instant' });
+            update();
+        };
+        shelfFilters.push(filter);
+        shelf.querySelectorAll('[data-shelf-filter]').forEach((button) => {
+            button.addEventListener('click', () => {
+                selectedBadge = button.dataset.shelfFilter;
+                shelf.querySelectorAll('[data-shelf-filter]').forEach((tab) => { tab.setAttribute('aria-pressed', String(tab === button)); });
+                filter();
+            });
+        });
+        update();
+    });
+    document.querySelector('[data-catalog-sort]')?.addEventListener('change', (event) => { window.location.assign(event.target.value); });
+    initUgcGalleries();
+    const videos = document.querySelectorAll('.ugc-player video');
+    if (videos.length) {
+        const observer = new IntersectionObserver((entries) => entries.forEach((entry) => { if (!entry.isIntersecting) entry.target.pause(); }), { threshold: .1 });
+        videos.forEach((video) => {
+            observer.observe(video);
+            video.addEventListener('play', () => {
+                videos.forEach((other) => { if (other !== video) other.pause(); });
+                video.closest('[data-ugc-gallery]')?.classList.add('is-playing');
+            });
+            video.addEventListener('pause', () => video.closest('[data-ugc-gallery]')?.classList.remove('is-playing'));
+        });
+        document.addEventListener('visibilitychange', () => { if (document.hidden) videos.forEach((video) => video.pause()); });
+    }
+}
+
+function initUgcGalleries() {
+    document.querySelectorAll('[data-ugc-gallery]').forEach((gallery) => {
+        const track = gallery.querySelector('[data-ugc-track]');
+        const slides = [...gallery.querySelectorAll('[data-ugc-slide]')];
+        const previous = gallery.querySelector('[data-ugc-prev]');
+        const next = gallery.querySelector('[data-ugc-next]');
+        const counter = gallery.querySelector('[data-ugc-counter]');
+        const dialog = gallery.closest('[data-ugc-modal]');
+        const opener = dialog?.closest('[data-ugc-card]')?.querySelector('[data-ugc-open]');
+        let index = 0;
+        const update = () => {
+            index = Math.max(0, Math.min(slides.length - 1, Math.round(track.scrollLeft / (track.clientWidth || 1))));
+            if (previous) previous.disabled = index === 0;
+            if (next) next.disabled = index === slides.length - 1;
+            if (counter) counter.textContent = `${index + 1} / ${slides.length}`;
+            slides.forEach((slide, position) => {
+                if (position !== index) slide.querySelectorAll('video').forEach((video) => video.pause());
+            });
+        };
+        const show = (position) => track.scrollTo({ left: Math.max(0, Math.min(slides.length - 1, position)) * track.clientWidth, behavior: reduceMotion.matches ? 'instant' : 'smooth' });
+        previous?.addEventListener('click', () => show(index - 1));
+        next?.addEventListener('click', () => show(index + 1));
+        opener?.addEventListener('click', () => {
+            dialog.showModal();
+            document.documentElement.classList.add('ugc-modal-open');
+            track.scrollTo({ left: 0, behavior: 'instant' });
+            update();
+            track.focus({ preventScroll: true });
+            slides[0]?.querySelector('video')?.play().catch(() => {});
+        });
+        dialog?.querySelector('[data-ugc-close]')?.addEventListener('click', () => dialog.close());
+        dialog?.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+        dialog?.addEventListener('close', () => {
+            gallery.querySelectorAll('video').forEach((video) => video.pause());
+            document.documentElement.classList.remove('ugc-modal-open');
+            opener?.focus({ preventScroll: true });
+        });
+        track.addEventListener('keydown', (event) => {
+            if (event.target !== track || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            show(event.key === 'Home' ? 0 : event.key === 'End' ? slides.length - 1 : index + (event.key === 'ArrowRight' ? 1 : -1));
+        });
+        track.addEventListener('scroll', update, { passive: true });
+        let width = track.clientWidth;
+        new ResizeObserver(() => {
+            if (width !== track.clientWidth) {
+                width = track.clientWidth;
+                track.scrollTo({ left: index * width, behavior: 'instant' });
+            }
+            update();
+        }).observe(track);
+        update();
+    });
+}
+
+function initProductCart() {
+    const toast = document.querySelector('[data-cart-toast]');
+    const pending = new Set();
+    let toastTimer;
+
+    const notify = ({ message, success = false }) => {
+        if (!toast) return;
+        clearTimeout(toastTimer);
+        toast.querySelector('[data-cart-toast-message]').textContent = message;
+        toast.querySelector('[data-cart-toast-icon]').textContent = success ? '✓' : '!';
+        toast.hidden = false;
+        toastTimer = setTimeout(() => { toast.hidden = true; }, 3500);
+    };
+    const refresh = (quantities) => {
+        document.querySelectorAll('[data-cart-card]').forEach((control) => {
+            if (quantities) control.dataset.quantity = quantities[control.dataset.variantId] || 0;
+            const quantity = Number(control.dataset.quantity);
+            control.querySelector('form').hidden = quantity > 0;
+            control.querySelector('[data-cart-quantity]').hidden = quantity < 1;
+            control.querySelector('[data-cart-count]').textContent = quantity;
+            control.querySelectorAll('button').forEach((button) => {
+                button.disabled = pending.has(control.dataset.variantId) || button.hasAttribute('data-cart-unavailable');
+            });
+            control.setAttribute('aria-busy', String(pending.has(control.dataset.variantId)));
+        });
+    };
+    const change = async (control, method) => {
+        const variantId = control.dataset.variantId;
+        if (pending.has(variantId)) return;
+
+        pending.add(variantId);
+        refresh();
+        try {
+            const controller = document.querySelector('[data-cart-controller]');
+            const cart = window.Livewire?.find(controller?.getAttribute('wire:id'));
+            if (!cart) throw new Error('Корзина недоступна');
+            await cart[method](Number(variantId));
+        } catch {
+            notify({ message: 'Не удалось обновить корзину. Попробуйте ещё раз.' });
+        } finally {
+            pending.delete(variantId);
+            refresh();
+        }
+    };
+
+    window.addEventListener('cart-notice', (event) => notify(event.detail));
+    window.addEventListener('cart-updated', (event) => refresh(event.detail.quantities));
+    document.addEventListener('submit', (event) => {
+        const control = event.target.closest('[data-cart-card]');
+        if (!control || !window.Livewire || event.target.hasAttribute('wire:submit')) return;
+        event.preventDefault();
+        change(control, 'addToCart');
+    });
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-cart-step]');
+        if (button) change(button.closest('[data-cart-card]'), button.dataset.cartStep);
+    });
+    refresh();
+}
+
 function boot() {
+    initProductCart();
     initReveal();
     initScrollEffects();
     initHeroParallax();
+    initShowcase();
     initFaq();
     initCookieBar();
     initFavorites();

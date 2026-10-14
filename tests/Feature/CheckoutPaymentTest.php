@@ -99,7 +99,12 @@ class CheckoutPaymentTest extends TestCase
             ->get(route('checkout.index'))
             ->assertOk()
             ->assertSee($variant->product->title)
-            ->assertSee('К оплате');
+            ->assertSee('К оплате')
+            ->assertSee('data-city-selector', false)
+            ->assertSee('data-city-open', false)
+            ->assertSee('data-city-search', false)
+            ->assertSee('data-popular-city="Ставрополь"', false)
+            ->assertDontSee('city-strip', false);
     }
 
     /** Выдача не должна попадать в поиск: это личная страница. */

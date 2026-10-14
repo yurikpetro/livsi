@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Mail\OrderPlaced;
 use App\Models\Order;
 use App\Models\ProductVariant;
 use App\Models\PromoRule;
@@ -138,6 +139,59 @@ class CheckoutDeliveryTest extends TestCase
         ])->assertSessionHasErrors('delivery_point_id');
 
         $this->assertDatabaseCount('orders', 0);
+    }
+
+    public function test_checkout_includes_connected_cdek_in_the_shared_pickup_map(): void
+    {
+        config([
+            'livsi.apiship.token' => 'example-token',
+            'livsi.apiship.active_providers' => ['cdek', 'ozonlog', 'yataxi'],
+        ]);
+
+        $this->withUnencryptedCookie(CartService::COOKIE, $this->token)
+            ->get(route('checkout.index'))
+            ->assertSee('data-methods="cdek_point,yandex_point,ozon_point"', false)
+            ->assertDontSee('example-token');
+    }
+
+    public function test_generic_pickup_saves_the_verified_cdek_point_and_destination(): void
+    {
+        config([
+            'livsi.apiship.token' => 'example-token',
+            'livsi.apiship.active_providers' => ['cdek', 'ozonlog', 'yataxi'],
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            '*/lists/points*' => Http::response(['rows' => [[
+                'id' => '27948', 'providerKey' => 'cdek', 'countryCode' => 'RU',
+                'city' => 'Ставрополь', 'region' => 'Ставропольский',
+                'availableOperation' => 3, 'enabled' => true,
+                'address' => 'Ставрополь, ул. Пирогова, 59',
+            ]]]),
+            '*/payments' => Http::response([
+                'id' => 'delivery_test', 'status' => 'pending',
+                'confirmation' => ['confirmation_url' => 'https://example.test/pay'],
+            ]),
+        ]);
+
+        $this->checkout([
+            'delivery_method' => DeliverySelection::PICKUP_POINT,
+            'delivery_city' => 'Александровское',
+            'delivery_region' => 'Ставропольский край',
+            'delivery_point_method' => DeliverySelection::CDEK_POINT,
+            'delivery_point_id' => '27948',
+            'delivery_point_address' => 'Подменённый адрес',
+        ])->assertRedirect('https://example.test/pay');
+
+        $this->assertDatabaseHas('orders', [
+            'delivery_method' => DeliverySelection::CDEK_POINT,
+            'delivery_point_id' => '27948',
+            'delivery_point_address' => 'Ставрополь, ул. Пирогова, 59',
+            'delivery_city' => 'Ставрополь',
+            'delivery_region' => 'Ставропольский край',
+        ]);
+        Http::assertSent(fn ($request) => str_contains(urldecode($request->url()), 'id=27948;providerKey=cdek'));
+        Mail::assertQueued(OrderPlaced::class);
     }
 
     public function test_generic_pickup_saves_the_carrier_from_a_verified_point(): void

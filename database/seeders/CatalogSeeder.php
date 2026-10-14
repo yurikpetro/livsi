@@ -22,28 +22,17 @@ use Illuminate\Support\Str;
  * Наполнение каталога данными из прототипа livsi-store-new.khetaggg.chatgpt.site.
  *
  * Цены — заглушки (подтверждено заказчиком 31.08.2026), реальный прайс ждём.
- * Изображения — временные, из старого макета: чистых фото без маркетплейсной
- * инфографики пока нет (вопрос 14.6).
+ * Изображения основных товаров перенесены из согласованного макета.
+ * Полный набор предметных фотографий ещё ожидается (вопрос 14.6).
  * Рейтинги проставлены с указанием источника — см. docs/07-design-review.md §8.1.
  */
 class CatalogSeeder extends Seeder
 {
-    /** Временные изображения из старого макета — до реальной съёмки. */
-    private const PLACEHOLDER_IMAGES = [
-        'fresh-hero.jpg',
-        'sweet-portrait.jpg',
-        'mango-product.jpg',
-        'warm-portrait.jpg',
-        'sweet-closeup.jpg',
-        'avatar3.jpg',
-        'avatar4.jpg',
-    ];
-
     public function run(): void
     {
-        $lines     = $this->seedLines();
-        $purposes  = $this->seedPurposes();
-        $tasks     = $this->seedTasks();
+        $lines = $this->seedLines();
+        $purposes = $this->seedPurposes();
+        $tasks = $this->seedTasks();
 
         $this->seedProducts($lines, $purposes, $tasks);
         $this->seedReviews();
@@ -59,13 +48,13 @@ class CatalogSeeder extends Seeder
     {
         $rows = [
             ['code' => 'fresh', 'title' => 'FRESH', 'subtitle' => 'свежий',           'color_bg' => '#d0dd56', 'color_ink' => '#51a940', 'sort' => 10,
-             'description' => 'Про свежесть, лёгкость и ощущение чистоты. Средства с лёгкими текстурами и свежими ароматами вроде чая, мяты и цитрусов.'],
+                'description' => 'Про свежесть, лёгкость и ощущение чистоты. Средства с лёгкими текстурами и свежими ароматами вроде чая, мяты и цитрусов.'],
             ['code' => 'sweet', 'title' => 'SWEET', 'subtitle' => 'сладкий',          'color_bg' => '#f6accd', 'color_ink' => '#be6eb5', 'sort' => 20,
-             'description' => 'Про удовольствие, чувственность и игру. Линейка построена вокруг сладких, фруктовых и гурманских ароматов.'],
+                'description' => 'Про удовольствие, чувственность и игру. Линейка построена вокруг сладких, фруктовых и гурманских ароматов.'],
             ['code' => 'warm',  'title' => 'WARM',  'subtitle' => 'тёплый',           'color_bg' => '#ffe405', 'color_ink' => '#ec9022', 'sort' => 30,
-             'description' => 'Про тепло, комфорт и уют. Тёплые и пряные ароматы, более насыщенные текстуры и плотный уход.'],
+                'description' => 'Про тепло, комфорт и уют. Тёплые и пряные ароматы, более насыщенные текстуры и плотный уход.'],
             ['code' => 'base',  'title' => 'BASE',  'subtitle' => 'базовый',          'color_bg' => '#f5e2b7', 'color_ink' => '#cc8c34', 'sort' => 40,
-             'description' => 'Базовый уход без ароматической доминанты. Универсальные продукты, которые подходят к любой другой линейке.'],
+                'description' => 'Базовый уход без ароматической доминанты. Универсальные продукты, которые подходят к любой другой линейке.'],
         ];
 
         $out = [];
@@ -81,15 +70,15 @@ class CatalogSeeder extends Seeder
     private function seedPurposes(): array
     {
         $rows = [
-            'hands'    => 'Руки',
-            'feet'     => 'Стопы',
-            'body'     => 'Тело',
-            'face'     => 'Лицо',
+            'hands' => 'Руки',
+            'feet' => 'Стопы',
+            'body' => 'Тело',
+            'face' => 'Лицо',
             'manicure' => 'Маникюр',
             'pedicure' => 'Педикюр',
         ];
 
-        $out  = [];
+        $out = [];
         $sort = 0;
 
         foreach ($rows as $code => $title) {
@@ -103,13 +92,13 @@ class CatalogSeeder extends Seeder
     private function seedTasks(): array
     {
         $rows = [
-            'cleansing'   => 'Очищение',
-            'moisturize'  => 'Увлажнение',
-            'exfoliate'   => 'Отшелушивание',
-            'soften'      => 'Размягчение',
+            'cleansing' => 'Очищение',
+            'moisturize' => 'Увлажнение',
+            'exfoliate' => 'Отшелушивание',
+            'soften' => 'Размягчение',
         ];
 
-        $out  = [];
+        $out = [];
         $sort = 0;
 
         foreach ($rows as $code => $title) {
@@ -121,148 +110,148 @@ class CatalogSeeder extends Seeder
 
     /**
      * @param  array<string, ProductLine>  $lines
-     * @param  array<string, Purpose>      $purposes
-     * @param  array<string, Task>         $tasks
+     * @param  array<string, Purpose>  $purposes
+     * @param  array<string, Task>  $tasks
      */
     private function seedProducts(array $lines, array $purposes, array $tasks): void
     {
         $rows = [
             [
-                'slug'      => 'multipenka-dlya-ruk-i-stop',
-                'title'     => 'Мультипенка для рук и стоп',
-                'short'     => 'Очищает без воды, липкости и ощущения сухости',
-                'line'      => 'fresh',
-                'badge'     => 'new',
-                'aroma'     => 'грейпфрут · зелёный чай',
-                'effect'    => 'Комфортное очищение с понятным результатом',
-                'rating'    => 4.9,
-                'reviews'   => 326,
-                'purposes'  => ['hands', 'feet'],
-                'tasks'     => ['cleansing'],
-                'image'     => 'fresh-hero.jpg',
-                'variants'  => [
+                'slug' => 'multipenka-dlya-ruk-i-stop',
+                'title' => 'Мультипенка для рук и стоп',
+                'short' => 'Очищает без воды, липкости и ощущения сухости',
+                'line' => 'fresh',
+                'badge' => 'new',
+                'aroma' => 'грейпфрут · зелёный чай',
+                'effect' => 'Комфортное очищение с понятным результатом',
+                'rating' => 4.9,
+                'reviews' => 326,
+                'purposes' => ['hands', 'feet'],
+                'tasks' => ['cleansing'],
+                'image' => 'livsi-fresh.png',
+                'variants' => [
                     ['volume' => '180 мл', 'ml' => 180, 'price' => 45000, 'weight' => 210, 'dims' => [55, 55, 175], 'default' => true],
                     ['volume' => '540 мл', 'ml' => 540, 'price' => 99000, 'weight' => 590, 'dims' => [80, 80, 220]],
                 ],
             ],
             [
-                'slug'      => 'krem-dlya-ruk-i-stop-25-urea',
-                'title'     => 'Крем для рук и стоп 25% Urea',
-                'short'     => 'Интенсивно смягчает сухую и огрубевшую кожу',
-                'line'      => 'base',
-                'badge'     => 'best',
-                'aroma'     => 'чистый · сливочный',
-                'effect'    => 'Смягчение и восстановление барьера',
-                'rating'    => 4.9,
-                'reviews'   => 614,
-                'purposes'  => ['hands', 'feet'],
-                'tasks'     => ['moisturize', 'soften'],
-                'image'     => 'warm-portrait.jpg',
-                'variants'  => [
+                'slug' => 'krem-dlya-ruk-i-stop-25-urea',
+                'title' => 'Крем для рук и стоп 25% Urea',
+                'short' => 'Интенсивно смягчает сухую и огрубевшую кожу',
+                'line' => 'base',
+                'badge' => 'best',
+                'aroma' => 'чистый · сливочный',
+                'effect' => 'Смягчение и восстановление барьера',
+                'rating' => 4.9,
+                'reviews' => 614,
+                'purposes' => ['hands', 'feet'],
+                'tasks' => ['moisturize', 'soften'],
+                'image' => 'livsi-base.png',
+                'variants' => [
                     ['volume' => '200 мл', 'ml' => 200, 'price' => 79000, 'weight' => 235, 'dims' => [55, 55, 180], 'default' => true],
                     ['volume' => '500 мл', 'ml' => 500, 'price' => 149000, 'weight' => 560, 'dims' => [80, 80, 210]],
                 ],
             ],
             [
-                'slug'      => 'parfyumirovannyy-mist-dlya-tela',
-                'title'     => 'Парфюмированный мист для тела',
-                'short'     => 'Оставляет лёгкий ароматный шлейф без тяжести',
-                'line'      => 'sweet',
-                'badge'     => 'new',
-                'aroma'     => 'сочные ягоды · вишня',
-                'effect'    => 'Аромат и лёгкое увлажнение',
-                'rating'    => 4.8,
-                'reviews'   => 148,
-                'purposes'  => ['body'],
-                'tasks'     => ['moisturize'],
-                'image'     => 'sweet-portrait.jpg',
-                'variants'  => [
+                'slug' => 'parfyumirovannyy-mist-dlya-tela',
+                'title' => 'Парфюмированный мист для тела',
+                'short' => 'Оставляет лёгкий ароматный шлейф без тяжести',
+                'line' => 'sweet',
+                'badge' => 'new',
+                'aroma' => 'сочные ягоды · вишня',
+                'effect' => 'Аромат и лёгкое увлажнение',
+                'rating' => 4.8,
+                'reviews' => 148,
+                'purposes' => ['body'],
+                'tasks' => ['moisturize'],
+                'image' => 'livsi-sweet.png',
+                'variants' => [
                     ['volume' => '100 мл', 'ml' => 100, 'price' => 109000, 'weight' => 145, 'dims' => [45, 45, 160], 'default' => true],
                 ],
             ],
             [
-                'slug'      => 'skrab-dlya-tela',
-                'title'     => 'Скраб для тела',
-                'short'     => 'Разглаживает кожу и возвращает ей мягкость',
-                'line'      => 'warm',
-                'badge'     => 'new',
-                'aroma'     => 'манго · маракуйя · апельсин',
-                'effect'    => 'Отшелушивание и питание',
-                'rating'    => 4.9,
-                'reviews'   => 207,
-                'purposes'  => ['body'],
-                'tasks'     => ['exfoliate'],
-                'image'     => 'mango-product.jpg',
-                'variants'  => [
+                'slug' => 'skrab-dlya-tela',
+                'title' => 'Скраб для тела',
+                'short' => 'Разглаживает кожу и возвращает ей мягкость',
+                'line' => 'warm',
+                'badge' => 'new',
+                'aroma' => 'манго · маракуйя · апельсин',
+                'effect' => 'Отшелушивание и питание',
+                'rating' => 4.9,
+                'reviews' => 207,
+                'purposes' => ['body'],
+                'tasks' => ['exfoliate'],
+                'image' => 'livsi-warm.png',
+                'variants' => [
                     ['volume' => '250 мл', 'ml' => 250, 'price' => 129000, 'weight' => 320, 'dims' => [85, 85, 95], 'default' => true],
                 ],
             ],
             [
-                'slug'      => 'keratoliticheskiy-gel-dlya-stop',
-                'title'     => 'Кератолитический гель для стоп',
-                'short'     => 'Точное действие для контролируемого педикюра',
-                'line'      => null,
-                'is_pro'    => true,
-                'badge'     => 'pro',
-                'aroma'     => 'профессиональная формула',
-                'effect'    => 'Размягчение гиперкератоза',
-                'rating'    => 4.9,
-                'reviews'   => 431,
-                'purposes'  => ['feet', 'pedicure'],
-                'tasks'     => ['soften'],
-                'image'     => 'avatar3.jpg',
-                'active'    => 'Мочевина, молочная кислота. Профессиональное применение, требует нейтрализации.',
-                'variants'  => [
+                'slug' => 'keratoliticheskiy-gel-dlya-stop',
+                'title' => 'Кератолитический гель для стоп',
+                'short' => 'Точное действие для контролируемого педикюра',
+                'line' => null,
+                'is_pro' => true,
+                'badge' => 'pro',
+                'aroma' => 'профессиональная формула',
+                'effect' => 'Размягчение гиперкератоза',
+                'rating' => 4.9,
+                'reviews' => 431,
+                'purposes' => ['feet', 'pedicure'],
+                'tasks' => ['soften'],
+                'image' => 'livsi-pro.png',
+                'active' => 'Мочевина, молочная кислота. Профессиональное применение, требует нейтрализации.',
+                'variants' => [
                     ['volume' => '100 мл', 'ml' => 100, 'price' => 69000, 'weight' => 130, 'dims' => [40, 40, 145], 'default' => true],
                 ],
             ],
             [
-                'slug'      => 'multipenka-dlya-manikyura-fresh',
-                'title'     => 'Мультипенка для маникюра',
-                'short'     => 'Мягко очищает и освежает кожу на каждом этапе ухода',
-                'line'      => 'fresh',
-                'badge'     => 'best',
-                'aroma'     => 'грейпфрут · зелёный чай',
-                'effect'    => 'Очищение без воды',
-                'rating'    => 4.9,
-                'reviews'   => 684,
-                'purposes'  => ['hands', 'manicure'],
-                'tasks'     => ['cleansing'],
-                'image'     => 'fresh-hero.jpg',
-                'variants'  => [
+                'slug' => 'multipenka-dlya-manikyura-fresh',
+                'title' => 'Мультипенка для маникюра',
+                'short' => 'Мягко очищает и освежает кожу на каждом этапе ухода',
+                'line' => 'fresh',
+                'badge' => 'best',
+                'aroma' => 'грейпфрут · зелёный чай',
+                'effect' => 'Очищение без воды',
+                'rating' => 4.9,
+                'reviews' => 684,
+                'purposes' => ['hands', 'manicure'],
+                'tasks' => ['cleansing'],
+                'image' => 'product-fresh.png',
+                'variants' => [
                     ['volume' => '200 мл', 'ml' => 200, 'price' => 49000, 'weight' => 230, 'dims' => [55, 55, 180], 'default' => true],
                 ],
             ],
             [
-                'slug'      => 'multipenka-dlya-manikyura-sweet',
-                'title'     => 'Мультипенка для маникюра',
-                'short'     => 'Очищает без воды и оставляет мягкий ягодный аромат',
-                'line'      => 'sweet',
-                'aroma'     => 'сочная вишня',
-                'effect'    => 'Комфортный уход с понятным результатом',
-                'rating'    => 4.9,
-                'reviews'   => 392,
-                'purposes'  => ['hands', 'manicure'],
-                'tasks'     => ['cleansing'],
-                'image'     => 'sweet-closeup.jpg',
-                'variants'  => [
+                'slug' => 'multipenka-dlya-manikyura-sweet',
+                'title' => 'Мультипенка для маникюра',
+                'short' => 'Очищает без воды и оставляет мягкий ягодный аромат',
+                'line' => 'sweet',
+                'aroma' => 'сочная вишня',
+                'effect' => 'Комфортный уход с понятным результатом',
+                'rating' => 4.9,
+                'reviews' => 392,
+                'purposes' => ['hands', 'manicure'],
+                'tasks' => ['cleansing'],
+                'image' => 'product-sweet.png',
+                'variants' => [
                     ['volume' => '200 мл', 'ml' => 200, 'price' => 49000, 'weight' => 230, 'dims' => [55, 55, 180], 'default' => true],
                 ],
             ],
             [
-                'slug'      => 'nabor-chistota-i-myagkost',
-                'title'     => 'Набор «Чистота и мягкость»',
-                'short'     => 'Два понятных шага для комфортного ежедневного ухода',
-                'line'      => 'fresh',
+                'slug' => 'nabor-chistota-i-myagkost',
+                'title' => 'Набор «Чистота и мягкость»',
+                'short' => 'Два понятных шага для комфортного ежедневного ухода',
+                'line' => 'fresh',
                 'is_bundle' => true,
-                'aroma'     => 'грейпфрут · чистый сливочный',
-                'effect'    => 'Очищение и смягчение',
-                'rating'    => 4.9,
-                'reviews'   => 64,
-                'purposes'  => ['hands', 'feet'],
-                'tasks'     => ['cleansing', 'moisturize'],
-                'image'     => 'avatar4.jpg',
-                'variants'  => [
+                'aroma' => 'грейпфрут · чистый сливочный',
+                'effect' => 'Очищение и смягчение',
+                'rating' => 4.9,
+                'reviews' => 64,
+                'purposes' => ['hands', 'feet'],
+                'tasks' => ['cleansing', 'moisturize'],
+                'image' => 'avatar4.jpg',
+                'variants' => [
                     ['volume' => '180 мл + 200 мл', 'price' => 119000, 'weight' => 460, 'dims' => [120, 70, 185], 'default' => true],
                 ],
             ],
@@ -272,24 +261,24 @@ class CatalogSeeder extends Seeder
 
         foreach ($rows as $row) {
             $product = Product::updateOrCreate(['slug' => $row['slug']], [
-                'title'             => $row['title'],
+                'title' => $row['title'],
                 'short_description' => $row['short'],
-                'badge'             => $row['badge'] ?? null,
-                'product_line_id'   => isset($row['line']) && $row['line'] ? $lines[$row['line']]->id : null,
-                'is_pro'            => $row['is_pro'] ?? false,
-                'is_bundle'         => $row['is_bundle'] ?? false,
-                'aroma'             => $row['aroma'] ?? null,
-                'effect'            => $row['effect'] ?? null,
+                'badge' => $row['badge'] ?? null,
+                'product_line_id' => isset($row['line']) && $row['line'] ? $lines[$row['line']]->id : null,
+                'is_pro' => $row['is_pro'] ?? false,
+                'is_bundle' => $row['is_bundle'] ?? false,
+                'aroma' => $row['aroma'] ?? null,
+                'effect' => $row['effect'] ?? null,
                 'active_ingredients' => $row['active'] ?? null,
                 // Способ применения общий и безопасный. Состав (INCI) намеренно
                 // пустой: выдумывать его нельзя, ждём документацию производителя.
-                'application'        => $this->applicationFor($row['slug']),
-                'rating'            => $row['rating'],
-                'reviews_count'     => $row['reviews'],
-                'reviews_source'    => 'Ozon',
-                'sort'              => $sort += 10,
-                'is_active'         => true,
-                'published_at'      => now(),
+                'application' => $this->applicationFor($row['slug']),
+                'rating' => $row['rating'],
+                'reviews_count' => $row['reviews'],
+                'reviews_source' => 'Ozon',
+                'sort' => $sort += 10,
+                'is_active' => true,
+                'published_at' => now(),
             ]);
 
             $product->purposes()->sync(collect($row['purposes'])->map(fn ($c) => $purposes[$c]->id)->all());
@@ -300,12 +289,17 @@ class CatalogSeeder extends Seeder
             // не переданы — вопрос 14.6.
             $gallery = array_values(array_unique([
                 $row['image'],
-                ...array_slice(array_diff(self::PLACEHOLDER_IMAGES, [$row['image']]), 0, 2),
+                match ($row['slug']) {
+                    'multipenka-dlya-ruk-i-stop' => 'product-fresh.png',
+                    'parfyumirovannyy-mist-dlya-tela' => 'product-sweet.png',
+                    'skrab-dlya-tela' => 'mango-product.jpg',
+                    default => $row['image'],
+                },
             ]));
 
             foreach ($gallery as $i => $file) {
                 ProductImage::updateOrCreate(
-                    ['product_id' => $product->id, 'path' => 'img/catalog/' . $file],
+                    ['product_id' => $product->id, 'path' => 'img/catalog/'.$file],
                     ['alt' => $row['title'], 'is_primary' => $i === 0, 'sort' => $i * 10],
                 );
             }
@@ -315,21 +309,21 @@ class CatalogSeeder extends Seeder
             foreach ($row['variants'] as $i => $v) {
                 $variant = ProductVariant::updateOrCreate(
                     [
-                        'product_id'    => $product->id,
+                        'product_id' => $product->id,
                         'option_volume' => $v['volume'],
-                        'option_aroma'  => $v['aroma'] ?? null,
+                        'option_aroma' => $v['aroma'] ?? null,
                     ],
                     [
-                        'sku'        => Str::upper(Str::substr(md5($row['slug'] . $v['volume']), 0, 10)),
-                        'volume_ml'  => $v['ml'] ?? null,
-                        'price'      => $v['price'],
-                        'weight_g'   => $v['weight'],
-                        'length_mm'  => $v['dims'][0],
-                        'width_mm'   => $v['dims'][1],
-                        'height_mm'  => $v['dims'][2],
+                        'sku' => Str::upper(Str::substr(md5($row['slug'].$v['volume']), 0, 10)),
+                        'volume_ml' => $v['ml'] ?? null,
+                        'price' => $v['price'],
+                        'weight_g' => $v['weight'],
+                        'length_mm' => $v['dims'][0],
+                        'width_mm' => $v['dims'][1],
+                        'height_mm' => $v['dims'][2],
                         'is_default' => $v['default'] ?? false,
-                        'sort'       => $vSort += 10,
-                        'is_active'  => true,
+                        'sort' => $vSort += 10,
+                        'is_active' => true,
                     ],
                 );
 
@@ -350,18 +344,12 @@ class CatalogSeeder extends Seeder
     private function applicationFor(string $slug): ?string
     {
         return match ($slug) {
-            'multipenka-dlya-ruk-i-stop', 'multipenka-dlya-manikyura-fresh', 'multipenka-dlya-manikyura-sweet' =>
-                'Нанесите пенку на сухую кожу, распределите и снимите салфеткой. Смывать не требуется. Подходит для использования перед процедурой и между этапами.',
-            'krem-dlya-ruk-i-stop-25-urea' =>
-                'Нанесите на чистую сухую кожу рук или стоп, распределите массирующими движениями до впитывания. Используйте ежедневно, при выраженной сухости — дважды в день.',
-            'parfyumirovannyy-mist-dlya-tela' =>
-                'Распылите на расстоянии 20–30 см от кожи. При необходимости обновляйте в течение дня.',
-            'skrab-dlya-tela' =>
-                'Нанесите на влажную кожу, помассируйте 1–2 минуты и смойте тёплой водой. Используйте 1–2 раза в неделю.',
-            'keratoliticheskiy-gel-dlya-stop' =>
-                'Только для профессионального применения. Нанесите на участки гиперкератоза, выдержите по протоколу, обработайте и нейтрализуйте. Не наносите на повреждённую кожу.',
-            'nabor-chistota-i-myagkost' =>
-                'Первый шаг — очищение пенкой, второй — нанесение крема на сухую кожу. Используйте ежедневно.',
+            'multipenka-dlya-ruk-i-stop', 'multipenka-dlya-manikyura-fresh', 'multipenka-dlya-manikyura-sweet' => 'Нанесите пенку на сухую кожу, распределите и снимите салфеткой. Смывать не требуется. Подходит для использования перед процедурой и между этапами.',
+            'krem-dlya-ruk-i-stop-25-urea' => 'Нанесите на чистую сухую кожу рук или стоп, распределите массирующими движениями до впитывания. Используйте ежедневно, при выраженной сухости — дважды в день.',
+            'parfyumirovannyy-mist-dlya-tela' => 'Распылите на расстоянии 20–30 см от кожи. При необходимости обновляйте в течение дня.',
+            'skrab-dlya-tela' => 'Нанесите на влажную кожу, помассируйте 1–2 минуты и смойте тёплой водой. Используйте 1–2 раза в неделю.',
+            'keratoliticheskiy-gel-dlya-stop' => 'Только для профессионального применения. Нанесите на участки гиперкератоза, выдержите по протоколу, обработайте и нейтрализуйте. Не наносите на повреждённую кожу.',
+            'nabor-chistota-i-myagkost' => 'Первый шаг — очищение пенкой, второй — нанесение крема на сухую кожу. Используйте ежедневно.',
             default => null,
         };
     }
@@ -375,34 +363,34 @@ class CatalogSeeder extends Seeder
     {
         $rows = [
             [
-                'slot'         => 'main',
-                'accent'       => 'fresh',
-                'slug'         => 'multipenka-dlya-ruk-i-stop',
-                'author'       => 'Алина',
-                'caption'      => 'FRESH / Мультипенка',
+                'slot' => 'main',
+                'accent' => 'fresh',
+                'slug' => 'multipenka-dlya-ruk-i-stop',
+                'author' => 'Алина',
+                'caption' => 'FRESH / Мультипенка',
                 'role_caption' => 'Подтверждённая покупка',
-                'text'         => 'Пенка всегда стоит у рабочего стола: очищает быстро, не липнет и не сушит. Один из тех продуктов, которые заканчиваются первыми.',
-                'image_path'   => 'img/reviews/main-product.png',
+                'text' => 'Пенка всегда стоит у рабочего стола: очищает быстро, не липнет и не сушит. Один из тех продуктов, которые заканчиваются первыми.',
+                'image_path' => 'img/catalog/product-fresh.png',
             ],
             [
-                'slot'         => 'top',
-                'accent'       => 'base',
-                'slug'         => 'krem-dlya-ruk-i-stop-25-urea',
-                'author'       => 'Мария',
-                'caption'      => 'BASE / Крем 25% Urea',
+                'slot' => 'top',
+                'accent' => 'base',
+                'slug' => 'krem-dlya-ruk-i-stop-25-urea',
+                'author' => 'Мария',
+                'caption' => 'BASE / Крем 25% Urea',
                 'role_caption' => 'Подтверждённая покупка',
-                'text'         => 'С кремом уход наконец стал регулярным: быстро впитывается, а стопы заметно мягче уже после первых применений.',
-                'image_path'   => 'img/reviews/top.jpg',
+                'text' => 'С кремом уход наконец стал регулярным: быстро впитывается, а стопы заметно мягче уже после первых применений.',
+                'image_path' => 'img/catalog/livsi-base.png',
             ],
             [
-                'slot'         => 'bottom',
-                'accent'       => 'pro',
-                'slug'         => null,
-                'author'       => 'Екатерина',
-                'caption'      => 'PRO / Pedicure',
+                'slot' => 'bottom',
+                'accent' => 'pro',
+                'slug' => null,
+                'author' => 'Екатерина',
+                'caption' => 'PRO / Pedicure',
                 'role_caption' => 'Мастер педикюра',
-                'text'         => 'В работе важна предсказуемость. У LIVSI понятная последовательность, удобный формат и контролируемый результат.',
-                'image_path'   => 'img/reviews/bottom.jpg',
+                'text' => 'В работе важна предсказуемость. У LIVSI понятная последовательность, удобный формат и контролируемый результат.',
+                'image_path' => 'img/catalog/livsi-pro.png',
             ],
         ];
 
@@ -414,19 +402,19 @@ class CatalogSeeder extends Seeder
             Review::updateOrCreate(
                 ['slot' => $row['slot']],
                 [
-                    'product_id'   => $product?->id,
-                    'author'       => $row['author'],
-                    'caption'      => $row['caption'],
+                    'product_id' => $product?->id,
+                    'author' => $row['author'],
+                    'caption' => $row['caption'],
                     'role_caption' => $row['role_caption'],
-                    'accent'       => $row['accent'],
-                    'text'         => $row['text'],
-                    'image_path'   => $row['image_path'],
-                    'rating'       => 5,
-                    'source'       => 'ozon',
+                    'accent' => $row['accent'],
+                    'text' => $row['text'],
+                    'image_path' => $row['image_path'],
+                    'rating' => 5,
+                    'source' => 'ozon',
                     'source_label' => 'Ozon',
-                    'is_featured'  => true,
-                    'is_active'    => true,
-                    'sort'         => $sort += 10,
+                    'is_featured' => true,
+                    'is_active' => true,
+                    'sort' => $sort += 10,
                 ],
             );
         }
@@ -434,14 +422,14 @@ class CatalogSeeder extends Seeder
 
     private function seedUgc(): void
     {
-        // Блок «Ты и LIVSI» — подборка изображений (видео решено не делать).
-        $images = ['fresh-hero.jpg', 'sweet-portrait.jpg', 'mango-product.jpg', 'warm-portrait.jpg', 'avatar4.jpg'];
-        $sort   = 0;
+        // Стартовые обложки; ролики загружаются через админку.
+        $images = ['livsi-fresh.png' => 'multipenka-dlya-ruk-i-stop', 'livsi-sweet.png' => 'parfyumirovannyy-mist-dlya-tela', 'livsi-warm.png' => 'skrab-dlya-tela', 'livsi-base.png' => 'krem-dlya-ruk-i-stop-25-urea', 'livsi-pro.png' => 'keratoliticheskiy-gel-dlya-stop'];
+        $sort = 0;
 
-        foreach ($images as $image) {
+        foreach ($images as $image => $slug) {
             UgcItem::updateOrCreate(
-                ['image_path' => 'img/catalog/' . $image],
-                ['alt' => 'LIVSI', 'sort' => $sort += 10, 'is_active' => true],
+                ['image_path' => 'img/catalog/'.$image],
+                ['alt' => 'LIVSI', 'product_id' => Product::where('slug', $slug)->value('id'), 'sort' => $sort += 10, 'is_active' => true],
             );
         }
     }
@@ -467,7 +455,7 @@ class CatalogSeeder extends Seeder
         // Пороги меняются из админки. Значения по умолчанию — как в макете.
         Setting::put('free_shipping_threshold', 100000); // 1 000 ₽ в копейках
         Setting::put('gift_threshold', 500000);          // 5 000 ₽ в копейках
-        Setting::put('topbar_text', 'БЕСПЛАТНАЯ ДОСТАВКА ОТ 1 000 ₽ · ДОСТАВКА ПО ВСЕЙ РОССИИ');
+        Setting::put('topbar_text', 'БЕСПЛАТНАЯ ДОСТАВКА ОТ 1 000 ₽ ПО ВСЕЙ РОССИИ');
         Setting::put('work_hours', 'пн–пт, 09:00–18:00');
         Setting::put('telegram_url', '');
         Setting::put('whatsapp_url', '');
@@ -517,11 +505,11 @@ class CatalogSeeder extends Seeder
         SellerProfile::updateOrCreate(
             ['code' => 'ip'],
             [
-                'legal_name'      => 'ИП Волкодав Антон Андреевич',
-                'address'         => 'г. Ставрополь',
-                'signer_name'     => 'Волкодав А. А.',
+                'legal_name' => 'ИП Волкодав Антон Андреевич',
+                'address' => 'г. Ставрополь',
+                'signer_name' => 'Волкодав А. А.',
                 'signer_position' => 'Индивидуальный предприниматель',
-                'is_default'      => true,
+                'is_default' => true,
             ],
         );
     }

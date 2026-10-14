@@ -4,7 +4,7 @@
     use App\Support\Money;
 
     $variant = $product->defaultVariant();
-    $images  = $product->images->isNotEmpty() ? $product->images : collect();
+    $images  = $product->images->isNotEmpty() ? $product->images->unique('path')->values() : collect();
     $cover   = $product->primaryImage();
 
     // Микроразметка товара. AggregateRating намеренно не выводим: отзывы

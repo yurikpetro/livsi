@@ -6,6 +6,8 @@ use App\Models\Declaration;
 use App\Models\Product;
 use App\Services\CatalogQuery;
 use Database\Seeders\CatalogSeeder;
+use DOMDocument;
+use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Tests\TestCase;
@@ -35,7 +37,7 @@ class DeclarationsTest extends TestCase
         $html = $this->get('/')->assertOk()->getContent();
 
         foreach (['Все товары', 'Новинки', 'Наборы', 'Уход', 'PRO', 'Декларации'] as $item) {
-            $this->assertStringContainsString('>' . $item . '<', $html, "В меню нет пункта «{$item}»");
+            $this->assertStringContainsString('>'.$item.'<', $html, "В меню нет пункта «{$item}»");
         }
     }
 
@@ -46,7 +48,7 @@ class DeclarationsTest extends TestCase
             route('catalog.index', ['tab' => 'new']),
             route('catalog.index', ['tab' => 'bundles']),
             route('catalog.index', ['tab' => 'care']),
-            route('catalog.pro'),
+            route('catalog.index', ['tab' => 'pro']),
             route('declarations'),
         ] as $url) {
             $this->get($url)->assertOk();
@@ -64,9 +66,15 @@ class DeclarationsTest extends TestCase
             $this->assertStringContainsString($line, $html);
         }
 
-        // Пункты подменю ведут на лендинги линеек, а не на фильтр каталога.
+        $xpath = $this->menuXpath($html);
+
         foreach (['fresh', 'sweet', 'warm', 'base'] as $code) {
-            $this->assertStringContainsString(route('catalog.line', $code), $html);
+            $links = $xpath->query('//div[@id="catalog-sub-care"]/a[normalize-space()="'.strtoupper($code).'"] | //nav[@id="mobile-nav"]//a[normalize-space()="'.strtoupper($code).'"]');
+
+            $this->assertSame(2, $links->length);
+            foreach ($links as $link) {
+                $this->assertSame(route('catalog.index', ['line' => $code]), $link->getAttribute('href'));
+            }
         }
     }
 
@@ -78,17 +86,27 @@ class DeclarationsTest extends TestCase
         $this->assertStringContainsString('id="catalog-sub-pro"', $html);
         $this->assertStringContainsString('SKIN', $html);
         $this->assertStringContainsString('MANICURE / PEDICURE', $html);
+
+        $links = $this->menuXpath($html)->query('//div[@id="catalog-menu"]//a[normalize-space()="PRO"] | //nav[@id="mobile-nav"]//a[normalize-space()="PRO"]');
+
+        $this->assertSame(2, $links->length);
+        foreach ($links as $link) {
+            $this->assertSame(route('catalog.index', ['tab' => 'pro']), $link->getAttribute('href'));
+        }
     }
 
     public function test_submenu_links_open_working_pages(): void
     {
         foreach ([
-            route('catalog.line', 'fresh'),
-            route('catalog.line', 'base'),
+            route('catalog.index', ['line' => 'fresh']),
+            route('catalog.index', ['line' => 'sweet']),
+            route('catalog.index', ['line' => 'warm']),
+            route('catalog.index', ['line' => 'base']),
+            route('catalog.index', ['tab' => 'pro']),
             route('catalog.index', ['tab' => 'pro', 'purpose' => ['body', 'face']]),
             route('catalog.index', ['tab' => 'pro', 'purpose' => ['manicure', 'pedicure']]),
         ] as $url) {
-            $this->get($url)->assertOk();
+            $this->get($url)->assertViewIs('catalog.index');
         }
     }
 
@@ -98,7 +116,7 @@ class DeclarationsTest extends TestCase
         $html = $this->get('/')->assertOk()->getContent();
 
         foreach (['#d0dd56', '#f6accd', '#ffe405', '#f5e2b7', '#99d0f7'] as $colour) {
-            $this->assertStringContainsString('background: ' . $colour, $html);
+            $this->assertStringContainsString('background: '.$colour, $html);
         }
     }
 
@@ -139,12 +157,12 @@ class DeclarationsTest extends TestCase
         $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
 
         $declaration = Declaration::create([
-            'number'      => 'ЕАЭС N RU Д-RU.РА01.В.12345/26',
-            'title'       => 'Косметика для тела',
-            'issued_on'   => '2026-01-15',
+            'number' => 'ЕАЭС N RU Д-RU.РА01.В.12345/26',
+            'title' => 'Косметика для тела',
+            'issued_on' => '2026-01-15',
             'valid_until' => '2031-01-14',
-            'file_path'   => 'declarations/test.pdf',
-            'file_size'   => 524288,
+            'file_path' => 'declarations/test.pdf',
+            'file_size' => 524288,
         ]);
 
         $declaration->products()->attach($product);
@@ -163,7 +181,7 @@ class DeclarationsTest extends TestCase
     public function test_expired_declaration_is_marked(): void
     {
         Declaration::create([
-            'number'      => 'ЕАЭС N RU Д-RU.РА01.В.00001/20',
+            'number' => 'ЕАЭС N RU Д-RU.РА01.В.00001/20',
             'valid_until' => now()->subMonth()->toDateString(),
         ]);
 
@@ -194,14 +212,14 @@ class DeclarationsTest extends TestCase
         $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
 
         $declaration = Declaration::create([
-            'number'      => 'ЕАЭС N RU Д-RU.РА01.В.55555/26',
+            'number' => 'ЕАЭС N RU Д-RU.РА01.В.55555/26',
             'valid_until' => '2031-06-30',
-            'file_path'   => 'declarations/test.pdf',
+            'file_path' => 'declarations/test.pdf',
         ]);
 
         $declaration->products()->attach($product);
 
-        $this->get('/product/' . $product->slug)
+        $this->get('/product/'.$product->slug)
             ->assertOk()
             ->assertSee('Документы')
             ->assertSee('ЕАЭС N RU Д-RU.РА01.В.55555/26')
@@ -223,5 +241,13 @@ class DeclarationsTest extends TestCase
     public function test_footer_links_to_declarations(): void
     {
         $this->get('/')->assertOk()->assertSee('Декларации соответствия');
+    }
+
+    private function menuXpath(string $html): DOMXPath
+    {
+        $document = new DOMDocument;
+        @$document->loadHTML('<?xml encoding="utf-8" ?>'.$html);
+
+        return new DOMXPath($document);
     }
 }

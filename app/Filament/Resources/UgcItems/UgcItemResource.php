@@ -26,7 +26,7 @@ class UgcItemResource extends Resource
 
     protected static ?string $navigationLabel = 'Галерея «Ты и LIVSI»';
 
-    protected static ?string $modelLabel = 'кадр';
+    protected static ?string $modelLabel = 'карточка галереи';
 
     protected static ?string $pluralModelLabel = 'Галерея «Ты и LIVSI»';
 

@@ -5,8 +5,8 @@
 @section('content')
     @php use App\Support\Money; @endphp
 
-    <section class="site-container py-14">
-        <h1 class="text-4xl md:text-5xl">Корзина</h1>
+    <section class="site-container py-14 cart-page">
+        <div class="eyebrow">Ваш заказ</div><h1 class="mt-4 cart-title">Корзина.</h1>
 
         @if ($cart->isEmpty())
             <div class="py-20 text-center">
@@ -39,12 +39,13 @@
             @endif
 
             <div class="mt-8 grid gap-12 lg:grid-cols-[1.6fr_1fr]">
-                <div class="divide-y divide-line border-y border-line">
+                <div class="divide-y divide-line border-y border-line cart-lines">
+                    <h2 class="py-5 text-sm">01 Ваш заказ <span class="text-muted">({{ $cart->items->sum('qty') }})</span></h2>
                     @foreach ($cart->items as $item)
                         <div class="flex gap-5 py-5">
                             @php $image = $item->variant->product->primaryImage(); @endphp
 
-                            <a href="{{ route('catalog.show', $item->variant->product) }}" class="block w-24 shrink-0 bg-shell">
+                            <a href="{{ route('catalog.show', $item->variant->product) }}" class="cart-item-photo block shrink-0 bg-shell">
                                 @if ($image)
                                     <x-img :path="$image->path" :alt="$image->alt" sizes="96px"
                                            class="aspect-[4/5] w-full object-cover" />
@@ -108,7 +109,8 @@
                     @endforeach
                 </div>
 
-                <aside class="h-fit border border-line p-6">
+                <aside class="cart-summary h-fit border border-ink p-6">
+                    <h2 class="mb-8 text-2xl">Итог заказа</h2>
                     <div class="flex items-baseline justify-between">
                         <span class="text-[11px] uppercase tracking-[0.08em] text-muted">Товары</span>
                         <span class="text-sm font-bold">{{ Money::rub($subtotal) }}</span>
@@ -124,8 +126,8 @@
                         <span class="text-2xl font-black">{{ Money::rub($subtotal) }}</span>
                     </div>
 
-                    <a href="{{ route('checkout.index') }}" class="btn btn-neon mt-6 w-full justify-center">
-                        Перейти к оформлению
+                    <a href="{{ route('checkout.index') }}" class="btn btn-dark mt-6 w-full justify-between">
+                        Перейти к оформлению <span aria-hidden="true">→</span>
                     </a>
                     <p class="mt-3 text-[10px] leading-relaxed text-muted">
                         Стоимость доставки рассчитывается отдельно и оплачивается при получении.

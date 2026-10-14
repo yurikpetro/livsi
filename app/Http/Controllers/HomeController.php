@@ -13,15 +13,14 @@ class HomeController extends Controller
     public function __invoke()
     {
         return view('home', [
-            'lines'    => ProductLine::active()->orderBy('sort')->get(),
+            'lines' => ProductLine::active()->orderBy('sort')->get(),
             'products' => Product::active()
                 ->with(['line', 'images', 'variants.quota'])
                 ->orderBy('sort')
-                ->take(8)
                 ->get(),
-            'reviews'  => Review::homepageBlock(),
-            'ugc'      => UgcItem::where('is_active', true)->orderBy('sort')->get(),
-            'faq'      => FaqItem::where('is_active', true)->orderBy('sort')->get(),
+            'reviews' => Review::homepageBlock(),
+            'ugc' => UgcItem::where('is_active', true)->with(['product.line', 'product.images', 'product.variants.quota'])->orderBy('sort')->get(),
+            'faq' => FaqItem::where('is_active', true)->orderBy('sort')->get(),
         ]);
     }
 }

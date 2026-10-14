@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\LegalPage;
 use Database\Seeders\CatalogSeeder;
 use Database\Seeders\LegalPagesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -19,26 +20,41 @@ class CitySelectorTest extends TestCase
         $this->seed(LegalPagesSeeder::class);
     }
 
-    public function test_city_can_be_changed_from_the_header_on_every_storefront_page(): void
+    public function test_city_is_not_requested_outside_checkout(): void
     {
-        foreach (['/', '/catalog'] as $path) {
+        foreach (['/', '/catalog', '/cart', '/login', '/partners', '/privacy'] as $path) {
             $this->get($path)
                 ->assertOk()
-                ->assertSee('data-city-open', false)
-                ->assertSee('data-city-selector', false)
-                ->assertSee('Выберите город')
-                ->assertSee('data-city-search', false)
-                ->assertSee('data-popular-city="Ставрополь"', false);
+                ->assertDontSee('data-city-open', false)
+                ->assertDontSee('data-city-selector', false)
+                ->assertDontSee('data-city-search', false);
         }
     }
 
-    public function test_privacy_page_describes_city_detection_at_first_visit(): void
+    public function test_privacy_page_describes_city_detection_only_at_checkout(): void
     {
         $this->get('/privacy')
             ->assertOk()
-            ->assertSee('При первом посещении сайта для предложения города')
+            ->assertSee('При открытии страницы оформления заказа для предложения города')
             ->assertSee('API Геокодера Яндекса')
-            ->assertSee('его можно изменить в шапке сайта или форме заказа');
+            ->assertSee('его можно изменить в форме заказа')
+            ->assertDontSee('его можно изменить в шапке сайта');
+    }
+
+    public function test_existing_privacy_page_is_updated_without_changing_other_legal_text(): void
+    {
+        $page = LegalPage::where('slug', 'privacy')->firstOrFail();
+        $page->update([
+            'body' => '<p>Другие условия обработки данных.</p><p>При первом посещении сайта для предложения города загружается сервис «Яндекс Карты»; его можно изменить в шапке сайта или форме заказа.</p>',
+            'reviewed_at' => now(),
+        ]);
+
+        $migration = require database_path('migrations/2026_10_08_152935_scope_city_detection_to_checkout.php');
+        $migration->up();
+
+        $page->refresh();
+        $this->assertSame('<p>Другие условия обработки данных.</p><p>При открытии страницы оформления заказа для предложения города загружается сервис «Яндекс Карты»; его можно изменить в форме заказа.</p>', $page->body);
+        $this->assertNull($page->reviewed_at);
     }
 
     public function test_coordinates_are_resolved_to_a_russian_city_without_exposing_the_api_key(): void

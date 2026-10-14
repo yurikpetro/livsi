@@ -63,6 +63,9 @@ class ApiShipClient
     {
         $response = Http::acceptJson()
             ->withHeaders(['Authorization' => (string) config('livsi.apiship.token')])
+            ->withOptions(filled(config('livsi.apiship.source_ip')) ? [
+                'curl' => [CURLOPT_INTERFACE => (string) config('livsi.apiship.source_ip')],
+            ] : [])
             ->connectTimeout(2)
             ->timeout(5)
             ->get(rtrim((string) config('livsi.apiship.api_url'), '/').'/lists/points', [

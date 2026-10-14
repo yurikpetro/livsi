@@ -1,10 +1,10 @@
 @php use App\Support\Money; @endphp
 
-<div>
+<div class="flex items-center">
     <button type="button" wire:click="openSearch"
-            class="text-ink/70 hover:text-ink" aria-label="Поиск">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path>
+            class="flex cursor-pointer items-center justify-center text-ink hover:text-ink" aria-label="Поиск">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+            <circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.4 15.4 4.6 4.6" stroke-linecap="round"></path>
         </svg>
     </button>
 

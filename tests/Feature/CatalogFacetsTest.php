@@ -4,11 +4,15 @@ namespace Tests\Feature;
 
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\Purpose;
 use App\Models\StockQuota;
 use App\Services\CatalogQuery;
 use Database\Seeders\CatalogSeeder;
+use DOMDocument;
+use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class CatalogFacetsTest extends TestCase
@@ -26,8 +30,8 @@ class CatalogFacetsTest extends TestCase
     public function test_multiple_values_within_one_axis_are_combined_with_or(): void
     {
         $hands = $this->found(['purpose' => ['hands']]);
-        $body  = $this->found(['purpose' => ['body']]);
-        $both  = $this->found(['purpose' => ['hands', 'body']]);
+        $body = $this->found(['purpose' => ['body']]);
+        $both = $this->found(['purpose' => ['hands', 'body']]);
 
         $this->assertGreaterThan($hands, $both);
         $this->assertGreaterThan($body, $both);
@@ -38,7 +42,7 @@ class CatalogFacetsTest extends TestCase
     public function test_different_axes_are_combined_with_and(): void
     {
         $fresh = $this->found(['line' => 'fresh']);
-        $both  = $this->found(['line' => 'fresh', 'task' => ['cleansing']]);
+        $both = $this->found(['line' => 'fresh', 'task' => ['cleansing']]);
 
         $this->assertLessThanOrEqual($fresh, $both);
         $this->assertGreaterThan(0, $both);
@@ -64,7 +68,7 @@ class CatalogFacetsTest extends TestCase
     /** А вот счётчики чужих осей должны сужаться. */
     public function test_facet_counts_of_other_axes_are_narrowed(): void
     {
-        $all   = $this->catalogQuery([])->facets();
+        $all = $this->catalogQuery([])->facets();
         $fresh = $this->catalogQuery(['line' => 'fresh'])->facets();
 
         $this->assertLessThan(
@@ -75,20 +79,72 @@ class CatalogFacetsTest extends TestCase
         $this->assertSame(0, $fresh['purpose']->firstWhere('code', 'body')->products_count);
     }
 
-    public function test_active_filters_are_shown_as_chips(): void
+    public function test_selected_filters_are_not_duplicated_below_categories(): void
     {
         $this->get('/catalog?line=fresh&purpose[]=hands')
             ->assertOk()
-            ->assertSee('Выбрано')
-            ->assertSee('Сбросить всё');
+            ->assertDontSee('Выбрано')
+            ->assertDontSee('Сбросить всё');
+    }
+
+    #[DataProvider('categories')]
+    public function test_category_links_replace_previous_filters_and_preserve_search_and_sort(string $label, array $filters): void
+    {
+        $html = $this->followingRedirects()->get(route('catalog.index', [
+            'tab' => 'new', 'line' => 'warm', 'purpose' => ['hands'],
+            'task' => ['cleansing'], 'q' => 'пенка', 'sort' => 'price_desc', 'page' => 2,
+        ]))->assertOk()->getContent();
+        $xpath = $this->catalogXpath($html);
+        $link = $xpath->query('//div[contains(@class, "catalog-toolbar")]/a[normalize-space()="'.$label.'"]')->item(0);
+
+        $this->assertNotNull($link);
+        parse_str(parse_url($link->getAttribute('href'), PHP_URL_QUERY) ?? '', $params);
+        $this->assertSame(['q' => 'пенка', 'sort' => 'price_desc', ...$filters], $params);
+    }
+
+    public function test_old_combined_category_url_redirects_to_one_category(): void
+    {
+        $this->get(route('catalog.index', [
+            'tab' => 'new', 'line' => 'warm', 'purpose' => ['hands'],
+            'task' => ['cleansing'], 'q' => 'пенка', 'sort' => 'price_desc', 'page' => 2,
+        ]))->assertRedirect(route('catalog.index', ['q' => 'пенка', 'sort' => 'price_desc', 'line' => 'warm']));
+    }
+
+    #[DataProvider('categories')]
+    public function test_selected_category_sets_heading_and_only_one_active_tab(string $label, array $filters): void
+    {
+        $html = $this->get(route('catalog.index', $filters))->assertOk()->getContent();
+        $xpath = $this->catalogXpath($html);
+        $active = $xpath->query('//div[contains(@class, "catalog-toolbar")]/a[contains(@class, "chip-active")]');
+
+        $this->assertSame($label.'.', $xpath->query('//h1')->item(0)->textContent);
+        $this->assertSame(1, $active->length);
+        $this->assertSame($label, trim($active->item(0)->textContent));
+    }
+
+    /** @return array<string, array{string, array{tab?: string, line?: string, purpose?: array<string>}}> */
+    public static function categories(): array
+    {
+        return [
+            'all' => ['Все товары', []],
+            'new' => ['Новинки', ['tab' => 'new']],
+            'best' => ['Бестселлеры', ['tab' => 'best']],
+            'bundles' => ['Наборы', ['tab' => 'bundles']],
+            'fresh' => ['FRESH', ['line' => 'fresh']],
+            'sweet' => ['SWEET', ['line' => 'sweet']],
+            'warm' => ['WARM', ['line' => 'warm']],
+            'base' => ['BASE', ['line' => 'base']],
+            'pro skin' => ['PRO SKIN', ['tab' => 'pro', 'purpose' => ['body', 'face']]],
+            'pro manicure' => ['PRO MANICURE / PEDICURE', ['tab' => 'pro', 'purpose' => ['manicure', 'pedicure']]],
+        ];
     }
 
     /** Клик по чипсу снимает ровно один фильтр, остальные остаются. */
     public function test_chip_url_removes_only_its_own_filter(): void
     {
-        $query  = $this->catalogQuery(['line' => 'fresh', 'purpose' => ['hands', 'feet']]);
+        $query = $this->catalogQuery(['line' => 'fresh', 'purpose' => ['hands', 'feet']]);
         $facets = $query->facets();
-        $chips  = $query->chips($facets);
+        $chips = $query->chips($facets);
 
         $handsChip = $chips->firstWhere('label', 'Руки');
 
@@ -119,7 +175,7 @@ class CatalogFacetsTest extends TestCase
 
     public function test_price_sorting_orders_products(): void
     {
-        $asc  = $this->firstProductSlug(['sort' => 'price_asc']);
+        $asc = $this->firstProductSlug(['sort' => 'price_asc']);
         $desc = $this->firstProductSlug(['sort' => 'price_desc']);
 
         $this->assertNotSame($asc, $desc);
@@ -153,6 +209,14 @@ class CatalogFacetsTest extends TestCase
 
     // ───────────────────────────────────────────── helpers
 
+    private function catalogXpath(string $html): DOMXPath
+    {
+        $document = new DOMDocument;
+        @$document->loadHTML('<?xml encoding="UTF-8">'.$html);
+
+        return new DOMXPath($document);
+    }
+
     private function catalogQuery(array $params): CatalogQuery
     {
         return CatalogQuery::fromRequest(Request::create('/catalog', 'GET', $params));
@@ -177,14 +241,14 @@ class CatalogFacetsTest extends TestCase
 
     private function makeExtraProducts(int $count, ?string $purposeCode = null): void
     {
-        $purpose = $purposeCode ? \App\Models\Purpose::where('code', $purposeCode)->first() : null;
+        $purpose = $purposeCode ? Purpose::where('code', $purposeCode)->first() : null;
 
         for ($i = 1; $i <= $count; $i++) {
             $product = Product::create([
-                'slug'      => 'test-product-' . $i,
-                'title'     => 'Тестовый товар ' . $i,
+                'slug' => 'test-product-'.$i,
+                'title' => 'Тестовый товар '.$i,
                 'is_active' => true,
-                'sort'      => 1000 + $i,
+                'sort' => 1000 + $i,
             ]);
 
             if ($purpose) {
@@ -192,12 +256,12 @@ class CatalogFacetsTest extends TestCase
             }
 
             $variant = ProductVariant::create([
-                'product_id'    => $product->id,
-                'sku'           => 'TEST' . $i,
+                'product_id' => $product->id,
+                'sku' => 'TEST'.$i,
                 'option_volume' => '100 мл',
-                'price'         => 10000 + $i,
-                'is_default'    => true,
-                'is_active'     => true,
+                'price' => 10000 + $i,
+                'is_default' => true,
+                'is_active' => true,
             ]);
 
             StockQuota::create(['product_variant_id' => $variant->id, 'allocated' => 5]);

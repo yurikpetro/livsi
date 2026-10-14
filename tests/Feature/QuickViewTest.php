@@ -3,9 +3,9 @@
 namespace Tests\Feature;
 
 use App\Livewire\QuickView;
+use App\Models\Cart;
 use App\Models\Product;
-use App\Models\Setting;
-use App\Support\Money;
+use App\Services\CartService;
 use Database\Seeders\CatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -14,9 +14,7 @@ use Tests\TestCase;
 /**
  * Быстрый просмотр товара из листинга.
  *
- * Он именно в дополнение к странице товара, а не вместо: у страницы свой
- * адрес, микроразметка и место в карте сайта. Модалка нужна, чтобы выбрать
- * объём и положить в корзину, не уходя из выдачи.
+ * Галерея, подробности и изменение корзины без перехода со страницы.
  */
 class QuickViewTest extends TestCase
 {
@@ -42,7 +40,7 @@ class QuickViewTest extends TestCase
             ->dispatch('quick-view', productId: $product->id)
             ->assertSet('open', true)
             ->assertSee($product->title)
-            ->assertSee('Состав · применение · отзывы');
+            ->assertDontSee('Полная карточка и отзывы');
     }
 
     public function test_default_variant_is_preselected(): void
@@ -60,7 +58,7 @@ class QuickViewTest extends TestCase
     {
         $product = Product::with('variants.quota')->where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
         $default = $product->variants->firstWhere('is_default', true);
-        $other   = $product->variants->firstWhere('is_default', false);
+        $other = $product->variants->firstWhere('is_default', false);
 
         $default->quota->update(['allocated' => 0]);
 
@@ -72,7 +70,7 @@ class QuickViewTest extends TestCase
     public function test_variant_can_be_switched(): void
     {
         $product = Product::with('variants')->where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
-        $other   = $product->variants->firstWhere('is_default', false);
+        $other = $product->variants->firstWhere('is_default', false);
 
         Livewire::test(QuickView::class)
             ->dispatch('quick-view', productId: $product->id)
@@ -87,25 +85,21 @@ class QuickViewTest extends TestCase
         $foreign = Product::with('variants')->where('slug', 'skrab-dlya-tela')->firstOrFail()->variants->first();
 
         $component = Livewire::test(QuickView::class)->dispatch('quick-view', productId: $product->id);
-        $before    = $component->get('variantId');
+        $before = $component->get('variantId');
 
         $component->call('selectVariant', $foreign->id)->assertSet('variantId', $before);
     }
 
-    /**
-     * Кладём в корзину и закрываем модалку: иначе поверх быстрого просмотра
-     * открылась бы выдвижная корзина, и вышло бы два слоя друг на друге.
-     */
-    public function test_adding_to_cart_closes_the_modal_and_notifies_the_cart(): void
+    public function test_adding_to_cart_keeps_the_modal_open_and_notifies_the_cart(): void
     {
         $product = Product::with('variants')->where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
-        $other   = $product->variants->firstWhere('is_default', false);
+        $other = $product->variants->firstWhere('is_default', false);
 
         Livewire::test(QuickView::class)
             ->dispatch('quick-view', productId: $product->id)
             ->call('selectVariant', $other->id)
             ->call('addToCart')
-            ->assertSet('open', false)
+            ->assertSet('open', true)
             ->assertDispatched('cart-add', variantId: $other->id);
     }
 
@@ -142,13 +136,6 @@ class QuickViewTest extends TestCase
             ->assertNotDispatched('cart-add');
     }
 
-    /**
-     * Содержимое модалки — как в макете.
-     *
-     * Объём выбирается, ниже три факта: аромат, эффект и порог бесплатной
-     * доставки. Подробное — состав, применение — спрятано за разворотом,
-     * чтобы быстрый просмотр оставался быстрым.
-     */
     public function test_modal_shows_what_the_mockup_shows(): void
     {
         $product = Product::where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
@@ -158,19 +145,13 @@ class QuickViewTest extends TestCase
             ->assertSee('Объём')
             ->assertSee('Аромат')
             ->assertSee('Эффект')
-            ->assertSee('Доставка')
+            ->assertDontSee('Доставка')
             ->assertSee('Добавить в корзину')
-            ->assertSee('Состав · применение · отзывы');
+            ->assertSee('С этим товаром рекомендуем')
+            ->assertDontSee('Полная карточка и отзывы');
     }
 
-    /**
-     * Строка «Состав · применение · отзывы» — ссылка на страницу товара.
-     *
-     * Раньше она раскрывалась разворотом с копией текста. Копия означала
-     * два места для одного и того же; к тому же на странице товара этот
-     * текст идёт вместе с документами и микроразметкой.
-     */
-    public function test_details_row_leads_to_the_product_page(): void
+    public function test_composition_and_application_are_visible_without_expanding_details(): void
     {
         $product = Product::where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
 
@@ -178,25 +159,100 @@ class QuickViewTest extends TestCase
             ->dispatch('quick-view', productId: $product->id)
             ->html();
 
-        $marker = (int) strpos($html, 'modal-more');
-        $start  = (int) strrpos(substr($html, 0, $marker), '<');
-        $tag    = substr($html, $start, $marker - $start);
-
-        $this->assertStringStartsWith('<a ', $tag, 'Строка перестала быть ссылкой');
-        $this->assertStringContainsString(route('catalog.show', $product), $tag);
-        $this->assertStringNotContainsString('<details', $html, 'Разворот вернулся: текст снова дублируется');
+        $this->assertStringNotContainsString('<details', $html);
+        $this->assertStringNotContainsString(route('catalog.show', $product), $html);
+        $this->assertStringContainsString(e($product->composition), $html);
+        $this->assertStringContainsString(e($product->application), $html);
+        $this->assertStringContainsString('Применение', $html);
     }
 
-    /** Порог берётся из настроек: заказчик меняет его сам. */
-    public function test_delivery_threshold_comes_from_settings(): void
+    public function test_volume_is_shown_even_for_a_product_with_one_variant(): void
     {
-        Setting::put('free_shipping_threshold', 250000);
-
-        $product = Product::where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
+        $product = Product::with('variants')->where('slug', 'skrab-dlya-tela')->firstOrFail();
 
         Livewire::test(QuickView::class)
             ->dispatch('quick-view', productId: $product->id)
-            ->assertSee('Бесплатно в заказе от ' . Money::rub(250000));
+            ->assertSee('Объём')
+            ->assertSee($product->defaultVariant()->option_volume);
+    }
+
+    public function test_inactive_default_variant_falls_back_to_an_active_one(): void
+    {
+        $product = Product::with('variants')->where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
+        $default = $product->defaultVariant();
+        $other = $product->variants->firstWhere('is_default', false);
+        $default->update(['is_active' => false]);
+
+        Livewire::test(QuickView::class)->dispatch('quick-view', productId: $product->id)
+            ->assertSet('variantId', $other->id)
+            ->call('selectVariant', $default->id)
+            ->assertSet('variantId', $other->id);
+    }
+
+    public function test_sold_out_variant_cannot_be_selected(): void
+    {
+        $product = Product::with('variants.quota')->where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
+        $default = $product->defaultVariant();
+        $other = $product->variants->firstWhere('is_default', false);
+        $other->quota->update(['allocated' => 0]);
+
+        Livewire::test(QuickView::class)->dispatch('quick-view', productId: $product->id)
+            ->call('selectVariant', $other->id)
+            ->assertSet('variantId', $default->id);
+    }
+
+    public function test_tampered_variant_from_another_product_is_not_added(): void
+    {
+        $product = Product::where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
+        $foreign = Product::with('variants')->where('slug', 'skrab-dlya-tela')->firstOrFail()->defaultVariant();
+
+        Livewire::test(QuickView::class)->dispatch('quick-view', productId: $product->id)
+            ->set('variantId', $foreign->id)->call('addToCart')
+            ->assertNotDispatched('cart-add')
+            ->assertDispatched('cart-notice', message: 'Этот вариант сейчас недоступен');
+    }
+
+    public function test_variant_that_sells_out_after_opening_is_not_added(): void
+    {
+        $product = Product::with('variants.quota')->where('slug', 'skrab-dlya-tela')->firstOrFail();
+        $component = Livewire::test(QuickView::class)->dispatch('quick-view', productId: $product->id);
+        $product->defaultVariant()->quota->update(['allocated' => 0]);
+
+        $component->call('addToCart')->assertSet('open', true)
+            ->assertNotDispatched('cart-add')
+            ->assertDispatched('cart-notice', message: 'Этот вариант сейчас недоступен');
+    }
+
+    public function test_modal_initializes_the_paid_quantity_without_counting_a_gift(): void
+    {
+        $product = Product::with('variants')->where('slug', 'skrab-dlya-tela')->firstOrFail();
+        $cart = Cart::create(['token' => str_repeat('q', 48)]);
+        $cart->items()->create(['product_variant_id' => $product->defaultVariant()->id, 'qty' => 2]);
+        $cart->items()->create(['product_variant_id' => $product->defaultVariant()->id, 'qty' => 1, 'is_gift' => true]);
+
+        Livewire::withCookie(CartService::COOKIE, $cart->token)->test(QuickView::class)
+            ->dispatch('quick-view', productId: $product->id)
+            ->assertSee('data-quantity="2"', false)
+            ->assertSee('Количество товара Скраб для тела');
+    }
+
+    public function test_variant_deactivated_after_opening_is_not_added(): void
+    {
+        $product = Product::with('variants')->where('slug', 'skrab-dlya-tela')->firstOrFail();
+        $component = Livewire::test(QuickView::class)->dispatch('quick-view', productId: $product->id);
+        $product->defaultVariant()->update(['is_active' => false]);
+
+        $component->call('addToCart')->assertNotDispatched('cart-add')
+            ->assertDispatched('cart-notice', message: 'Этот вариант сейчас недоступен');
+    }
+
+    public function test_opening_the_modal_does_not_create_an_empty_cart(): void
+    {
+        $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
+
+        Livewire::test(QuickView::class)->dispatch('quick-view', productId: $product->id);
+
+        $this->assertSame(0, Cart::count());
     }
 
     /** В выборе стоит только объём: аромат показан отдельной строкой. */
@@ -234,8 +290,8 @@ class QuickViewTest extends TestCase
         // Берём открывающий тег фотографии целиком: обработчик стоит в нём
         // раньше класса, поэтому окно отсчитываем от начала тега.
         $marker = (int) strpos($html, 'product-open');
-        $start  = (int) strrpos(substr($html, 0, $marker), '<');
-        $tag    = substr($html, $start, $marker - $start);
+        $start = (int) strrpos(substr($html, 0, $marker), '<');
+        $tag = substr($html, $start, $marker - $start);
 
         $this->assertStringStartsWith('<button', $tag, 'Фотография снова стала ссылкой на страницу товара');
         $this->assertStringContainsString("Livewire.dispatch('quick-view'", $tag);
@@ -255,7 +311,7 @@ class QuickViewTest extends TestCase
         $html = $this->get('/catalog')->assertOk()->getContent();
 
         $position = strpos($html, 'Быстрый просмотр');
-        $before   = substr($html, 0, $position);
+        $before = substr($html, 0, $position);
 
         // Между началом ссылки на товар и кнопкой обязательно есть её закрытие.
         $this->assertGreaterThan(

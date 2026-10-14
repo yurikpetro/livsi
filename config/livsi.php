@@ -96,6 +96,7 @@ return [
     'apiship' => [
         'token' => env('APISHIP_TOKEN'),
         'api_url' => env('APISHIP_API_URL', 'https://api.apiship.ru/v1'),
+        'source_ip' => env('APISHIP_SOURCE_IP'),
         'active_providers' => array_filter(array_map('trim', explode(',', (string) env('APISHIP_ACTIVE_PROVIDERS', 'ozonlog')))),
     ],
 

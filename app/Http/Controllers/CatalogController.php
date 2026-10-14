@@ -10,13 +10,16 @@ class CatalogController extends Controller
 {
     public function index(Request $request)
     {
-        $query  = CatalogQuery::fromRequest($request);
+        $query = CatalogQuery::fromRequest($request);
+        if ($query->line && $query->tab !== '') {
+            return redirect($query->urlForCategory(['line' => $query->line]));
+        }
+
         $facets = $query->facets();
 
         return view('catalog.index', [
-            'query'    => $query,
-            'facets'   => $facets,
-            'chips'    => $query->chips($facets),
+            'query' => $query,
+            'facets' => $facets,
             'products' => $query->builder()->paginate(CatalogQuery::PER_PAGE)->withQueryString(),
 
             // Сортировка не меняет состав выдачи, только порядок, поэтому

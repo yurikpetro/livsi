@@ -30,7 +30,7 @@ class CartDrawer extends Component
 
     public function boot(CartService $cart, PromoService $promo): void
     {
-        $this->cart  = $cart;
+        $this->cart = $cart;
         $this->promo = $promo;
     }
 
@@ -51,23 +51,57 @@ class CartDrawer extends Component
         $variant = ProductVariant::with('quota')->find($variantId);
 
         if (! $variant) {
+            $this->dispatch('cart-notice', message: 'Этот товар сейчас недоступен');
+            $this->publishQuantities();
+
             return;
         }
 
         $added = $this->cart->add($variant, max(1, $qty));
 
-        $this->open = true;
-
         if ($added < 1) {
-            $this->dispatch('cart-notice', message: 'Этого товара сейчас нет в наличии');
+            $this->dispatch('cart-notice', message: $variant->available() > 0
+                ? 'Доступное количество товара уже в корзине'
+                : 'Этого товара сейчас нет в наличии');
+        } else {
+            $this->dispatch('cart-notice', message: $variant->product->title.' добавлен в корзину', success: true);
+        }
+
+        $this->publishQuantities();
+    }
+
+    public function incrementVariant(int $variantId): void
+    {
+        if ($item = $this->paidVariantItem($variantId)) {
+            $this->increment($item->id);
+        } else {
+            $this->publishQuantities();
+        }
+    }
+
+    public function decrementVariant(int $variantId): void
+    {
+        if ($item = $this->paidVariantItem($variantId)) {
+            $this->decrement($item->id);
+        } else {
+            $this->publishQuantities();
         }
     }
 
     public function increment(int $itemId): void
     {
         if ($item = $this->ownedItem($itemId)) {
+            if ($item->qty >= $item->variant->available()) {
+                $this->dispatch('cart-notice', message: 'Доступное количество товара уже в корзине');
+                $this->publishQuantities();
+
+                return;
+            }
+
             $this->cart->setQty($item, $item->qty + 1);
         }
+
+        $this->publishQuantities();
     }
 
     public function decrement(int $itemId): void
@@ -75,6 +109,8 @@ class CartDrawer extends Component
         if ($item = $this->ownedItem($itemId)) {
             $this->cart->setQty($item, $item->qty - 1);
         }
+
+        $this->publishQuantities();
     }
 
     public function removeItem(int $itemId): void
@@ -82,6 +118,8 @@ class CartDrawer extends Component
         if ($item = $this->ownedItem($itemId)) {
             $this->cart->remove($item);
         }
+
+        $this->publishQuantities();
     }
 
     public function chooseGift(int $variantId): void
@@ -91,27 +129,29 @@ class CartDrawer extends Component
         if ($variant && ! $this->cart->chooseGift($variant)) {
             $this->dispatch('cart-notice', message: 'Этот подарок сейчас недоступен');
         }
+
+        $this->publishQuantities();
     }
 
     public function render()
     {
-        $cart     = $this->cart->currentOrNull() ?? $this->emptyCart();
+        $cart = $this->cart->currentOrNull() ?? $this->emptyCart();
         $subtotal = $cart->subtotal();
 
         $freeShippingThreshold = $this->promo->freeShippingRule()?->threshold;
-        $remaining             = $this->promo->remainingToFreeShipping($subtotal);
+        $remaining = $this->promo->remainingToFreeShipping($subtotal);
 
         return view('livewire.cart-drawer', [
-            'cart'          => $cart,
-            'subtotal'      => $subtotal,
-            'count'         => $cart->totalQty(),
-            'remaining'     => $remaining,
-            'progress'      => $freeShippingThreshold > 0
+            'cart' => $cart,
+            'subtotal' => $subtotal,
+            'count' => $cart->totalQty(),
+            'remaining' => $remaining,
+            'progress' => $freeShippingThreshold > 0
                 ? min(100, (int) round($subtotal / $freeShippingThreshold * 100))
                 : 100,
-            'giftUnlocked'  => $this->promo->isGiftUnlocked($subtotal),
+            'giftUnlocked' => $this->promo->isGiftUnlocked($subtotal),
             'remainingGift' => $this->promo->remainingToGift($subtotal),
-            'gifts'         => $this->promo->eligibleGifts(),
+            'gifts' => $this->promo->eligibleGifts(),
         ]);
     }
 
@@ -129,9 +169,25 @@ class CartDrawer extends Component
 
     private function emptyCart(): Cart
     {
-        $cart = new Cart();
+        $cart = new Cart;
         $cart->setRelation('items', collect());
 
         return $cart;
+    }
+
+    private function paidVariantItem(int $variantId): ?CartItem
+    {
+        return $this->cart->currentOrNull()?->items->first(
+            fn (CartItem $item): bool => $item->product_variant_id === $variantId && ! $item->is_gift,
+        );
+    }
+
+    private function publishQuantities(): void
+    {
+        $quantities = $this->cart->currentOrNull()?->items
+            ->reject(fn (CartItem $item): bool => $item->is_gift)
+            ->pluck('qty', 'product_variant_id')->all() ?? [];
+
+        $this->dispatch('cart-updated', quantities: $quantities);
     }
 }

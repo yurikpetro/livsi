@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use App\Services\FavoriteService;
-use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,17 +16,11 @@ use Illuminate\Http\Request;
  */
 class FavoriteController extends Controller
 {
-    public function __construct(private readonly FavoriteService $favorites)
-    {
-    }
+    public function __construct(private readonly FavoriteService $favorites) {}
 
-    public function index(): View
+    public function index(): RedirectResponse
     {
-        return view('pages.favorites', [
-            'products' => $this->favorites->products(),
-            // Список личный и у каждого свой — индексировать нечего.
-            'robots'   => 'noindex, nofollow',
-        ]);
+        return to_route('catalog.index');
     }
 
     /**

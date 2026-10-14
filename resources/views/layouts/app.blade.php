@@ -26,6 +26,7 @@
 
     <link rel="icon" href="{{ asset('img/logo.svg') }}" type="image/svg+xml">
 
+    <link rel="preload" href="{{ asset('fonts/Geist-VariableFont_wght.ttf') }}" as="font" type="font/ttf" crossorigin>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 
     @stack('head')
@@ -33,12 +34,14 @@
 {{-- Колонка во всю высоту экрана: без неё на коротких страницах — пустое
      избранное, пустая корзина, короткий документ — подвал вставал посреди
      экрана, а под ним оставалась белая полоса. --}}
-<body class="flex min-h-screen flex-col">
+<body id="top" class="flex min-h-screen flex-col">
     {{-- Полоса прогресса чтения — как в прототипе. Ширину задаёт скрипт. --}}
     <div class="scroll-progress" data-scroll-progress aria-hidden="true"></div>
 
     @include('partials.header')
-    @include('partials.city-selector')
+    @if (request()->routeIs('checkout.index'))
+        @include('partials.city-selector')
+    @endif
 
     <main class="flex-1">
         {{-- Короткие сообщения после перенаправления: «вы вышли», «корзина пуста».
@@ -59,5 +62,10 @@
     @livewire('quick-view')
 
     @include('partials.cookie-bar')
+
+    <div class="cart-toast" data-cart-toast hidden role="status" aria-atomic="true">
+        <span class="cart-toast-icon" data-cart-toast-icon aria-hidden="true">✓</span>
+        <span data-cart-toast-message></span>
+    </div>
 </body>
 </html>

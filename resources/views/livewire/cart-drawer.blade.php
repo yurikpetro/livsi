@@ -1,15 +1,14 @@
 @php use App\Support\Money; @endphp
 
-<div>
+<div data-cart-controller>
     {{-- Кнопка в шапке со счётчиком --}}
     <button type="button" wire:click="openDrawer"
-            class="relative flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] hover:text-green"
+            class="relative flex cursor-pointer items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] hover:text-green"
             aria-label="Корзина: {{ $count }}">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-            <path d="M4 7h16l-1.3 11.2a2 2 0 0 1-2 1.8H7.3a2 2 0 0 1-2-1.8L4 7Z"></path>
-            <path d="M9 7V5.5a3 3 0 0 1 6 0V7"></path>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+            <path d="M5 8h14l-1 13H6L5 8Z" stroke-linejoin="round"></path>
+            <path d="M9 9V6.8a3 3 0 0 1 6 0V9" stroke-linecap="round"></path>
         </svg>
-        <span class="hidden sm:inline">Корзина</span>
         @if ($count > 0)
             <span class="grid h-4 min-w-4 place-items-center rounded-full bg-neon px-1 text-[10px] font-bold text-ink">{{ $count }}</span>
         @endif

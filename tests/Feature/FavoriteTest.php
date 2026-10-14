@@ -36,8 +36,8 @@ class FavoriteTest extends TestCase
     private function customer(): User
     {
         return User::create([
-            'name'  => 'Иван',
-            'email' => 'ivan+' . Str::random(6) . '@example.com',
+            'name' => 'Иван',
+            'email' => 'ivan+'.Str::random(6).'@example.com',
         ]);
     }
 
@@ -102,12 +102,12 @@ class FavoriteTest extends TestCase
         $this->assertNull(Favorite::sole()->token);
     }
 
-    public function test_page_shows_only_your_own_favorites(): void
+    public function test_old_favorites_page_redirects_without_exposing_saved_products(): void
     {
-        $mine   = $this->product();
+        $mine = $this->product();
         $theirs = $this->product(1);
 
-        $me      = $this->customer();
+        $me = $this->customer();
         $someone = $this->customer();
 
         Favorite::create(['user_id' => $me->id, 'product_id' => $mine->id]);
@@ -115,16 +115,15 @@ class FavoriteTest extends TestCase
 
         $this->actingAs($me)
             ->get(route('favorites'))
-            ->assertOk()
-            ->assertSee($mine->title)
+            ->assertRedirect(route('catalog.index'))
+            ->assertDontSee($mine->title)
             ->assertDontSee($theirs->title);
     }
 
-    public function test_guest_sees_an_empty_state(): void
+    public function test_old_favorites_page_redirects_for_guests(): void
     {
         $this->get(route('favorites'))
-            ->assertOk()
-            ->assertSee('Пока пусто');
+            ->assertRedirect(route('catalog.index'));
     }
 
     // ─────────────────────────────────── перенос при входе
@@ -132,7 +131,7 @@ class FavoriteTest extends TestCase
     public function test_guest_list_moves_into_the_account_on_login(): void
     {
         $product = $this->product();
-        $token   = Str::random(48);
+        $token = Str::random(48);
 
         Favorite::create(['token' => $token, 'product_id' => $product->id]);
 
@@ -163,8 +162,8 @@ class FavoriteTest extends TestCase
     public function test_duplicate_on_merge_does_not_break_login(): void
     {
         $product = $this->product();
-        $token   = Str::random(48);
-        $user    = $this->customer();
+        $token = Str::random(48);
+        $user = $this->customer();
 
         Favorite::create(['user_id' => $user->id, 'product_id' => $product->id]);
         Favorite::create(['token' => $token, 'product_id' => $product->id]);
@@ -180,9 +179,9 @@ class FavoriteTest extends TestCase
 
     // ─────────────────────────────────── витрина
 
-    public function test_card_marks_what_is_already_favorited(): void
+    public function test_catalog_does_not_show_favorite_controls_even_for_saved_products(): void
     {
-        $user    = $this->customer();
+        $user = $this->customer();
         $product = $this->product();
 
         Favorite::create(['user_id' => $user->id, 'product_id' => $product->id]);
@@ -190,20 +189,23 @@ class FavoriteTest extends TestCase
         $this->actingAs($user)
             ->get(route('catalog.index'))
             ->assertOk()
-            ->assertSee('product-favorite liked', escape: false);
+            ->assertDontSee('data-favorite', escape: false)
+            ->assertDontSee('Добавить в избранное');
     }
 
-    public function test_header_shows_the_favorites_link(): void
+    public function test_home_does_not_show_the_favorites_section(): void
     {
         $this->get(route('home'))
             ->assertOk()
-            ->assertSee('Избранное');
+            ->assertDontSee('Избранное')
+            ->assertDontSee('data-favorite', escape: false)
+            ->assertDontSee('href="'.route('favorites').'"', escape: false);
     }
 
     /** Снятый с продажи товар не показывается в списке, но и не удаляется. */
     public function test_inactive_product_drops_out_of_the_list(): void
     {
-        $user    = $this->customer();
+        $user = $this->customer();
         $product = $this->product();
 
         Favorite::create(['user_id' => $user->id, 'product_id' => $product->id]);
@@ -212,7 +214,7 @@ class FavoriteTest extends TestCase
 
         $this->actingAs($user)
             ->get(route('favorites'))
-            ->assertOk()
+            ->assertRedirect(route('catalog.index'))
             ->assertDontSee($product->title);
 
         $this->assertSame(1, Favorite::count(), 'Запись стирать не нужно: товар может вернуться');

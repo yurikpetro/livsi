@@ -3,16 +3,13 @@
 namespace App\Livewire;
 
 use App\Models\Product;
-use App\Models\Setting;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
 /**
  * Быстрый просмотр товара из листинга — как в макете.
  *
- * Именно «в дополнение», а не «вместо»: страница товара остаётся основной,
- * у неё свой адрес, микроразметка и место в карте сайта. Модалка нужна,
- * чтобы выбрать объём и положить в корзину, не уходя из выдачи.
+ * Галерея, выбор объёма, корзина и подробности доступны в одном окне.
  */
 class QuickView extends Component
 {
@@ -35,9 +32,9 @@ class QuickView extends Component
 
         // Предвыбираем доступный вариант: по умолчанию, а если его нет
         // в наличии — первый доступный.
-        $this->variantId = ($product->defaultVariant()?->available() > 0
+        $this->variantId = ($product->defaultVariant()?->is_active && $product->defaultVariant()->available() > 0
             ? $product->defaultVariant()
-            : $product->variants->first(fn ($v) => $v->available() > 0))?->id;
+            : $product->variants->first(fn ($v) => $v->is_active && $v->available() > 0))?->id;
 
         $this->open = true;
     }
@@ -51,33 +48,40 @@ class QuickView extends Component
     {
         $product = $this->product();
 
-        if ($product && $product->variants->contains('id', $variantId)) {
+        $variant = $product?->variants->firstWhere('id', $variantId);
+
+        if ($variant?->is_active && $variant->available() > 0) {
             $this->variantId = $variantId;
         }
     }
 
     /**
-     * Кладём в корзину и закрываем модалку: иначе поверх быстрого просмотра
-     * открылась бы выдвижная корзина, и получилось бы два слоя друг на друге.
+     * Окно остаётся открытым; результат добавления сообщает корзина.
      */
     public function addToCart(): void
     {
-        if (! $this->variantId) {
+        $variant = $this->product()?->variants->firstWhere('id', $this->variantId);
+
+        if (! $variant?->is_active || $variant->available() < 1) {
+            $this->dispatch('cart-notice', message: 'Этот вариант сейчас недоступен');
+
             return;
         }
-
-        $this->open = false;
 
         $this->dispatch('cart-add', variantId: $this->variantId);
     }
 
     public function render()
     {
+        $product = $this->product();
+        $recommendations = Product::active()->with(['line', 'images', 'variants.quota'])
+            ->when($product, fn ($query) => $query->whereKeyNot($product->id)
+                ->orderByRaw('CASE WHEN product_line_id = ? THEN 0 ELSE 1 END', [$product->product_line_id]))
+            ->orderBy('sort')->limit(3)->get();
+
         return view('livewire.quick-view', [
-            'product' => $this->product(),
-            // Порог бесплатной доставки заказчик меняет в настройках,
-            // поэтому в модалке он читается, а не вписан в шаблон.
-            'freeShipping' => (int) Setting::get('free_shipping_threshold', 0),
+            'product' => $product,
+            'recommendations' => $recommendations,
         ]);
     }
 

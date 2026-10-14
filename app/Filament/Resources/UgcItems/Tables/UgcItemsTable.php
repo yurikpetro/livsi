@@ -16,7 +16,9 @@ class UgcItemsTable
     {
         return $table
             ->columns([
-                ImageColumn::make('image_path'),
+                ImageColumn::make('image_path')->label('Обложка')->disk('public_images'),
+                IconColumn::make('has_video')->label('Видео')->state(fn ($record): bool => collect($record->galleryMedia())->contains('type', 'video'))->boolean(),
+                TextColumn::make('media_count')->label('Кадров')->state(fn ($record): int => count($record->galleryMedia())),
                 TextColumn::make('alt')
                     ->searchable(),
                 TextColumn::make('product.title')

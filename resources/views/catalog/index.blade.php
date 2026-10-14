@@ -5,74 +5,45 @@
     : 'Каталог косметики — LIVSI')
 
 @section('content')
+    @php
+        $categoryTitle = match (true) {
+            $query->tab === 'pro' && $query->purposes === ['body', 'face'] => 'PRO SKIN',
+            $query->tab === 'pro' && $query->purposes === ['manicure', 'pedicure'] => 'PRO MANICURE / PEDICURE',
+            $query->line !== null => $facets['line']->firstWhere('code', $query->line)?->title ?? 'Все товары',
+            isset(\App\Services\CatalogQuery::TABS[$query->tab]) => \App\Services\CatalogQuery::TABS[$query->tab],
+            default => 'Все товары',
+        };
+    @endphp
     <section class="site-container pt-10 md:pt-14">
         @if ($query->q !== '')
             <div class="eyebrow">Поиск</div>
             <h1 class="mt-3 text-3xl md:text-5xl normal-case tracking-tight">«{{ $query->q }}»</h1>
         @else
-            <h1 class="text-4xl md:text-6xl">Все товары.</h1>
+            <h1 class="text-4xl md:text-6xl">{{ $categoryTitle }}.</h1>
         @endif
 
-        {{-- Быстрые подборки поверх осей --}}
-        <div class="mt-8 flex flex-wrap items-center gap-2">
-            <span class="eyebrow w-full sm:w-24">Подборки</span>
-            @foreach (\App\Services\CatalogQuery::TABS as $code => $title)
-                <a href="{{ $query->urlToggle('tab', $code) }}"
-                   class="chip @if ($query->isActive('tab', $code)) chip-active @endif">{{ $title }}</a>
+        {{-- Подборки и линейки по макету --}}
+        <div class="catalog-toolbar mt-8 flex flex-wrap items-center gap-2">
+            <a href="{{ $query->urlForCategory() }}" class="chip @if (! $query->line && ! $query->purposes && ! $query->tasks && $query->tab === '') chip-active @endif">Все товары</a>
+            @foreach (['new', 'best', 'bundles'] as $code)
+                <a href="{{ $query->urlForCategory(['tab' => $code]) }}"
+                   class="chip @if ($query->isActive('tab', $code)) chip-active @endif">{{ \App\Services\CatalogQuery::TABS[$code] }}</a>
             @endforeach
-        </div>
-
-        {{-- Три независимые оси. Внутри оси — ИЛИ, между осями — И.
-             Счётчик считается без учёта своей оси, иначе фильтр становится тупиком. --}}
-        <div class="mt-4 space-y-3 border-t border-line pt-5">
-            @foreach ([
-                'line'    => ['Линейка', $facets['line']],
-                'purpose' => ['Назначение', $facets['purpose']],
-                'task'    => ['Задача', $facets['task']],
-            ] as $axis => [$label, $values])
-                <div class="flex flex-wrap items-center gap-2">
-                    <span class="eyebrow w-full sm:w-24">{{ $label }}</span>
-                    @foreach ($values as $value)
-                        @php $empty = $value->products_count === 0 && ! $query->isActive($axis, $value->code); @endphp
-                        <a href="{{ $empty ? '#' : $query->urlToggle($axis, $value->code) }}"
-                           @class([
-                               'chip gap-1.5',
-                               'chip-active' => $query->isActive($axis, $value->code),
-                               'pointer-events-none opacity-35' => $empty,
-                           ])
-                           @if ($empty) aria-disabled="true" tabindex="-1" @endif>
-                            {{ $value->title }}
-                            <span class="text-[9px] opacity-60">{{ $value->products_count }}</span>
-                        </a>
-                    @endforeach
-                </div>
+            @foreach ($facets['line'] as $value)
+                <a href="{{ $query->urlForCategory(['line' => $value->code]) }}" class="chip @if ($query->isActive('line', $value->code)) chip-active @endif">{{ $value->title }}</a>
             @endforeach
+            <a href="{{ $query->urlForCategory(['tab' => 'pro', 'purpose' => ['body', 'face']]) }}" class="chip @if ($query->tab === 'pro' && $query->purposes === ['body', 'face']) chip-active @endif">PRO SKIN</a>
+            <a href="{{ $query->urlForCategory(['tab' => 'pro', 'purpose' => ['manicure', 'pedicure']]) }}" class="chip @if ($query->tab === 'pro' && $query->purposes === ['manicure', 'pedicure']) chip-active @endif">PRO MANICURE / PEDICURE</a>
         </div>
-
-        {{-- Активные фильтры: каждый снимается по отдельности --}}
-        @if ($chips->isNotEmpty())
-            <div class="mt-5 flex flex-wrap items-center gap-2">
-                <span class="eyebrow w-full sm:w-24">Выбрано</span>
-                @foreach ($chips as $chip)
-                    <a href="{{ $chip['url'] }}" class="chip chip-active gap-2">
-                        {{ $chip['label'] }}
-                        <span aria-hidden="true" class="text-[11px] leading-none">✕</span>
-                    </a>
-                @endforeach
-                <a href="{{ route('catalog.index') }}"
-                   class="text-[10px] uppercase tracking-[0.08em] text-muted underline hover:text-ink">
-                    Сбросить всё
-                </a>
-            </div>
-        @endif
 
         <div class="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-line pt-4">
-            <div class="flex flex-wrap gap-4 text-[11px] uppercase tracking-[0.08em] text-muted">
-                @foreach (\App\Services\CatalogQuery::SORTS as $code => $title)
-                    <a href="{{ $query->urlWithSort($code) }}"
-                       class="@if ($query->sort === $code) font-bold text-ink @endif hover:text-ink">{{ $title }}</a>
-                @endforeach
-            </div>
+            <label class="flex items-center gap-3 text-xs"><span class="text-muted">Сортировка</span>
+                <select class="catalog-sort" data-catalog-sort aria-label="Сортировка товаров">
+                    @foreach (\App\Services\CatalogQuery::SORTS as $code => $title)
+                        <option value="{{ $query->urlWithSort($code) }}" @selected($query->sort === $code)>{{ $title }}</option>
+                    @endforeach
+                </select>
+            </label>
             <span class="text-[11px] uppercase tracking-[0.08em] text-muted">
                 {{ \App\Support\Plural::products($products->total()) }}
             </span>
@@ -93,7 +64,7 @@
                 @endif
             </div>
         @else
-            <div class="reveal-stagger mt-8 grid gap-3 grid-cols-2 md:gap-4 lg:grid-cols-4" data-reveal>
+            <div class="reveal-stagger mt-8 grid gap-3 grid-cols-2 md:gap-4 lg:grid-cols-4 xl:grid-cols-6" data-reveal>
                 @foreach ($products as $i => $product)
                     <x-product-card :product="$product" style="--index: {{ $i }}" />
                 @endforeach
