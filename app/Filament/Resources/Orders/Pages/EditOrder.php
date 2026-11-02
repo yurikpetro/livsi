@@ -8,6 +8,7 @@ use App\Filament\Support\RefundAction;
 use App\Filament\Support\ShipmentAction;
 use App\Models\OrderIssue;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
@@ -26,8 +27,6 @@ class EditOrder extends EditRecord
             FulfillmentAction::change(),
             ShipmentAction::make(),
             ShipmentAction::check(),
-            ShipmentAction::cancel(),
-            RefundAction::make(),
             Action::make('print')
                 ->label('Распечатать заказ')
                 ->icon(Heroicon::OutlinedPrinter)
@@ -59,6 +58,16 @@ class EditOrder extends EditRecord
 
                     Notification::make()->title('Обращение записано')->success()->send();
                 }),
+
+            // Отмены — за отдельной кнопкой «Отменить…»: случайно не нажать и шапка не разъезжается.
+            ActionGroup::make([
+                ShipmentAction::cancel(),
+                RefundAction::make(),
+            ])
+                ->label('Отменить…')
+                ->icon(Heroicon::OutlinedXCircle)
+                ->color('danger')
+                ->button(),
         ];
     }
 }
