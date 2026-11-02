@@ -19,6 +19,7 @@ use App\Services\ReceiptService;
 use App\Services\RefundService;
 use App\Support\Fulfillment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -303,6 +304,36 @@ class ReceiptsAndRefundsTest extends TestCase
         }
         $this->assertSame(Order::STATUS_PAID, $order->fresh()->status);
         $this->assertSame(2, $order->marks()->count());
+    }
+
+    public function test_refund_lost_on_network_is_repeated_with_the_same_key(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        $order = $this->order();
+        $down = true;
+        Http::fake(['*/v3/refunds' => function () use (&$down) {
+            if ($down) {
+                throw new ConnectionException('timeout');
+            }
+
+            return Http::response(['id' => 'ref-1', 'status' => 'succeeded']);
+        }]);
+
+        try {
+            app(RefundService::class)->refund($order, 'Тест', 'admin');
+            $this->fail('Обрыв связи должен дойти до администратора');
+        } catch (ValidationException $exception) {
+            $this->assertStringContainsString('Нет связи с ЮKassa', $exception->validator->errors()->first());
+        }
+        $this->assertSame(Order::STATUS_PAID, $order->fresh()->status);
+        $this->assertTrue(app(RefundService::class)->canRefund($order->fresh()));
+
+        $down = false;
+        app(RefundService::class)->refund($order->fresh(), 'Тест', 'admin');
+
+        $keys = collect(Http::recorded())->map(fn ($pair) => $pair[0]->header('Idempotence-Key')[0])->unique();
+        $this->assertCount(1, $keys);
+        $this->assertSame(Order::STATUS_REFUNDED, $order->fresh()->status);
     }
 
     public function test_admin_order_page_shows_refund_action_and_receipts_line(): void

@@ -11,6 +11,7 @@ use App\Models\StockQuotaMovement;
 use App\Payments\ReceiptBuilder;
 use App\Payments\YooKassaGateway;
 use App\Support\Fulfillment;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -85,7 +86,9 @@ class RefundService
             ? ['customer' => $builder->customer(), 'items' => $builder->closingItems()]
             : null;
         $amount = (int) $payment->amount;
-        $attempt = (int) ($previous?->payload['attempt'] ?? 0) + 1;
+        // Прошлая попытка оборвалась на связи (итог неизвестен) — повторяем с тем же
+        // ключом: если ЮKassa тот возврат уже провела, она вернёт его, а не сделает второй.
+        $attempt = (int) ($previous?->payload['attempt'] ?? 0) + ($previous?->status === OrderReceipt::NEW ? 0 : 1);
         $refund = OrderReceipt::query()->updateOrCreate(
             ['order_id' => $order->id, 'kind' => OrderReceipt::KIND_REFUND],
             ['status' => OrderReceipt::NEW, 'external_id' => null, 'error' => null, 'response' => null, 'done_at' => null,
@@ -95,6 +98,9 @@ class RefundService
 
         try {
             $answer = $this->kassa->createRefund((string) $payment->external_id, $amount, $receipt, 'Возврат по заказу '.$order->number, $refund->idempotence_key);
+        } catch (ConnectionException $exception) {
+            $refund->update(['error' => 'Нет связи с ЮKassa — итог неизвестен. Нажмите возврат ещё раз: повтор безопасен.']);
+            $this->fail('Нет связи с ЮKassa. Нажмите «Вернуть деньги» ещё раз через минуту — второго возврата не будет, ЮKassa узнает повтор.');
         } catch (RuntimeException $exception) {
             $refund->update(['status' => OrderReceipt::CANCELED, 'error' => mb_substr($exception->getMessage(), 0, 500)]);
             $this->fail('ЮKassa не приняла возврат: '.mb_substr($exception->getMessage(), 0, 200));
