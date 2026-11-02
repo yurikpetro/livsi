@@ -13,6 +13,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Validation\ValidationException;
 
@@ -67,6 +68,7 @@ class EditOrder extends EditRecord
                 ->label('Отменить…')
                 ->icon(Heroicon::OutlinedXCircle)
                 ->color('danger')
+                ->dropdownWidth(Width::ExtraSmall)
                 ->button(),
         ];
     }
