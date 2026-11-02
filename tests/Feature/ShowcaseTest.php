@@ -122,7 +122,7 @@ class ShowcaseTest extends TestCase
             ->assertSee('Следующий кадр: Видео')->assertDontSee('Следующий кадр: Фото');
     }
 
-    public function test_home_shelf_identifies_all_lines_including_pro_without_a_line_record(): void
+    public function test_home_shelf_identifies_care_and_professional_lines(): void
     {
         $this->seed(CatalogSeeder::class);
         Product::where('slug', 'parfyumirovannyy-mist-dlya-tela')->update(['badge' => null]);

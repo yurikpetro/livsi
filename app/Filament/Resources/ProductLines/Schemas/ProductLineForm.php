@@ -3,14 +3,14 @@
 namespace App\Filament\Resources\ProductLines\Schemas;
 
 use Filament\Forms\Components\ColorPicker;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
 /**
- * Ароматическая линейка: FRESH, SWEET, WARM, BASE.
+ * Линейки: FRESH, SWEET, WARM, BASE и две профессиональные.
  *
  * Цвета берутся из брендбука (стр. 38, 41) и участвуют в вёрстке лендинга
  * линейки и маркеров в меню. Свободное текстовое поле для цвета, как было

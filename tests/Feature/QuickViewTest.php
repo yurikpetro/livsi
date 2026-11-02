@@ -53,6 +53,31 @@ class QuickViewTest extends TestCase
             ->assertSet('variantId', $default->id);
     }
 
+    public function test_description_is_visible_and_escaped_without_internal_sku(): void
+    {
+        $product = Product::where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
+        $product->update([
+            'sku' => 'PRIVATE-PRODUCT-001',
+            'active_ingredients' => 'Описание <script>alert("xss")</script>',
+        ]);
+
+        Livewire::test(QuickView::class)
+            ->dispatch('quick-view', productId: $product->id)
+            ->assertSee('Описание <script>alert("xss")</script>')
+            ->assertDontSee('<script>alert("xss")</script>', escape: false)
+            ->assertDontSee('PRIVATE-PRODUCT-001');
+    }
+
+    public function test_empty_description_section_is_not_shown(): void
+    {
+        $product = Product::where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
+        $product->update(['active_ingredients' => null]);
+
+        Livewire::test(QuickView::class)
+            ->dispatch('quick-view', productId: $product->id)
+            ->assertDontSee('<h3>Описание</h3>', escape: false);
+    }
+
     /** Если вариант по умолчанию распродан, предвыбираем первый доступный. */
     public function test_sold_out_default_variant_falls_back_to_an_available_one(): void
     {

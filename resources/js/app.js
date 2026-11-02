@@ -7,6 +7,9 @@
  * половина главной осталась бы невидимой.
  */
 
+import { initDeliveryQuote } from './delivery-quote.js';
+import { initOzonClientCheck } from './ozon-client-check.js';
+
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 /**
@@ -523,14 +526,17 @@ function initDeliveryPoints() {
     const hint = document.querySelector('[name="delivery_point_hint"]');
     const addressField = document.querySelector('[data-delivery-address]');
     const ozonNotice = document.querySelector('[data-ozon-notice]');
-    const search = root.querySelector('[data-points-search]');
+    const search = document.querySelector('[data-points-search]');
+    const pickupDescription = document.querySelector('[data-pickup-description]');
+    const pickupAction = document.querySelector('[data-pickup-action]');
     const status = root.querySelector('[data-points-status]');
     const pointId = root.querySelector('[data-point-id]');
-    const selected = root.querySelector('[data-point-selected]');
+    const selected = document.querySelector('[data-point-selected]');
     const pointMethod = root.querySelector('[data-point-method]');
     const dialog = root.querySelector('[data-points-dialog]');
     const location = root.querySelector('[data-points-location]');
     const filter = root.querySelector('[data-points-filter]');
+    const carrierFilters = [...root.querySelectorAll('[data-points-carrier]')];
     const count = root.querySelector('[data-points-count]');
     const list = root.querySelector('[data-points-list]');
     const more = root.querySelector('[data-points-more]');
@@ -552,33 +558,36 @@ function initDeliveryPoints() {
     const currentMethod = () => radios.find((radio) => radio.checked)?.value;
     const locationKey = () => JSON.stringify([city.value.trim().toLocaleLowerCase('ru'), region.value.trim().toLocaleLowerCase('ru')]);
     const retrySeconds = () => Math.max(0, Math.ceil((pointsRetryAt - Date.now()) / 1000));
+    let ozonAllowed = !root.dataset.ozonCheckUrl;
 
     const loadMaps = () => loadYandexMaps(root.dataset.mapsKey, root.dataset.suggestKey);
 
-    const carrierForPoint = (point) => ({ cdek: 'cdek_point', yataxi: 'yandex_point', ozonlog: 'ozon_point' })[point.provider];
+    const carrierForPoint = (point) => ({ cdek: 'cdek_point', yataxi: 'yandex_point', ozonlog: 'ozon_point', ozondel: 'ozon_point' })[point.provider];
     const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     })[char]);
 
     const choosePoint = (point, method) => {
+        if (method === 'ozon_point' && !ozonAllowed) return;
         pointId.value = point.id;
         pointMethod.value = method;
         selectedAddress = point.address.slice(0, 255);
         hint.value = selectedAddress;
-        selected.textContent = `Выбран ПВЗ: ${labels[method]} · ${point.address}${point.timetable ? ` · ${point.timetable}` : ''}`;
+        selected.textContent = `${labels[method]} · ${point.address}${point.timetable ? ` · ${point.timetable}` : ''}`;
         selected.hidden = false;
+        pickupDescription.hidden = true;
+        pickupAction.textContent = 'Изменить пункт →';
         ozonNotice.hidden = method !== 'ozon_point';
         dialog.close();
         search.focus();
+        root.dispatchEvent(new CustomEvent('livsi:delivery-selection', { bubbles: true }));
     };
 
     const reset = () => {
         const hasCity = city.value.trim().length >= 2;
-        const canUseCourier = hasCity && city.value.trim().toLocaleLowerCase('ru')
-            === root.dataset.courierCity.trim().toLocaleLowerCase('ru');
         deliveryMethods.hidden = !hasCity;
         radios.forEach((radio) => {
-            radio.disabled = !hasCity || (radio.value === 'stavropol_courier' && !canUseCourier);
+            radio.disabled = !hasCity || radio.value === 'stavropol_courier';
             if (radio.disabled) radio.checked = false;
         });
         controller?.abort();
@@ -599,6 +608,12 @@ function initDeliveryPoints() {
         more.hidden = true;
         status.hidden = true;
         selected.hidden = true;
+        pickupDescription.hidden = false;
+        pickupDescription.textContent = methods.length
+            ? root.dataset.mapsKey ? 'Все доступные службы на одной карте' : 'Все доступные службы в общем списке'
+            : 'Доставку согласуем с менеджером';
+        pickupAction.hidden = !methods.length;
+        pickupAction.textContent = 'Выбрать пункт →';
         mapElement.hidden = true;
         mapFallback.hidden = true;
         clusterer?.removeAll();
@@ -612,8 +627,7 @@ function initDeliveryPoints() {
         instruction.textContent = methods.length
             ? 'Покажем ПВЗ всего региона. Найдите удобный пункт на карте или в списке.'
             : 'Службы доставки пока подключаются. Пожелания по доставке можно оставить в комментарии к заказу.';
-        search.hidden = !isPointMethod || !methods.length || city.value.trim().length < 2;
-        search.textContent = root.dataset.mapsKey ? 'Выбрать пункт выдачи на карте' : 'Выбрать пункт выдачи';
+        root.dispatchEvent(new CustomEvent('livsi:delivery-selection', { bubbles: true }));
     };
 
     const hasCoordinates = (point) => point.lat != null && point.lng != null
@@ -630,10 +644,12 @@ function initDeliveryPoints() {
 
     const matchingPoints = () => {
         const query = filter.value.trim().toLocaleLowerCase('ru');
+        const selectedMethods = carrierFilters.filter((checkbox) => checkbox.checked && !checkbox.disabled).map((checkbox) => checkbox.value);
+        const carrierPoints = points.filter((point) => selectedMethods.includes(carrierForPoint(point)));
         return query
-            ? points.filter((point) => `${labels[carrierForPoint(point)]} ${point.city} ${point.address}`.toLocaleLowerCase('ru').includes(query))
+            ? carrierPoints.filter((point) => `${labels[carrierForPoint(point)]} ${point.city} ${point.address}`.toLocaleLowerCase('ru').includes(query))
                 .sort((a, b) => Number(b.city.toLocaleLowerCase('ru') === query) - Number(a.city.toLocaleLowerCase('ru') === query))
-            : points;
+            : carrierPoints;
     };
 
     const renderList = () => {
@@ -649,7 +665,8 @@ function initDeliveryPoints() {
             empty.className = 'pickup-count';
             empty.textContent = loading ? 'Подождите, загружаем адреса региона.'
                 : retrySeconds() ? `Список временно недоступен. Повторите выбор через ${retrySeconds()} сек.`
-                    : 'По этому запросу пунктов нет. Измените поиск.';
+                    : !carrierFilters.some((checkbox) => checkbox.checked) ? 'Выберите хотя бы одну службу доставки.'
+                        : 'По этим условиям пунктов нет. Измените поиск или выберите другую службу доставки.';
             list.append(empty);
         }
 
@@ -713,6 +730,11 @@ function initDeliveryPoints() {
     const drawMap = async () => {
         if (!dialog.open) return;
         const ymaps = await loadMaps();
+        if (!dialog.open) return;
+        const mapPoints = matchingPoints().filter(hasCoordinates);
+        map?.balloon?.close();
+        clusterer?.balloon?.close();
+        clusterer?.removeAll();
         if (!ymaps || !points.some(hasCoordinates)) {
             mapFallback.hidden = false;
             mapElement.hidden = true;
@@ -734,8 +756,7 @@ function initDeliveryPoints() {
             map.geoObjects.add(clusterer);
         }
         map.container.fitToViewport();
-        clusterer.removeAll();
-        clusterer.add(points.filter(hasCoordinates).map((point) => {
+        clusterer.add(mapPoints.map((point) => {
             const method = carrierForPoint(point);
             const mark = new ymaps.Placemark([Number(point.lat), Number(point.lng)], {
                 hintContent: `${labels[method]} · ${escapeHtml(point.address)}`,
@@ -822,7 +843,7 @@ function initDeliveryPoints() {
                 : `${requestedCity} · Выберите населённый пункт из подсказок, чтобы показать весь регион`;
             renderList();
             status.textContent = points.length
-                ? `${points.length} ПВЗ ${requestedRegion ? `по региону «${requestedRegion}»` : `в населённом пункте «${requestedCity}»`}. ${root.dataset.freeShipping === '1' ? 'Доставка бесплатная.' : 'Стоимость доставки менеджер подтвердит отдельно.'}${failed ? ' Часть служб сейчас недоступна.' : ''}`
+                ? `${points.length} ПВЗ ${requestedRegion ? `по региону «${requestedRegion}»` : `в населённом пункте «${requestedCity}»`}.${failed ? ' Часть служб сейчас недоступна.' : ''}`
                 : retrySeconds() ? `Слишком много запросов. Повторите выбор ПВЗ через ${retrySeconds()} сек.`
                     : 'ПВЗ не найдены или временно недоступны. Пожелания по доставке можно оставить в комментарии к заказу.';
             try { await drawMap(); } catch { mapFallback.hidden = false; }
@@ -888,7 +909,17 @@ function initDeliveryPoints() {
         reset();
         if (currentMethod() === 'pickup_point') load();
     });
-    search.addEventListener('click', openPointsDialog);
+    search.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            if (!search.checked) {
+                search.checked = true;
+                search.dispatchEvent(new Event('change', { bubbles: true }));
+            } else {
+                openPointsDialog();
+            }
+        }
+    });
     dialog.addEventListener('pointerdown', () => { deliveryInteracted = true; });
     dialog.addEventListener('wheel', () => { deliveryInteracted = true; }, { passive: true });
     dialog.addEventListener('keydown', () => { deliveryInteracted = true; });
@@ -903,7 +934,14 @@ function initDeliveryPoints() {
         choosePoint(point, carrierForPoint(point));
     }, true);
     root.querySelector('[data-points-close]').addEventListener('click', () => dialog.close());
-    filter.addEventListener('input', () => { visibleCount = 80; renderList(); });
+    const applyPointFilters = () => {
+        visibleCount = 80;
+        list.scrollTop = 0;
+        renderList();
+        drawMap().catch(() => { mapFallback.hidden = false; });
+    };
+    filter.addEventListener('input', applyPointFilters);
+    carrierFilters.forEach((checkbox) => checkbox.addEventListener('change', applyPointFilters));
     filter.addEventListener('keydown', (event) => { if (event.key === 'Enter') event.preventDefault(); });
     more.addEventListener('click', () => { visibleCount += 80; renderList(); });
 
@@ -934,21 +972,135 @@ function initDeliveryPoints() {
         }
     } catch { /* Хранилище браузера может быть отключено. */ }
     reset();
+    initOzonClientCheck(root, (allowed) => {
+        ozonAllowed = allowed;
+        const checkbox = carrierFilters.find((input) => input.value === 'ozon_point');
+        if (checkbox) {
+            checkbox.disabled = !allowed;
+            checkbox.checked = allowed;
+        }
+        if (!allowed && pointMethod.value === 'ozon_point') {
+            pointId.value = '';
+            pointMethod.value = '';
+            if (hint.value === selectedAddress) hint.value = '';
+            selectedAddress = null;
+            selected.hidden = true;
+            pickupDescription.hidden = false;
+            pickupAction.textContent = 'Выбрать пункт →';
+            ozonNotice.hidden = true;
+            root.dispatchEvent(new CustomEvent('livsi:delivery-selection', { bubbles: true }));
+        }
+        applyPointFilters();
+    });
     if (root.dataset.mapsKey) loadMaps().then(setupCityTools).catch(() => {});
     if (currentMethod() === 'pickup_point' && city.value.trim().length >= 2) load();
+}
+
+function initHeroSlider(hero, selectLine) {
+    if (!hero) return;
+
+    const slides = [...hero.querySelectorAll('[data-hero-slide]')];
+    if (!slides.length) return;
+    const buttons = [...hero.querySelectorAll('[data-hero-select]')];
+    const mobile = window.matchMedia('(max-width: 47.99rem)');
+    let index = Math.max(0, slides.findIndex((slide) => !slide.hidden));
+    let timer;
+    let gesture = null;
+    let visible = true;
+    let suppressClickUntil = 0;
+
+    const stop = () => window.clearTimeout(timer);
+    const schedule = () => {
+        stop();
+        if (!mobile.matches || reduceMotion.matches || document.hidden || !visible || gesture
+            || hero.contains(document.activeElement) || slides.length < 2) return;
+        timer = window.setTimeout(() => show(index + 1), 5000);
+    };
+    const show = (position, manual = false) => {
+        index = (position + slides.length) % slides.length;
+        const line = slides[index].dataset.heroSlide;
+        slides.forEach((slide, position) => { slide.hidden = position !== index; });
+        buttons.forEach((button) => { button.setAttribute('aria-pressed', String(button.dataset.heroSelect === line)); });
+        if (manual) selectLine(line);
+        schedule();
+    };
+    buttons.forEach((button) => {
+        button.addEventListener('click', () => show(slides.findIndex((slide) => slide.dataset.heroSlide === button.dataset.heroSelect), true));
+    });
+
+    hero.addEventListener('touchstart', (event) => {
+        if (!mobile.matches || event.touches.length !== 1) {
+            gesture = null;
+            schedule();
+            return;
+        }
+        const touch = event.touches[0];
+        gesture = { id: touch.identifier, x: touch.clientX, y: touch.clientY, horizontal: false };
+        stop();
+    }, { passive: true });
+    hero.addEventListener('touchmove', (event) => {
+        if (!gesture) return;
+        const touch = [...event.touches].find((touch) => touch.identifier === gesture.id);
+        if (!touch || event.touches.length !== 1) {
+            gesture = null;
+            schedule();
+            return;
+        }
+        const dx = Math.abs(touch.clientX - gesture.x);
+        const dy = Math.abs(touch.clientY - gesture.y);
+        if (!gesture.horizontal && dy > 12 && dy >= dx) {
+            gesture = null;
+            schedule();
+            return;
+        }
+        if (dx > 12 && dx > dy * 1.25) gesture.horizontal = true;
+        if (gesture.horizontal && event.cancelable) event.preventDefault();
+    }, { passive: false });
+    hero.addEventListener('touchend', (event) => {
+        if (!gesture) return;
+        const touch = [...event.changedTouches].find((touch) => touch.identifier === gesture.id);
+        if (!touch) return;
+        const dx = touch.clientX - gesture.x;
+        const dy = touch.clientY - gesture.y;
+        if (gesture.horizontal) suppressClickUntil = Date.now() + 500;
+        gesture = null;
+        if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+            show(index + (dx < 0 ? 1 : -1), true);
+        } else {
+            schedule();
+        }
+    }, { passive: true });
+    hero.addEventListener('touchcancel', () => { gesture = null; schedule(); }, { passive: true });
+    hero.addEventListener('click', (event) => {
+        if (Date.now() < suppressClickUntil) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    }, true);
+    hero.addEventListener('focusin', stop);
+    hero.addEventListener('focusout', () => window.setTimeout(schedule, 0));
+    document.addEventListener('visibilitychange', schedule);
+    mobile.addEventListener('change', () => { gesture = null; schedule(); });
+    reduceMotion.addEventListener('change', schedule);
+    window.addEventListener('pagehide', stop);
+    window.addEventListener('pageshow', schedule);
+    if ('IntersectionObserver' in window) {
+        new IntersectionObserver(([entry]) => {
+            visible = entry.isIntersecting;
+            schedule();
+        }).observe(hero);
+    }
+    hero.classList.add('hero-swipe-ready');
+    schedule();
 }
 
 function initShowcase() {
     const hero = document.querySelector('[data-hero]');
     let selectedLine = null;
     const shelfFilters = [];
-    hero?.querySelectorAll('[data-hero-select]').forEach((button) => {
-        button.addEventListener('click', () => {
-            selectedLine = button.dataset.heroSelect;
-            hero.querySelectorAll('[data-hero-slide]').forEach((slide) => { slide.hidden = slide.dataset.heroSlide !== button.dataset.heroSelect; });
-            hero.querySelectorAll('[data-hero-select]').forEach((tab) => { tab.setAttribute('aria-pressed', String(tab === button)); });
-            shelfFilters.forEach((filter) => filter());
-        });
+    initHeroSlider(hero, (line) => {
+        selectedLine = line;
+        shelfFilters.forEach((filter) => filter());
     });
     document.querySelectorAll('[data-product-shelf]').forEach((shelf) => {
         const track = shelf.querySelector('[data-shelf-track]');
@@ -1125,6 +1277,7 @@ function boot() {
     initFavorites();
     initCitySelector();
     initDeliveryPoints();
+    initDeliveryQuote();
 }
 
 if (document.readyState === 'loading') {

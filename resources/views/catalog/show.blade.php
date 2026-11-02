@@ -96,17 +96,7 @@
                         @if ($product->line)
                             <a href="{{ route('catalog.line', $product->line) }}" class="hover:text-ink">{{ $product->line->title }}</a>
                         @endif
-                        @if ($product->is_pro)
-                            <a href="{{ route('catalog.pro') }}" class="ml-1 bg-pro-light px-1.5 py-0.5 text-ink">PRO</a>
-                        @endif
                     </span>
-                    @if ($product->rating)
-                        {{-- Источник рейтинга обязателен: отзывы собраны не на сайте. --}}
-                        <span class="text-[11px] text-muted">
-                            ★ {{ number_format($product->rating, 1, ',', '') }} ·
-                            {{ \App\Support\Plural::reviews((int) $product->reviews_count) }} на {{ $product->reviews_source }}
-                        </span>
-                    @endif
                 </div>
 
                 <h1 class="mt-4 text-3xl normal-case tracking-tight md:mt-5 md:text-5xl">{{ $product->title }}</h1>
@@ -141,10 +131,7 @@
                         @foreach ([
                             'Аромат'     => $product->aroma,
                             'Эффект'     => $product->effect,
-                            'Назначение' => $product->purposes->pluck('title')->implode(', ') ?: null,
-                            'Задача'     => $product->tasks->pluck('title')->implode(', ') ?: null,
                             'Срок годности' => $product->shelf_life,
-                            'Артикул'    => $variant?->sku,
                         ] as $label => $value)
                             @if ($value)
                                 <div class="flex justify-between gap-6 py-3">
@@ -170,9 +157,9 @@
                      нужны не всем, но мастера читают состав внимательно. --}}
                 <div class="mt-8 divide-y divide-line border-t border-line">
                     @foreach ([
+                        'Описание' => $product->active_ingredients,
                         'Состав' => $product->composition,
                         'Способ применения' => $product->application,
-                        'Действующие вещества' => $product->active_ingredients,
                     ] as $label => $text)
                         @if ($text)
                             <details class="group py-4">
@@ -180,7 +167,7 @@
                                     <span class="text-xs font-bold uppercase tracking-[0.08em]">{{ $label }}</span>
                                     <span class="text-lg text-muted transition group-open:rotate-45" aria-hidden="true">+</span>
                                 </summary>
-                                <p class="mt-3 text-xs leading-relaxed text-muted">{{ $text }}</p>
+                                <p class="mt-3 whitespace-pre-line text-xs leading-relaxed text-muted">{{ $text }}</p>
                             </details>
                         @endif
                     @endforeach

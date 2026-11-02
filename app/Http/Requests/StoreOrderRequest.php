@@ -28,6 +28,7 @@ class StoreOrderRequest extends FormRequest
             'delivery_address' => [Rule::requiredIf(fn () => $this->input('delivery_method') === DeliverySelection::STAVROPOL_COURIER), 'nullable', 'string', 'max:500'],
             'delivery_point_hint' => ['nullable', 'string', 'max:255'],
             'delivery_point_id' => ['nullable', 'regex:/^[0-9]+$/', 'max:20'],
+            'delivery_quote_token' => ['nullable', 'string', 'max:16000'],
 
             'consent' => ['accepted'],
 

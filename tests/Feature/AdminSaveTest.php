@@ -2,6 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Pages\Settings;
+use App\Filament\Resources\LeadRequests\Pages\EditLeadRequest;
+use App\Filament\Resources\ProductLines\Pages\EditProductLine;
+use App\Filament\Resources\Products\Pages\CreateProduct;
+use App\Filament\Resources\Products\Pages\EditProduct;
+use App\Filament\Resources\ProductVariants\Pages\EditProductVariant;
+use App\Filament\Resources\PromoRules\Pages\EditPromoRule;
+use App\Filament\Resources\Purposes\Pages\EditPurpose;
+use App\Filament\Resources\Reviews\Pages\EditReview;
+use App\Filament\Resources\Reviews\ReviewResource;
+use App\Filament\Widgets\ShopOverview;
 use App\Models\LeadRequest;
 use App\Models\Product;
 use App\Models\ProductLine;
@@ -48,23 +59,32 @@ class AdminSaveTest extends TestCase
     {
         $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->getRouteKey()])
-            ->fillForm(['title' => 'Скраб для тела обновлённый'])
+        Livewire::test(EditProduct::class, ['record' => $product->getRouteKey()])
+            ->fillForm([
+                'title' => 'Скраб для тела обновлённый',
+                'sku' => 'LIVSI-PRODUCT-001',
+                'active_ingredients' => 'Подробное описание скраба.',
+            ])
             ->call('save')
             ->assertHasNoFormErrors();
 
         $this->assertSame('Скраб для тела обновлённый', $product->fresh()->title);
+        $this->assertSame('LIVSI-PRODUCT-001', $product->fresh()->sku);
+        $this->assertSame('Подробное описание скраба.', $product->fresh()->active_ingredients);
     }
 
-    /** Назначения и задачи — две из трёх осей навигации, их не было в форме вовсе. */
-    public function test_product_purposes_and_tasks_can_be_set(): void
+    public function test_saving_product_preserves_removed_purposes_and_tasks(): void
     {
-        $product  = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
+        $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
         $purposes = Purpose::limit(2)->pluck('id')->all();
-        $tasks    = Task::limit(2)->pluck('id')->all();
+        $tasks = Task::limit(2)->pluck('id')->all();
+        $product->purposes()->sync($purposes);
+        $product->tasks()->sync($tasks);
 
-        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->getRouteKey()])
-            ->fillForm(['purposes' => $purposes, 'tasks' => $tasks])
+        Livewire::test(EditProduct::class, ['record' => $product->getRouteKey()])
+            ->assertFormFieldDoesNotExist('purposes')
+            ->assertFormFieldDoesNotExist('tasks')
+            ->fillForm(['title' => 'Обновлённый скраб'])
             ->call('save')
             ->assertHasNoFormErrors();
 
@@ -75,9 +95,9 @@ class AdminSaveTest extends TestCase
     public function test_product_line_is_chosen_from_a_list_not_typed_as_a_number(): void
     {
         $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
-        $line    = ProductLine::where('code', 'warm')->firstOrFail();
+        $line = ProductLine::where('code', 'warm')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->getRouteKey()])
+        Livewire::test(EditProduct::class, ['record' => $product->getRouteKey()])
             ->fillForm(['product_line_id' => $line->id])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -90,7 +110,7 @@ class AdminSaveTest extends TestCase
     {
         $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->getRouteKey()])
+        Livewire::test(EditProduct::class, ['record' => $product->getRouteKey()])
             ->fillForm(['title' => 'Кокосовый скраб'])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -101,28 +121,74 @@ class AdminSaveTest extends TestCase
     public function test_product_slug_must_be_unique(): void
     {
         $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
-        $other   = Product::where('slug', '!=', 'skrab-dlya-tela')->firstOrFail();
+        $other = Product::where('slug', '!=', 'skrab-dlya-tela')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->getRouteKey()])
+        Livewire::test(EditProduct::class, ['record' => $product->getRouteKey()])
             ->fillForm(['slug' => $other->slug])
             ->call('save')
             ->assertHasFormErrors(['slug']);
     }
 
-    /** Оценка без площадки-источника на витрину не попадёт, поэтому и сохранять её нельзя. */
-    public function test_rating_requires_its_source(): void
+    public function test_saving_product_preserves_removed_rating_fields(): void
     {
         $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
+        $product->update(['rating' => 4.8, 'reviews_count' => 10, 'reviews_source' => 'Ozon']);
 
-        Livewire::test(\App\Filament\Resources\Products\Pages\EditProduct::class, ['record' => $product->getRouteKey()])
-            ->fillForm(['rating' => 4.8, 'reviews_count' => 10, 'reviews_source' => null])
+        Livewire::test(EditProduct::class, ['record' => $product->getRouteKey()])
+            ->assertFormFieldDoesNotExist('rating')
+            ->assertFormFieldDoesNotExist('reviews_count')
+            ->assertFormFieldDoesNotExist('reviews_source')
+            ->fillForm(['title' => 'Обновлённый скраб'])
             ->call('save')
-            ->assertHasFormErrors(['reviews_source']);
+            ->assertHasNoFormErrors();
+
+        $this->assertSame(4.8, $product->fresh()->rating);
+        $this->assertSame(10, $product->fresh()->reviews_count);
+        $this->assertSame('Ozon', $product->fresh()->reviews_source);
+    }
+
+    public function test_product_sku_is_independent_of_variant_skus_and_can_be_kept_on_save(): void
+    {
+        $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
+        $product->update(['sku' => 'INTERNAL-001']);
+        $variantSkus = $product->variants()->pluck('sku', 'id')->all();
+
+        Livewire::test(EditProduct::class, ['record' => $product->getRouteKey()])
+            ->fillForm(['title' => 'Обновлённый скраб'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('INTERNAL-001', $product->fresh()->sku);
+        $this->assertSame($variantSkus, $product->variants()->pluck('sku', 'id')->all());
+    }
+
+    public function test_product_sku_must_be_unique(): void
+    {
+        $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
+        $product->update(['sku' => 'INTERNAL-001']);
+        $other = Product::whereKeyNot($product->id)->firstOrFail();
+
+        Livewire::test(EditProduct::class, ['record' => $other->getRouteKey()])
+            ->fillForm(['sku' => 'INTERNAL-001'])
+            ->call('save')
+            ->assertHasFormErrors(['sku' => 'unique']);
+
+        $this->assertNull($other->fresh()->sku);
+    }
+
+    public function test_product_can_be_created_without_an_internal_sku(): void
+    {
+        Livewire::test(CreateProduct::class)
+            ->fillForm(['title' => 'Новая пенка', 'slug' => 'new-foam', 'sku' => null])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertDatabaseHas('products', ['slug' => 'new-foam', 'sku' => null]);
     }
 
     public function test_new_product_gets_a_slug_from_its_title(): void
     {
-        Livewire::test(\App\Filament\Resources\Products\Pages\CreateProduct::class)
+        Livewire::test(CreateProduct::class)
             ->fillForm(['title' => 'Пенка для рук'])
             ->assertFormSet(fn (array $state) => filled($state['slug']));
     }
@@ -138,7 +204,7 @@ class AdminSaveTest extends TestCase
     {
         $variant = ProductVariant::firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->getRouteKey()])
+        Livewire::test(EditProductVariant::class, ['record' => $variant->getRouteKey()])
             // В поле должны стоять рубли записи, а не её копейки.
             ->assertFormSet(fn (array $state) => (float) $state['price'] === $variant->price / 100)
             ->fillForm(['price' => '1 249,50'])
@@ -152,12 +218,35 @@ class AdminSaveTest extends TestCase
     {
         $variant = ProductVariant::firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->getRouteKey()])
-            ->fillForm(['weight_g' => 250, 'length_mm' => 60, 'width_mm' => 60, 'height_mm' => 180])
+        Livewire::test(EditProductVariant::class, ['record' => $variant->getRouteKey()])
+            ->fillForm(['weight_g' => 250, 'length_mm' => 60, 'width_mm' => 60, 'height_mm' => 180, 'dimensions_verified' => true])
             ->call('save')
             ->assertHasNoFormErrors();
 
         $this->assertSame(250, $variant->fresh()->weight_g);
+        $this->assertTrue($variant->fresh()->dimensions_verified);
+    }
+
+    public function test_zero_dimensions_cannot_be_saved_in_the_admin(): void
+    {
+        $variant = ProductVariant::firstOrFail();
+        Livewire::test(EditProductVariant::class, ['record' => $variant->getRouteKey()])
+            ->fillForm(['weight_g' => 0, 'width_mm' => 0])->call('save')
+            ->assertHasFormErrors(['weight_g', 'width_mm']);
+    }
+
+    public function test_delivery_calculation_settings_require_packaging_and_origin(): void
+    {
+        Livewire::test(Settings::class)
+            ->fillForm(['delivery_calculation_enabled' => true])->call('save')
+            ->assertHasFormErrors(['delivery_origin_address', 'delivery_pickup_type', 'delivery_padding_mm', 'delivery_packaging_weight_g']);
+        Livewire::test(Settings::class)
+            ->fillForm(['delivery_calculation_enabled' => true, 'delivery_calculation_test' => true, 'delivery_origin_address' => 'Ставрополь, улица Ленина, 1',
+                'delivery_pickup_type' => 1, 'delivery_padding_mm' => 10, 'delivery_packaging_weight_g' => 90])
+            ->call('save')->assertHasNoFormErrors();
+        $this->assertTrue(Setting::get('delivery_calculation_enabled'));
+        $this->assertTrue(Setting::get('delivery_calculation_test'));
+        $this->assertEquals(90, Setting::get('delivery_packaging_weight_g'));
     }
 
     /** Сумму пишут по-русски: с пробелом в разрядах и запятой. */
@@ -166,7 +255,7 @@ class AdminSaveTest extends TestCase
         $variant = ProductVariant::firstOrFail();
 
         foreach (['990' => 99000, '1990.5' => 199050, '1 990,50' => 199050] as $typed => $expected) {
-            Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->getRouteKey()])
+            Livewire::test(EditProductVariant::class, ['record' => $variant->getRouteKey()])
                 ->fillForm(['price' => (string) $typed])
                 ->call('save')
                 ->assertHasNoFormErrors();
@@ -179,7 +268,7 @@ class AdminSaveTest extends TestCase
     {
         $variant = ProductVariant::firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->getRouteKey()])
+        Livewire::test(EditProductVariant::class, ['record' => $variant->getRouteKey()])
             ->fillForm(['price' => 'бесплатно'])
             ->call('save')
             ->assertHasFormErrors(['price']);
@@ -188,9 +277,9 @@ class AdminSaveTest extends TestCase
     public function test_variant_sku_must_be_unique(): void
     {
         $variant = ProductVariant::firstOrFail();
-        $other   = ProductVariant::where('id', '!=', $variant->id)->firstOrFail();
+        $other = ProductVariant::where('id', '!=', $variant->id)->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\ProductVariants\Pages\EditProductVariant::class, ['record' => $variant->getRouteKey()])
+        Livewire::test(EditProductVariant::class, ['record' => $variant->getRouteKey()])
             ->fillForm(['sku' => $other->sku])
             ->call('save')
             ->assertHasFormErrors(['sku']);
@@ -202,7 +291,7 @@ class AdminSaveTest extends TestCase
     {
         $rule = PromoRule::where('type', 'gift')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\PromoRules\Pages\EditPromoRule::class, ['record' => $rule->getRouteKey()])
+        Livewire::test(EditPromoRule::class, ['record' => $rule->getRouteKey()])
             ->assertFormSet(fn (array $state) => (float) $state['threshold'] === $rule->threshold / 100)
             ->fillForm(['threshold' => '4500'])
             ->call('save')
@@ -214,10 +303,10 @@ class AdminSaveTest extends TestCase
     /** Подарки лежат в связи, а не в JSON-колонке payload. */
     public function test_promo_gifts_can_be_chosen(): void
     {
-        $rule     = PromoRule::where('type', 'gift')->firstOrFail();
+        $rule = PromoRule::where('type', 'gift')->firstOrFail();
         $variants = ProductVariant::limit(2)->pluck('id')->all();
 
-        Livewire::test(\App\Filament\Resources\PromoRules\Pages\EditPromoRule::class, ['record' => $rule->getRouteKey()])
+        Livewire::test(EditPromoRule::class, ['record' => $rule->getRouteKey()])
             ->fillForm(['gifts' => $variants])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -235,13 +324,13 @@ class AdminSaveTest extends TestCase
     {
         $review = Review::where('slot', 'main')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Reviews\Pages\EditReview::class, ['record' => $review->getRouteKey()])
+        Livewire::test(EditReview::class, ['record' => $review->getRouteKey()])
             ->fillForm([
-                'text'         => 'Беру уже третий раз.',
-                'author'       => 'Ольга',
-                'caption'      => 'FRESH / Пенка',
+                'text' => 'Беру уже третий раз.',
+                'author' => 'Ольга',
+                'caption' => 'FRESH / Пенка',
                 'role_caption' => 'Постоянный покупатель',
-                'rating'       => 4,
+                'rating' => 4,
             ])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -259,8 +348,8 @@ class AdminSaveTest extends TestCase
 
     public function test_reviews_cannot_be_created_or_deleted(): void
     {
-        $this->assertFalse(\App\Filament\Resources\Reviews\ReviewResource::canCreate());
-        $this->assertFalse(\App\Filament\Resources\Reviews\ReviewResource::canDeleteAny());
+        $this->assertFalse(ReviewResource::canCreate());
+        $this->assertFalse(ReviewResource::canDeleteAny());
 
         $this->get('/admin/reviews/create')->assertNotFound();
     }
@@ -269,7 +358,7 @@ class AdminSaveTest extends TestCase
     {
         $review = Review::where('slot', 'top')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Reviews\Pages\EditReview::class, ['record' => $review->getRouteKey()])
+        Livewire::test(EditReview::class, ['record' => $review->getRouteKey()])
             ->fillForm(['text' => '', 'author' => ''])
             ->call('save')
             ->assertHasFormErrors(['text', 'author']);
@@ -280,7 +369,7 @@ class AdminSaveTest extends TestCase
     {
         $review = Review::where('slot', 'bottom')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Reviews\Pages\EditReview::class, ['record' => $review->getRouteKey()])
+        Livewire::test(EditReview::class, ['record' => $review->getRouteKey()])
             ->fillForm(['text' => str_repeat('а', 400)])
             ->call('save')
             ->assertHasFormErrors(['text']);
@@ -297,7 +386,7 @@ class AdminSaveTest extends TestCase
 
     public function test_average_score_is_editable_in_settings(): void
     {
-        Livewire::test(\App\Filament\Pages\Settings::class)
+        Livewire::test(Settings::class)
             ->fillForm(['reviews_score' => '4.8', 'reviews_score_note' => 'По отзывам на Ozon'])
             ->call('save');
 
@@ -309,7 +398,7 @@ class AdminSaveTest extends TestCase
     {
         $line = ProductLine::where('code', 'fresh')->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\ProductLines\Pages\EditProductLine::class, ['record' => $line->getRouteKey()])
+        Livewire::test(EditProductLine::class, ['record' => $line->getRouteKey()])
             ->fillForm(['subtitle' => 'Свежесть и чистота'])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -320,9 +409,9 @@ class AdminSaveTest extends TestCase
     public function test_purpose_code_must_be_unique(): void
     {
         $purpose = Purpose::firstOrFail();
-        $other   = Purpose::where('id', '!=', $purpose->id)->firstOrFail();
+        $other = Purpose::where('id', '!=', $purpose->id)->firstOrFail();
 
-        Livewire::test(\App\Filament\Resources\Purposes\Pages\EditPurpose::class, ['record' => $purpose->getRouteKey()])
+        Livewire::test(EditPurpose::class, ['record' => $purpose->getRouteKey()])
             ->fillForm(['code' => $other->code])
             ->call('save')
             ->assertHasFormErrors(['code']);
@@ -335,7 +424,7 @@ class AdminSaveTest extends TestCase
             'contact' => '@petr', 'consent_at' => now(),
         ]);
 
-        Livewire::test(\App\Filament\Resources\LeadRequests\Pages\EditLeadRequest::class, ['record' => $lead->getRouteKey()])
+        Livewire::test(EditLeadRequest::class, ['record' => $lead->getRouteKey()])
             ->fillForm(['status' => LeadRequest::STATUS_IN_PROGRESS, 'manager_comment' => 'Позвонил, ждёт КП'])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -354,7 +443,7 @@ class AdminSaveTest extends TestCase
             'contact' => '@petr', 'consent_at' => now(),
         ]);
 
-        Livewire::test(\App\Filament\Resources\LeadRequests\Pages\EditLeadRequest::class, ['record' => $lead->getRouteKey()])
+        Livewire::test(EditLeadRequest::class, ['record' => $lead->getRouteKey()])
             ->fillForm(['name' => 'Подменённое имя', 'status' => LeadRequest::STATUS_DONE])
             ->call('save');
 
@@ -370,7 +459,7 @@ class AdminSaveTest extends TestCase
 
     public function test_thresholds_are_shown_in_rubles_and_saved_in_kopecks(): void
     {
-        Livewire::test(\App\Filament\Pages\Settings::class)
+        Livewire::test(Settings::class)
             ->assertFormSet(['free_shipping_threshold' => '1000', 'gift_threshold' => '5000'])
             ->fillForm(['free_shipping_threshold' => '1500', 'gift_threshold' => '3000'])
             ->call('save');
@@ -381,7 +470,7 @@ class AdminSaveTest extends TestCase
 
     public function test_manager_email_can_be_set_from_settings(): void
     {
-        Livewire::test(\App\Filament\Pages\Settings::class)
+        Livewire::test(Settings::class)
             ->fillForm(['manager_email' => 'zayavki@livsi.shop'])
             ->call('save');
 
@@ -390,7 +479,7 @@ class AdminSaveTest extends TestCase
 
     public function test_invalid_manager_email_is_rejected(): void
     {
-        Livewire::test(\App\Filament\Pages\Settings::class)
+        Livewire::test(Settings::class)
             ->fillForm(['manager_email' => 'не-адрес'])
             ->call('save')
             ->assertHasFormErrors(['manager_email']);
@@ -399,7 +488,7 @@ class AdminSaveTest extends TestCase
     /** Изменённый порог сразу виден на витрине: настройки читает промо-сервис. */
     public function test_changed_threshold_reaches_the_storefront(): void
     {
-        Livewire::test(\App\Filament\Pages\Settings::class)
+        Livewire::test(Settings::class)
             ->fillForm(['free_shipping_threshold' => '2000'])
             ->call('save');
 
@@ -417,7 +506,7 @@ class AdminSaveTest extends TestCase
 
     public function test_dashboard_shows_the_shop_overview(): void
     {
-        Livewire::test(\App\Filament\Widgets\ShopOverview::class)
+        Livewire::test(ShopOverview::class)
             ->assertSee('Новых заявок')
             ->assertSee('Без веса и габаритов');
     }
@@ -446,12 +535,12 @@ class AdminSaveTest extends TestCase
             preg_match_all('/FileUpload::make\((.*?)\)(.*?);/s', $source, $matches);
 
             foreach ($matches[0] as $declaration) {
-                if (! str_contains($declaration, "->disk(")) {
+                if (! str_contains($declaration, '->disk(')) {
                     $offenders[] = basename($path);
                 }
             }
         }
 
-        $this->assertSame([], $offenders, 'Поле загрузки без явного диска: ' . implode(', ', $offenders));
+        $this->assertSame([], $offenders, 'Поле загрузки без явного диска: '.implode(', ', $offenders));
     }
 }

@@ -26,15 +26,29 @@ class CheckoutDeliveryTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->withSession(['delivery_test' => true]);
+        $this->withCredentials();
+        $this->withCookie(config('session.cookie'), session()->getId());
 
         $this->seed(CatalogSeeder::class);
         Setting::put('vat_rate_default', '20');
+        Setting::put('delivery_calculation_enabled', true);
+        Setting::put('delivery_origin_address', 'Ставрополь, Ленина, 1');
+        Setting::put('delivery_pickup_type', 1);
+        Setting::put('delivery_padding_mm', 10);
+        Setting::put('delivery_packaging_weight_g', 90);
         config([
             'livsi.yookassa.shop_id' => '123456',
             'livsi.yookassa.secret_key' => 'test_secret',
         ]);
         Mail::fake();
         Http::fake([
+            '*/calculator' => Http::response(['deliveryToPoint' => [[
+                'providerKey' => 'cdek', 'tariffs' => [[
+                    'tariffId' => 7, 'deliveryCost' => 300, 'feesIncluded' => true,
+                    'pickupTypes' => [1], 'deliveryTypes' => [2], 'pointIds' => [42, 27948],
+                ]],
+            ]]]),
             '*/payments/delivery_test' => Http::response(['id' => 'delivery_test', 'status' => 'pending']),
             '*/payments' => Http::response([
                 'id' => 'delivery_test',
@@ -45,12 +59,23 @@ class CheckoutDeliveryTest extends TestCase
 
         $this->token = Str::random(32);
         $variant = ProductVariant::whereHas('quota', fn ($query) => $query->where('allocated', '>', 5))->firstOrFail();
+        $variant->update(['dimensions_verified' => true, 'weight_g' => 250, 'length_mm' => 50, 'width_mm' => 50, 'height_mm' => 100]);
         $this->withUnencryptedCookie(CartService::COOKIE, $this->token)
             ->post(route('cart.add'), ['variant_id' => $variant->id, 'qty' => 1]);
     }
 
     private function checkout(array $delivery): TestResponse
     {
+        if (! empty($delivery['delivery_point_id']) && ($delivery['delivery_point_method'] ?? $delivery['delivery_method'] ?? null) === DeliverySelection::CDEK_POINT) {
+            $quote = $this->withUnencryptedCookie(CartService::COOKIE, $this->token)->postJson(route('delivery.quote'), [
+                'delivery_city' => $delivery['delivery_city'],
+                'delivery_region' => $delivery['delivery_region'] ?? null,
+                'delivery_point_method' => DeliverySelection::CDEK_POINT,
+                'delivery_point_id' => $delivery['delivery_point_id'],
+            ]);
+            $delivery['delivery_quote_token'] = $quote->json('token');
+        }
+
         return $this->withUnencryptedCookie(CartService::COOKIE, $this->token)
             ->post(route('checkout.store'), array_merge([
                 'name' => 'Мария',
@@ -71,9 +96,9 @@ class CheckoutDeliveryTest extends TestCase
             ->assertSee('Курьер по Ставрополю')
             ->assertSee('value="pickup_point"', false)
             ->assertDontSee('<option value="ozon_point"', false)
-            ->assertSee('До бесплатной доставки осталось')
+            ->assertSee('Доставка рассчитается после выбора пункта выдачи')
             ->assertSee('data-free-shipping="0"', false)
-            ->assertSee('стоимость и пункт выдачи менеджер согласует отдельно');
+            ->assertDontSee('Согласовать доставку с менеджером');
     }
 
     public function test_checkout_shows_free_delivery_when_the_active_rule_is_unlocked(): void
@@ -83,51 +108,35 @@ class CheckoutDeliveryTest extends TestCase
         $this->withUnencryptedCookie(CartService::COOKIE, $this->token)
             ->get(route('checkout.index'))
             ->assertOk()
-            ->assertSee('Для этого заказа доставка бесплатная.')
+            ->assertSee('Доставка рассчитается после выбора пункта выдачи')
             ->assertSee('data-free-shipping="1"', false)
             ->assertDontSee('стоимость и пункт выдачи менеджер согласует отдельно');
     }
 
-    public function test_carrier_choice_is_saved_without_fabricating_a_tariff_or_point(): void
+    public function test_carrier_choice_without_a_quote_cannot_create_an_order(): void
     {
         $this->checkout([
             'delivery_method' => DeliverySelection::CDEK_POINT,
             'delivery_city' => 'Казань',
             'delivery_point_hint' => 'Ближе к центру',
             'delivery_address' => 'Не должен сохраниться',
-        ])->assertRedirect('https://example.test/pay');
+        ])->assertSessionHasErrors('delivery_quote');
 
-        $order = Order::firstOrFail();
-        $this->assertSame('RU', $order->delivery_country_code);
-        $this->assertSame('Казань', $order->delivery_city);
-        $this->assertSame(DeliverySelection::CDEK_POINT, $order->delivery_method);
-        $this->assertSame('Ближе к центру', $order->delivery_point_hint);
-        $this->assertNull($order->delivery_address);
-        $this->assertSame(0, $order->delivery_price);
-        $this->assertSame($order->items_total - $order->discount_total, $order->total);
-
-        $this->get($order->accessUrl())
-            ->assertOk()
-            ->assertSee('СДЭК · пункт выдачи')
-            ->assertSee('Казань')
-            ->assertSee('Ближе к центру')
-            ->assertSee('Стоимость доставки и пункт выдачи согласуем отдельно');
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('payments', 0);
     }
 
-    public function test_generic_pickup_can_be_ordered_with_a_manual_address_hint(): void
+    public function test_address_hint_cannot_replace_a_calculated_pickup_point(): void
     {
         $this->checkout([
             'delivery_method' => DeliverySelection::PICKUP_POINT,
             'delivery_city' => 'Армавир',
             'delivery_region' => 'Краснодарский край',
             'delivery_point_hint' => 'Возле вокзала',
-        ])->assertRedirect('https://example.test/pay');
+        ])->assertSessionHasErrors('delivery_quote');
 
-        $order = Order::firstOrFail();
-        $this->assertSame(DeliverySelection::PICKUP_POINT, $order->delivery_method);
-        $this->assertSame('Краснодарский край', $order->delivery_region);
-        $this->assertNull($order->delivery_point_id);
-        $this->assertSame('Возле вокзала', $order->delivery_point_hint);
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('payments', 0);
     }
 
     public function test_generic_pickup_rejects_point_id_without_a_carrier(): void
@@ -196,10 +205,10 @@ class CheckoutDeliveryTest extends TestCase
 
     public function test_generic_pickup_saves_the_carrier_from_a_verified_point(): void
     {
-        config(['livsi.apiship.token' => 'example-token', 'livsi.apiship.active_providers' => ['ozonlog']]);
+        config(['livsi.apiship.token' => 'example-token', 'livsi.apiship.active_providers' => ['cdek']]);
         Http::fake([
             '*/lists/points*' => Http::response(['rows' => [[
-                'id' => 42, 'providerKey' => 'ozonlog', 'countryCode' => 'RU',
+                'id' => 42, 'providerKey' => 'cdek', 'countryCode' => 'RU',
                 'city' => 'Москва', 'region' => 'Москва', 'availableOperation' => 2,
                 'enabled' => true, 'address' => 'Москва, улица 1',
             ]]]),
@@ -213,21 +222,21 @@ class CheckoutDeliveryTest extends TestCase
             'delivery_method' => DeliverySelection::PICKUP_POINT,
             'delivery_city' => 'Москва',
             'delivery_region' => 'Москва',
-            'delivery_point_method' => DeliverySelection::OZON_POINT,
+            'delivery_point_method' => DeliverySelection::CDEK_POINT,
             'delivery_point_id' => '42',
         ])->assertRedirect('https://example.test/pay');
 
         $order = Order::firstOrFail();
-        $this->assertSame(DeliverySelection::OZON_POINT, $order->delivery_method);
+        $this->assertSame(DeliverySelection::CDEK_POINT, $order->delivery_method);
         $this->assertSame('42', $order->delivery_point_id);
     }
 
-    public function test_point_from_another_region_is_not_saved(): void
+    public function test_point_from_another_region_blocks_checkout(): void
     {
-        config(['livsi.apiship.token' => 'example-token', 'livsi.apiship.active_providers' => ['ozonlog']]);
+        config(['livsi.apiship.token' => 'example-token', 'livsi.apiship.active_providers' => ['cdek']]);
         Http::fake([
             '*/lists/points*' => Http::response(['rows' => [[
-                'id' => 42, 'providerKey' => 'ozonlog', 'countryCode' => 'RU',
+                'id' => 42, 'providerKey' => 'cdek', 'countryCode' => 'RU',
                 'city' => 'Александровск', 'region' => 'Пермский край', 'availableOperation' => 2,
                 'enabled' => true, 'address' => 'Александровск, улица 1',
             ]]]),
@@ -241,11 +250,12 @@ class CheckoutDeliveryTest extends TestCase
             'delivery_method' => DeliverySelection::PICKUP_POINT,
             'delivery_city' => 'Александровск',
             'delivery_region' => 'Ставропольский край',
-            'delivery_point_method' => DeliverySelection::OZON_POINT,
+            'delivery_point_method' => DeliverySelection::CDEK_POINT,
             'delivery_point_id' => '42',
-        ])->assertRedirect('https://example.test/pay');
+        ])->assertSessionHasErrors('delivery_quote');
 
-        $this->assertNull(Order::firstOrFail()->delivery_point_id);
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('payments', 0);
     }
 
     public function test_local_courier_requires_stavropol_and_an_address(): void
@@ -261,9 +271,9 @@ class CheckoutDeliveryTest extends TestCase
             'delivery_method' => DeliverySelection::STAVROPOL_COURIER,
             'delivery_city' => ' ставрополь ',
             'delivery_address' => 'ул. Ленина, 10',
-        ])->assertRedirect('https://example.test/pay');
+        ])->assertSessionHasErrors('delivery_method');
 
-        $this->assertSame('ул. Ленина, 10', Order::firstOrFail()->delivery_address);
+        $this->assertDatabaseCount('orders', 0);
     }
 
     public function test_unknown_or_missing_method_cannot_create_order(): void
@@ -275,12 +285,12 @@ class CheckoutDeliveryTest extends TestCase
         $this->assertDatabaseCount('orders', 0);
     }
 
-    public function test_selected_ozon_point_is_verified_before_it_is_saved(): void
+    public function test_selected_carrier_point_is_verified_before_it_is_saved(): void
     {
-        config(['livsi.apiship.token' => 'example-token', 'livsi.apiship.active_providers' => ['ozonlog']]);
+        config(['livsi.apiship.token' => 'example-token', 'livsi.apiship.active_providers' => ['cdek']]);
         Http::fake([
             '*/lists/points*' => Http::response(['rows' => [[
-                'id' => '42', 'providerKey' => 'ozonlog', 'countryCode' => 'RU',
+                'id' => '42', 'providerKey' => 'cdek', 'countryCode' => 'RU',
                 'city' => 'Москва', 'availableOperation' => 2,
                 'enabled' => true, 'address' => 'Москва, улица 1',
             ]]]),
@@ -291,7 +301,7 @@ class CheckoutDeliveryTest extends TestCase
         ]);
 
         $this->checkout([
-            'delivery_method' => DeliverySelection::OZON_POINT,
+            'delivery_method' => DeliverySelection::CDEK_POINT,
             'delivery_city' => 'Москва',
             'delivery_point_id' => '42',
             'delivery_point_hint' => 'Москва, улица 1',
@@ -304,10 +314,10 @@ class CheckoutDeliveryTest extends TestCase
 
     public function test_point_in_neighboring_city_of_selected_region_is_saved_as_actual_destination(): void
     {
-        config(['livsi.apiship.token' => 'example-token', 'livsi.apiship.active_providers' => ['ozonlog']]);
+        config(['livsi.apiship.token' => 'example-token', 'livsi.apiship.active_providers' => ['cdek']]);
         Http::fake([
             '*/lists/points*' => Http::response(['rows' => [[
-                'id' => '42', 'providerKey' => 'ozonlog', 'countryCode' => 'RU',
+                'id' => '42', 'providerKey' => 'cdek', 'countryCode' => 'RU',
                 'city' => 'Пятигорск', 'region' => 'Ставропольский', 'availableOperation' => 2,
                 'enabled' => true, 'address' => 'Пятигорск, улица 1',
             ]]]),
@@ -321,7 +331,7 @@ class CheckoutDeliveryTest extends TestCase
             'delivery_method' => DeliverySelection::PICKUP_POINT,
             'delivery_city' => 'Александровское',
             'delivery_region' => 'Ставропольский край',
-            'delivery_point_method' => DeliverySelection::OZON_POINT,
+            'delivery_point_method' => DeliverySelection::CDEK_POINT,
             'delivery_point_id' => '42',
         ])->assertRedirect('https://example.test/pay');
 
@@ -331,12 +341,12 @@ class CheckoutDeliveryTest extends TestCase
         $this->assertSame('Пятигорск, улица 1', $order->delivery_point_address);
     }
 
-    public function test_point_outside_selected_region_is_not_saved(): void
+    public function test_point_outside_selected_region_blocks_checkout(): void
     {
-        config(['livsi.apiship.token' => 'example-token', 'livsi.apiship.active_providers' => ['ozonlog']]);
+        config(['livsi.apiship.token' => 'example-token', 'livsi.apiship.active_providers' => ['cdek']]);
         Http::fake([
             '*/lists/points*' => Http::response(['rows' => [[
-                'id' => '42', 'providerKey' => 'ozonlog', 'countryCode' => 'RU',
+                'id' => '42', 'providerKey' => 'cdek', 'countryCode' => 'RU',
                 'city' => 'Александровск', 'region' => 'Пермский край', 'availableOperation' => 2,
                 'enabled' => true, 'address' => 'Александровск, улица 1',
             ]]]),
@@ -350,18 +360,17 @@ class CheckoutDeliveryTest extends TestCase
             'delivery_method' => DeliverySelection::PICKUP_POINT,
             'delivery_city' => 'Александровское',
             'delivery_region' => 'Ставропольский край',
-            'delivery_point_method' => DeliverySelection::OZON_POINT,
+            'delivery_point_method' => DeliverySelection::CDEK_POINT,
             'delivery_point_id' => '42',
-        ])->assertRedirect('https://example.test/pay');
+        ])->assertSessionHasErrors('delivery_quote');
 
-        $order = Order::firstOrFail();
-        $this->assertNull($order->delivery_point_id);
-        $this->assertSame('Александровское', $order->delivery_city);
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('payments', 0);
     }
 
-    public function test_apiship_outage_does_not_prevent_checkout(): void
+    public function test_apiship_outage_blocks_checkout(): void
     {
-        config(['livsi.apiship.token' => 'example-token', 'livsi.apiship.active_providers' => ['ozonlog']]);
+        config(['livsi.apiship.token' => 'example-token', 'livsi.apiship.active_providers' => ['cdek']]);
         Http::fake([
             '*/lists/points*' => Http::response(['message' => 'unavailable'], 503),
             '*/payments' => Http::response([
@@ -371,14 +380,13 @@ class CheckoutDeliveryTest extends TestCase
         ]);
 
         $this->checkout([
-            'delivery_method' => DeliverySelection::OZON_POINT,
+            'delivery_method' => DeliverySelection::CDEK_POINT,
             'delivery_city' => 'Москва',
             'delivery_point_id' => '42',
             'delivery_point_hint' => 'Москва, улица 1',
-        ])->assertRedirect('https://example.test/pay');
+        ])->assertSessionHasErrors('delivery_quote');
 
-        $order = Order::firstOrFail();
-        $this->assertNull($order->delivery_point_id);
-        $this->assertSame('Москва, улица 1', $order->delivery_point_hint);
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('payments', 0);
     }
 }

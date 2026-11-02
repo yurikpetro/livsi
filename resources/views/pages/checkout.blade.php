@@ -46,21 +46,26 @@
                         </div>
                     @endif
 
+                    <div class="flex items-baseline justify-between gap-4 border-b border-line py-3 text-sm">
+                        <span>Доставка</span>
+                        <span class="text-right font-bold" data-checkout-delivery-price aria-live="polite">{{ $remainingToFreeShipping === 0 ? 'Бесплатно' : 'Не рассчитана' }}</span>
+                    </div>
+
                     <div class="flex items-baseline justify-between gap-4 py-4">
                         <span class="text-[10px] uppercase tracking-[0.08em] text-muted">К оплате</span>
-                        <span class="text-2xl font-black">
+                        <span class="text-2xl font-black" data-checkout-total data-items-total="{{ max(0, $cart->subtotal() - ($gift ? $gift->variant->price : 0)) }}">
                             {{ Money::rub(max(0, $cart->subtotal() - ($gift ? $gift->variant->price : 0))) }}
                         </span>
                     </div>
                 </div>
 
-                <p class="mt-2 text-xs leading-relaxed text-muted">
+                <p class="mt-2 text-xs leading-relaxed text-muted" data-checkout-delivery-note>
                     @if ($remainingToFreeShipping === 0)
-                        Для этого заказа доставка бесплатная. Сейчас оплачиваются только товары; способ, пункт выдачи и срок менеджер подтвердит отдельно.
-                    @elseif ($remainingToFreeShipping !== null)
-                        До бесплатной доставки осталось {{ Money::rub($remainingToFreeShipping) }}. Сейчас оплачиваются только товары; стоимость и пункт выдачи менеджер согласует отдельно.
+                        Доставка бесплатная для вашего заказа. Выберите пункт выдачи, чтобы уточнить срок доставки.
+                    @elseif ($deliveryCalculationEnabled)
+                        Доставка рассчитается после выбора пункта выдачи и войдёт в сумму к оплате.
                     @else
-                        Сейчас оплачиваются только товары. Стоимость и пункт выдачи менеджер согласует отдельно.
+                        Расчёт доставки временно недоступен. Оформление заказа станет доступно после восстановления расчёта.
                     @endif
                 </p>
             </div>
@@ -75,7 +80,8 @@
                     </div>
                 @endunless
 
-                <form method="POST" action="{{ route('checkout.store') }}" class="lead-form">
+                <form method="POST" action="{{ route('checkout.store') }}" class="lead-form"
+                      @if ($deliveryCalculationEnabled) data-delivery-quote-url="{{ route('delivery.quote') }}" @endif>
                     @csrf
 
                     @error('cart')
@@ -97,6 +103,9 @@
                         <input type="tel" name="phone" value="{{ old('phone') }}" required
                                placeholder="+7 900 000-00-00" autocomplete="tel" class="field-control">
                         @error('phone')<span class="field-error">{{ $message }}</span>@enderror
+                        @if ($ozonClientCheckEnabled)
+                            <span class="mt-1 block text-[11px] text-muted" data-ozon-check-status>Для доставки Ozon укажите телефон получателя.</span>
+                        @endif
                     </label>
 
                     <label class="field field-wide">
@@ -124,16 +133,21 @@
                     <div class="field field-wide" data-delivery-methods @if (mb_strlen(trim((string) old('delivery_city'))) < 2) hidden @endif>
                         <span class="field-label">Куда доставить? <span aria-hidden="true">*</span></span>
                         <div class="delivery-choices">
-                            <label class="delivery-choice">
+                            <label class="delivery-choice" data-pickup-choice>
                                 <input type="radio" name="delivery_method" value="{{ DeliverySelection::PICKUP_POINT }}" required
+                                       data-points-search aria-haspopup="dialog" aria-controls="pickup-points-dialog"
                                        @checked(old('delivery_method') === DeliverySelection::PICKUP_POINT || in_array(old('delivery_method'), DeliverySelection::pickupMethods(), true))>
-                                <span><strong>В пункт выдачи</strong><small>{{ $mapsApiKey ? 'Все доступные службы на одной карте' : 'Все доступные службы в общем списке' }}</small></span>
+                                <span class="delivery-choice-copy">
+                                    <strong>В пункт выдачи</strong>
+                                    <small data-pickup-description>{{ $mapsApiKey ? 'Все доступные службы на одной карте' : 'Все доступные службы в общем списке' }}</small>
+                                    <small data-point-selected aria-live="polite" hidden></small>
+                                    <span class="delivery-choice-action" data-pickup-action>Выбрать пункт →</span>
+                                </span>
                             </label>
                             <label class="delivery-choice" data-delivery-courier>
                                 <input type="radio" name="delivery_method" value="{{ DeliverySelection::STAVROPOL_COURIER }}" required
-                                       @disabled(! DeliverySelection::isStavropol((string) old('delivery_city')))
-                                       @checked(old('delivery_method') === DeliverySelection::STAVROPOL_COURIER)>
-                                <span><strong>Курьер по Ставрополю</strong><small>Доступен только в Ставрополе</small></span>
+                                       disabled>
+                                <span><strong>Курьер по Ставрополю</strong><small>Временно недоступен</small></span>
                             </label>
                         </div>
                         @error('delivery_method')<span class="field-error">{{ $message }}</span>@enderror
@@ -148,27 +162,41 @@
 
                     <input type="hidden" name="delivery_point_hint" value="{{ old('delivery_point_hint') }}">
 
-                    <div class="field field-wide" data-delivery-points
+                    <div class="contents" data-delivery-points
+                         @if ($ozonClientCheckEnabled) data-ozon-check-url="{{ route('delivery.ozon.check-client') }}" @endif
                          data-courier-city="{{ config('livsi.delivery.origin_city') }}"
                          data-url="{{ route('delivery.points') }}"
                          data-geocode-url="{{ route('delivery.city.geocode') }}"
                          data-free-shipping="{{ $remainingToFreeShipping === 0 ? '1' : '0' }}"
                          data-methods="{{ implode(',', $pointMethods) }}"
                          data-maps-key="{{ $mapsApiKey }}" data-suggest-key="{{ $suggestApiKey }}">
-                        <p class="mb-2 text-xs leading-relaxed text-muted" data-points-instruction></p>
-                        <button type="button" class="btn btn-outline" data-points-search hidden>Выбрать пункт выдачи на карте</button>
-                        <p class="text-xs text-muted" role="status" data-points-status hidden></p>
-                        <p class="mt-2 text-sm font-semibold" data-point-selected hidden></p>
-                        <dialog class="pickup-dialog" data-points-dialog aria-label="Выбор пункта выдачи">
+                        <dialog id="pickup-points-dialog" class="pickup-dialog" data-points-dialog aria-label="Выбор пункта выдачи">
                             <div class="pickup-dialog-head">
-                                <div><span class="pickup-dialog-kicker">ДОСТАВКА LIVSI</span><h2>Выберите пункт выдачи</h2><p data-points-location></p></div>
+                                <div><span class="pickup-dialog-kicker">ДОСТАВКА LIVSI</span><h2>Выберите пункт выдачи</h2><p data-points-location></p><p class="sr-only" data-points-instruction></p></div>
                                 <button type="button" class="pickup-dialog-close" data-points-close aria-label="Закрыть карту">×</button>
                             </div>
                             <div class="pickup-dialog-body">
                                 <aside class="pickup-sidebar">
+                                    <p class="text-xs text-muted" role="status" data-points-status hidden></p>
                                     <label class="sr-only" for="pickup-filter">Поиск пункта выдачи</label>
                                     <input id="pickup-filter" type="search" class="pickup-filter" data-points-filter placeholder="Адрес, населённый пункт или служба">
-                                    <p class="pickup-count" data-points-count></p>
+                                    <fieldset class="pickup-carriers">
+                                        <legend>Служба доставки</legend>
+                                        @foreach (['ozon_point' => 'Ozon', 'cdek_point' => 'СДЭК', 'yandex_point' => 'Яндекс'] as $method => $label)
+                                            @if (in_array($method, $pointMethods, true))
+                                                <label class="pickup-carrier">
+                                                    <input type="checkbox" value="{{ $method }}" data-points-carrier @checked($method !== 'ozon_point' || ! $ozonClientCheckEnabled) @disabled($method === 'ozon_point' && $ozonClientCheckEnabled)
+                                                           @if ($method === 'ozon_point' && $ozonClientCheckEnabled) aria-describedby="ozon-eligibility-status" @endif>
+                                                    <span>{{ $label }}</span>
+                                                </label>
+                                            @endif
+                                        @endforeach
+                                    </fieldset>
+                                    @if ($ozonClientCheckEnabled)
+                                        <p id="ozon-eligibility-status" class="pickup-count" role="status" data-ozon-check-status>Для доставки Ozon укажите телефон получателя.</p>
+                                        <button type="button" class="pickup-more" data-ozon-check-retry hidden>Повторить проверку Ozon</button>
+                                    @endif
+                                    <p class="pickup-count" data-points-count role="status"></p>
                                     <div class="pickup-list" data-points-list></div>
                                     <button type="button" class="pickup-more" data-points-more hidden>Показать ещё пункты</button>
                                 </aside>
@@ -180,9 +208,23 @@
                         </dialog>
                         <input type="hidden" name="delivery_point_id" value="{{ old('delivery_point_id') }}" data-point-id>
                         <input type="hidden" name="delivery_point_method" value="{{ old('delivery_point_method') }}" data-point-method>
-                        <p class="mt-2 text-[11px] leading-relaxed text-muted" data-ozon-notice hidden>Для Ozon номер получателя должен быть привязан к Ozon ID. Если это не так, менеджер предложит другой способ.</p>
+                        <p class="mt-2 text-[11px] leading-relaxed text-muted" data-ozon-notice hidden>@if ($ozonClientCheckEnabled)Для доставки Ozon используйте проверенный номер получателя. При изменении номера пункт нужно выбрать заново.@else Для Ozon номер получателя должен быть привязан к Ozon ID.@endif</p>
                         @error('delivery_point_id')<span class="field-error">{{ $message }}</span>@enderror
                     </div>
+
+                    @if ($deliveryCalculationEnabled)
+                        <div class="field field-wide" data-delivery-quote>
+                            @if ($deliveryCalculationTest)
+                                <p class="mb-2 text-xs text-muted">Пробный расчёт: используются временные размеры товаров и упаковки.</p>
+                            @endif
+                            <p class="text-sm" data-delivery-quote-status role="status">{{ $remainingToFreeShipping === 0 ? 'Доставка бесплатная. Выберите пункт выдачи, чтобы уточнить срок доставки.' : 'Выберите пункт выдачи для расчёта доставки.' }}</p>
+                            <button type="button" class="btn btn-outline mt-2" data-delivery-recalculate>Рассчитать доставку</button>
+                            <input type="hidden" name="delivery_quote_token" value="">
+                            @error('delivery_quote')<span class="field-error" role="alert">{{ $message }}</span>@enderror
+                        </div>
+                    @else
+                        <p class="field-error field-wide" role="alert">Расчёт доставки временно недоступен. Попробуйте оформить заказ позже.</p>
+                    @endif
 
                     <label class="field field-wide">
                         <span class="field-label">Комментарий</span>
@@ -205,7 +247,7 @@
                         <span>Согласен получать новости и предложения LIVSI — по желанию</span>
                     </label>
 
-                    <button type="submit" class="btn btn-dark" @disabled(! $gateway->isConfigured())>
+                    <button type="submit" class="btn btn-dark" @disabled(! $gateway->isConfigured() || ! $deliveryCalculationEnabled)>
                         Перейти к оплате
                         <span aria-hidden="true">→</span>
                     </button>

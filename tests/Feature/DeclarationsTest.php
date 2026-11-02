@@ -103,8 +103,8 @@ class DeclarationsTest extends TestCase
             route('catalog.index', ['line' => 'warm']),
             route('catalog.index', ['line' => 'base']),
             route('catalog.index', ['tab' => 'pro']),
-            route('catalog.index', ['tab' => 'pro', 'purpose' => ['body', 'face']]),
-            route('catalog.index', ['tab' => 'pro', 'purpose' => ['manicure', 'pedicure']]),
+            route('catalog.index', ['line' => 'pro-skin']),
+            route('catalog.index', ['line' => 'pro-manicure-pedicure']),
         ] as $url) {
             $this->get($url)->assertViewIs('catalog.index');
         }

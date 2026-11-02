@@ -63,4 +63,15 @@ class DeliveryRateLimitTest extends TestCase
             ]),
         ]);
     }
+
+    public function test_quote_limit_is_independent_of_points_and_geocoding(): void
+    {
+        $this->fakeDeliveryApis();
+        for ($attempt = 0; $attempt < 15; $attempt++) {
+            $this->postJson(route('delivery.quote'), [])->assertUnprocessable();
+        }
+        $this->postJson(route('delivery.quote'), [])->assertTooManyRequests()->assertHeader('Retry-After');
+        $this->getJson(route('delivery.points', ['method' => 'cdek_point', 'city' => 'Ставрополь']))->assertOk();
+        $this->postJson(route('delivery.city.geocode'), ['latitude' => 45.03, 'longitude' => 41.99])->assertOk();
+    }
 }

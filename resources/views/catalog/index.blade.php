@@ -7,8 +7,6 @@
 @section('content')
     @php
         $categoryTitle = match (true) {
-            $query->tab === 'pro' && $query->purposes === ['body', 'face'] => 'PRO SKIN',
-            $query->tab === 'pro' && $query->purposes === ['manicure', 'pedicure'] => 'PRO MANICURE / PEDICURE',
             $query->line !== null => $facets['line']->firstWhere('code', $query->line)?->title ?? 'Все товары',
             isset(\App\Services\CatalogQuery::TABS[$query->tab]) => \App\Services\CatalogQuery::TABS[$query->tab],
             default => 'Все товары',
@@ -32,8 +30,6 @@
             @foreach ($facets['line'] as $value)
                 <a href="{{ $query->urlForCategory(['line' => $value->code]) }}" class="chip @if ($query->isActive('line', $value->code)) chip-active @endif">{{ $value->title }}</a>
             @endforeach
-            <a href="{{ $query->urlForCategory(['tab' => 'pro', 'purpose' => ['body', 'face']]) }}" class="chip @if ($query->tab === 'pro' && $query->purposes === ['body', 'face']) chip-active @endif">PRO SKIN</a>
-            <a href="{{ $query->urlForCategory(['tab' => 'pro', 'purpose' => ['manicure', 'pedicure']]) }}" class="chip @if ($query->tab === 'pro' && $query->purposes === ['manicure', 'pedicure']) chip-active @endif">PRO MANICURE / PEDICURE</a>
         </div>
 
         <div class="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-line pt-4">

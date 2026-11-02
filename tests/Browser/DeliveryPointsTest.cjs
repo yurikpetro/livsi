@@ -28,12 +28,22 @@ test('Overlapping pickup points show all carriers and select the correct point',
                     assert.ok(csrf && variant, 'Catalog must contain the guest cart form');
                     await context.request.post(`${baseUrl}/cart/add`, { form: { _token: csrf, variant_id: variant, qty: '1' } });
                     await context.addInitScript(() => {
+                        document.addEventListener('DOMContentLoaded', () => {
+                            const phone = document.querySelector('[name="phone"]');
+                            if (phone) {
+                                phone.value = '+79000000000';
+                                phone.dispatchEvent(new Event('input', { bubbles: true }));
+                            }
+                        });
                         localStorage.setItem('livsi.delivery.city.v1', JSON.stringify({ city: 'Ставрополь', region: 'Ставропольский край' }));
                     });
                     const page = await context.newPage();
                     const errors = [];
                     page.on('pageerror', (error) => errors.push(error.message));
+                    await page.route('**/delivery/ozon/check-client', route => route.fulfill({ json: { can_be_delivered: true } }));
                     if (process.env.LIVSI_TEST_LOCAL_ASSETS === '1') {
+                        await page.route('**/build/assets/delivery-quote.js', (route) => route.fulfill({ path: 'resources/js/delivery-quote.js', contentType: 'text/javascript' }));
+                        await page.route('**/build/assets/ozon-client-check.js', (route) => route.fulfill({ path: 'resources/js/ozon-client-check.js', contentType: 'text/javascript' }));
                         const manifest = JSON.parse(await fs.readFile('public/build/manifest.json', 'utf8'));
                         await page.route('**/build/assets/app-*.js', (route) => route.fulfill({ path: 'resources/js/app.js', contentType: 'text/javascript' }));
                         await page.route('**/build/assets/app-*.css', (route) => route.fulfill({ path: `public/build/${manifest['resources/css/app.css'].file}`, contentType: 'text/css' }));
@@ -89,6 +99,7 @@ test('Overlapping pickup points show all carriers and select the correct point',
                         assert.equal(await page.locator('[data-ozon-notice]').isVisible(), method === 'ozon_point');
                     }
                     await page.locator('[data-points-search]').click();
+                    await page.waitForFunction(() => document.querySelector('[data-points-dialog]').open);
                     await page.waitForFunction(() => window.pickupTestClusterer?.getGeoObjects().length === 3);
                     await page.evaluate(async (center) => {
                         const marks = pickupTestClusterer.getGeoObjects();

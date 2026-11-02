@@ -11,6 +11,7 @@ class Order extends Model
     protected $guarded = [];
 
     protected $casts = [
+        'delivery_quote' => 'array',
         'utm' => 'array',
         'consent_at' => 'datetime',
         'marketing_consent_at' => 'datetime',

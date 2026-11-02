@@ -76,8 +76,10 @@ class OrderForm
                                 ? $record->delivery_point_address.' (ApiShip ID '.$record->delivery_point_id.')'
                                 : '—'),
                         Placeholder::make('delivery_price_status')->label('Стоимость')
-                            ->content(fn (Order $record) => $record->delivery_price > 0
-                                ? Money::rub($record->delivery_price)
+                            ->content(fn (Order $record) => $record->delivery_quote
+                                ? ($record->delivery_price > 0 ? Money::rub($record->delivery_price) : 'Бесплатно для покупателя')
+                                    .' · перевозчик '.Money::rub($record->delivery_quote['carrier_cost'])
+                                    .' · '.$record->delivery_quote['tariff_name']
                                 : 'Не рассчитана. Связаться с покупателем и согласовать отдельно.')
                             ->columnSpanFull(),
                     ])

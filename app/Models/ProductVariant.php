@@ -11,8 +11,9 @@ class ProductVariant extends Model
     protected $guarded = [];
 
     protected $casts = [
+        'dimensions_verified' => 'boolean',
         'is_default' => 'boolean',
-        'is_active'  => 'boolean',
+        'is_active' => 'boolean',
     ];
 
     public function product(): BelongsTo

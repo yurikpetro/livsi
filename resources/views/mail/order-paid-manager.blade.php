@@ -19,7 +19,13 @@
     @if ($order->delivery_address)Адрес: {{ $order->delivery_address }}<br>@endif
     @if ($order->delivery_point_address)Предпочтительный ПВЗ: {{ $order->delivery_point_address }}<br>
     @elseif ($order->delivery_point_hint)Пожелание по ПВЗ: {{ $order->delivery_point_hint }}<br>@endif
-    Стоимость и пункт выдачи нужно согласовать отдельно.
+    @if ($order->delivery_quote)
+        Доставка покупателю: {{ $order->delivery_price > 0 ? Money::rub($order->delivery_price) : 'бесплатно' }}.<br>
+        Стоимость перевозчика: {{ Money::rub($order->delivery_quote['carrier_cost']) }}.
+        Тариф: {{ $order->delivery_quote['tariff_name'] }}.
+    @else
+        Стоимость и пункт выдачи нужно согласовать отдельно.
+    @endif
 </p>
 
 <p>

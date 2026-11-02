@@ -28,7 +28,11 @@ class ReviewsTable
                     ->color('gray')
                     ->formatStateUsing(fn (?string $state) => Review::SLOTS[$state] ?? '—'),
 
-                ImageColumn::make('image_path')->label('Фото')->square(),
+                ImageColumn::make('image_path')
+                    ->label('Фото')
+                    ->disk('public_images')
+                    ->visibility('public')
+                    ->square(),
 
                 TextColumn::make('caption')
                     ->label('Строка над цитатой')

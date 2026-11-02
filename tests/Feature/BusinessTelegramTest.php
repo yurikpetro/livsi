@@ -96,6 +96,7 @@ class BusinessTelegramTest extends TestCase
 
         $user = app(SocialAuthService::class)->login($profile);
         app(SocialAuthService::class)->login($profile);
+        app(SocialAuthService::class)->login(new SocialProfile('vk', '456', 'buyer@example.com', 'Другое имя', null));
         User::factory()->create(['is_admin' => true]);
 
         Queue::assertPushed(SendBusinessTelegram::class, 1);

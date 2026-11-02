@@ -28,6 +28,9 @@
         </tr>
     @endif
 
+    @if ($order->delivery_quote || $order->delivery_price > 0)
+        <tr><td style="padding:10px 0; font-size:13px;">Доставка</td><td style="text-align:right; font-size:13px;">{{ $order->delivery_price > 0 ? Money::rub($order->delivery_price) : 'Бесплатно' }}</td></tr>
+    @endif
     <tr>
         <td style="padding:14px 0 0 0; font-size:14px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;">Итого</td>
         <td style="padding:14px 0 0 0; font-size:18px; font-weight:700; text-align:right; white-space:nowrap;">

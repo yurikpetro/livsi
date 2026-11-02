@@ -28,8 +28,8 @@
                     <div class="hero-aroma"><span class="eyebrow">{{ $code === 'pro' ? 'Профессиональный подход' : 'Характер аромата' }}</span><b>{{ $aroma }}</b></div>
                     <div @class(['hero-actions flex flex-wrap', 'gap-3' => $code !== 'pro', 'hero-pro-actions' => $code === 'pro'])>
                         @if ($code === 'pro')
-                            <a href="{{ route('catalog.index', ['tab' => 'pro', 'purpose' => ['body', 'face']]) }}" class="btn hero-cta hero-pro-cta">PRO SKIN <span aria-hidden="true">↗</span></a>
-                            <a href="{{ route('catalog.index', ['tab' => 'pro', 'purpose' => ['manicure', 'pedicure']]) }}" class="btn hero-cta hero-pro-cta hero-pro-cta-secondary">PRO MANICURE / PEDICURE <span aria-hidden="true">↗</span></a>
+                            <a href="{{ route('catalog.index', ['line' => 'pro-skin']) }}" class="btn hero-cta hero-pro-cta">PRO SKIN <span aria-hidden="true">↗</span></a>
+                            <a href="{{ route('catalog.index', ['line' => 'pro-manicure-pedicure']) }}" class="btn hero-cta hero-pro-cta hero-pro-cta-secondary">PRO MANICURE / PEDICURE <span aria-hidden="true">↗</span></a>
                         @else
                             <a href="{{ route('catalog.index', ['line' => $code]) }}" class="btn hero-cta">Смотреть {{ strtoupper($code) }} <span aria-hidden="true">→</span></a>
                         @endif
@@ -60,7 +60,7 @@
             <button type="button" class="shelf-arrow shelf-prev" data-shelf-prev aria-label="Показать предыдущие товары" disabled>←</button>
             <div class="product-shelf reveal-stagger" data-shelf-track tabindex="0" aria-label="Подборка товаров">
                 @foreach ($products as $i => $product)
-                    <x-product-card :product="$product" :data-shelf-line="$product->is_pro ? 'pro' : ($product->line?->code ?? '')" :data-badge="$product->badge" style="--index: {{ $i }}" />
+                    <x-product-card :product="$product" :data-shelf-line="$product->isProfessional() ? 'pro' : ($product->line?->code ?? '')" :data-badge="$product->badge" style="--index: {{ $i }}" />
                 @endforeach
             </div>
             <button type="button" class="shelf-arrow shelf-next" data-shelf-next aria-label="Показать следующие товары">→</button>

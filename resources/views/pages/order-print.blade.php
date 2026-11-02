@@ -102,7 +102,7 @@
                     @elseif ($order->delivery_point_hint)
                         <div><dt>Пожелание по ПВЗ</dt><dd>{{ $order->delivery_point_hint }}</dd></div>
                     @endif
-                    <div><dt>Стоимость доставки</dt><dd>{{ $order->delivery_price > 0 ? \App\Support\Money::rub($order->delivery_price) : 'Не согласована' }}</dd></div>
+                    <div><dt>Стоимость доставки</dt><dd>{{ $order->delivery_price > 0 ? \App\Support\Money::rub($order->delivery_price) : ($order->delivery_quote ? 'Бесплатно' : 'Не согласована') }}</dd></div>
                 </dl>
             </section>
         </div>

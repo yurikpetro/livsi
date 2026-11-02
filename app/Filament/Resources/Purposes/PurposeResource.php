@@ -18,6 +18,8 @@ class PurposeResource extends Resource
 {
     protected static ?string $model = Purpose::class;
 
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedHandRaised;
 
     protected static string|\UnitEnum|null $navigationGroup = 'Каталог';

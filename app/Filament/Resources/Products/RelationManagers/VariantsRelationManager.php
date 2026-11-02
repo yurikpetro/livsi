@@ -77,10 +77,12 @@ class VariantsRelationManager extends RelationManager
                 Section::make('Вес и габариты')
                     ->description('Нужны для расчёта доставки. Пока не заполнены, стоимость доставки посчитать нельзя.')
                     ->schema([
-                        TextInput::make('weight_g')->label('Вес, г')->numeric()->minValue(0),
-                        TextInput::make('length_mm')->label('Длина, мм')->numeric()->minValue(0),
-                        TextInput::make('width_mm')->label('Ширина, мм')->numeric()->minValue(0),
-                        TextInput::make('height_mm')->label('Высота, мм')->numeric()->minValue(0),
+                        TextInput::make('weight_g')->label('Вес с тарой, г')->integer()->minValue(1),
+                        TextInput::make('length_mm')->label('Длина, мм')->integer()->minValue(1),
+                        TextInput::make('width_mm')->label('Ширина, мм')->integer()->minValue(1),
+                        TextInput::make('height_mm')->label('Высота, мм')->integer()->minValue(1),
+                        Toggle::make('dimensions_verified')->label('Вес и размеры проверены')->default(false)
+                            ->helperText('Подтвердите реальные замеры товара с потребительской тарой. Заглушки в расчёт не попадут.')->columnSpanFull(),
                     ])
                     ->columns(4)
                     ->collapsed(),

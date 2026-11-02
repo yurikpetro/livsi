@@ -7,6 +7,45 @@ use RuntimeException;
 
 class ApiShipClient
 {
+    public function canDeliverToOzonClient(string $phone): bool
+    {
+        $this->guard('ozondel');
+        $body = Http::acceptJson()
+            ->withHeaders(['Authorization' => (string) config('livsi.apiship.token')])
+            ->withOptions(filled(config('livsi.apiship.source_ip')) ? [
+                'curl' => [CURLOPT_INTERFACE => (string) config('livsi.apiship.source_ip')],
+            ] : [])
+            ->connectTimeout(2)->timeout(12)
+            ->post(rtrim((string) config('livsi.apiship.api_url'), '/').'/ozondel/check-client', [
+                'phoneNumber' => $phone,
+                ...(filled(config('livsi.apiship.ozon_connection_id'))
+                    ? ['providerConnectId' => (int) config('livsi.apiship.ozon_connection_id')] : []),
+            ])->throw()->json();
+
+        if (! is_bool($body['canBeDelivered'] ?? null)) {
+            throw new RuntimeException('Ozon returned an invalid eligibility response.');
+        }
+
+        return $body['canBeDelivered'];
+    }
+
+    /** @param array<string, mixed> $parameters
+     * @return array<string, mixed>
+     */
+    public function calculate(array $parameters): array
+    {
+        $this->guard($parameters['providerKeys'][0]);
+
+        return Http::acceptJson()
+            ->withHeaders(['Authorization' => (string) config('livsi.apiship.token')])
+            ->withOptions(filled(config('livsi.apiship.source_ip')) ? [
+                'curl' => [CURLOPT_INTERFACE => (string) config('livsi.apiship.source_ip')],
+            ] : [])
+            ->connectTimeout(2)->timeout(12)
+            ->post(rtrim((string) config('livsi.apiship.api_url'), '/').'/calculator', $parameters)
+            ->throw()->json();
+    }
+
     public function isConfigured(): bool
     {
         return filled(config('livsi.apiship.token'));

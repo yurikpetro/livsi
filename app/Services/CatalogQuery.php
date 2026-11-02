@@ -257,9 +257,10 @@ class CatalogQuery
         }
 
         match ($this->tab) {
-            'pro' => $query->where('is_pro', true),
+            'pro' => $query->professional(),
             'bundles' => $query->where('is_bundle', true),
-            'care' => $query->where('is_pro', false)->where('is_bundle', false),
+            'care' => $query->where('is_pro', false)->where('is_bundle', false)
+                ->whereDoesntHave('line', fn (Builder $line): Builder => $line->whereIn('code', ProductLine::PROFESSIONAL_CODES)),
             'new' => $query->where('badge', 'new'),
             'best' => $query->where('badge', 'best'),
             default => null,

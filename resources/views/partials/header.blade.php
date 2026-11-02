@@ -1,12 +1,7 @@
 @php
     /**
-     * Меню каталога с вложенностью — как в макете: «Уход» раскрывает
-     * ароматические линейки, PRO раскрывает свои подкатегории.
-     *
-     * Подкатегории PRO собраны из существующих осей навигации, а не из новой
-     * сущности: в прототипе SKIN и MANICURE / PEDICURE на текущих данных
-     * возвращают один и тот же единственный PRO-товар, различить их
-     * невозможно. Толкование требует подтверждения — docs/07-design-review.md §13.
+     * Четыре линейки ухода и две профессиональные линейки используют
+     * одинаковые записи каталога и ссылки с фильтром по линейке.
      */
     $catalogMenu = [
         ['label' => 'Все товары', 'url' => route('catalog.index')],
@@ -16,7 +11,7 @@
             'label'    => 'Уход',
             'url'      => route('catalog.index', ['tab' => 'care']),
             'key'      => 'care',
-            'children' => $siteLines->map(fn ($line) => [
+            'children' => $siteLines->reject(fn (\App\Models\ProductLine $line): bool => $line->isProfessional())->map(fn (\App\Models\ProductLine $line): array => [
                 'label' => $line->title,
                 'url'   => route('catalog.index', ['line' => $line->code]),
                 'color' => $line->color_bg,
@@ -26,18 +21,11 @@
             'label'    => 'PRO',
             'url'      => route('catalog.index', ['tab' => 'pro']),
             'key'      => 'pro',
-            'children' => [
-                [
-                    'label' => 'SKIN',
-                    'url'   => route('catalog.index', ['tab' => 'pro', 'purpose' => ['body', 'face']]),
-                    'color' => '#99d0f7',
-                ],
-                [
-                    'label' => 'MANICURE / PEDICURE',
-                    'url'   => route('catalog.index', ['tab' => 'pro', 'purpose' => ['manicure', 'pedicure']]),
-                    'color' => '#99d0f7',
-                ],
-            ],
+            'children' => $siteLines->filter(fn (\App\Models\ProductLine $line): bool => $line->isProfessional())->map(fn (\App\Models\ProductLine $line): array => [
+                'label' => $line->title,
+                'url'   => route('catalog.index', ['line' => $line->code]),
+                'color' => $line->color_bg,
+            ])->all(),
         ],
     ];
 @endphp

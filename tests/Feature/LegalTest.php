@@ -68,6 +68,30 @@ class LegalTest extends TestCase
         }
     }
 
+    public function test_delivery_page_requires_automatic_calculation_before_payment(): void
+    {
+        $this->get('/delivery')->assertOk()
+            ->assertSee('Оплата возможна только после расчёта доставки.')
+            ->assertDontSee('уточняет менеджер после заказа');
+    }
+
+    public function test_delivery_migration_updates_only_old_paragraphs_and_preserves_custom_content(): void
+    {
+        $page = LegalPage::where('slug', 'delivery')->firstOrFail();
+        $page->update(['body' => '<p>Авторский текст</p><p>На этапе оформления можно выбрать предпочтительный способ доставки. Стоимость, срок и конкретный пункт выдачи пока уточняет менеджер после заказа. На странице оплаты отображается сумма только за товары; доставка в неё не включена.</p>',
+            'reviewed_at' => now()]);
+        $migration = require database_path('migrations/2026_10_31_140211_require_calculated_delivery_in_legal_page.php');
+        $migration->up();
+        $this->assertStringContainsString('Авторский текст', $page->fresh()->body);
+        $this->assertStringContainsString('Оплата возможна только после расчёта доставки.', $page->fresh()->body);
+        $this->assertNull($page->fresh()->reviewed_at);
+
+        $page->refresh()->update(['body' => '<p>Полностью свой документ</p>', 'reviewed_at' => now()]);
+        $migration->up();
+        $this->assertSame('<p>Полностью свой документ</p>', $page->fresh()->body);
+        $this->assertNotNull($page->fresh()->reviewed_at);
+    }
+
     public function test_disabled_document_returns_404(): void
     {
         LegalPage::where('slug', 'offer')->update(['is_active' => false]);

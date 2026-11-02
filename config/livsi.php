@@ -51,6 +51,16 @@ return [
         'info_url' => env('YANDEX_INFO_URL', 'https://login.yandex.ru/info'),
     ],
 
+    /** VK и Mail используют одно публичное приложение и серверный PKCE. */
+    'vk' => [
+        'client_id' => env('VK_CLIENT_ID'),
+        'redirect_uri' => env('VK_REDIRECT_URI'),
+        'auth_url' => 'https://id.vk.ru/authorize',
+        'token_url' => 'https://id.vk.ru/oauth2/auth',
+        'info_url' => 'https://id.vk.ru/oauth2/user_info',
+        'public_info_url' => 'https://id.vk.ru/oauth2/public_info',
+    ],
+
     /*
     | Оплата через ЮKassa.
     |
@@ -94,6 +104,7 @@ return [
     ],
 
     'apiship' => [
+        'ozon_connection_id' => env('APISHIP_OZON_CONNECTION_ID'),
         'token' => env('APISHIP_TOKEN'),
         'api_url' => env('APISHIP_API_URL', 'https://api.apiship.ru/v1'),
         'source_ip' => env('APISHIP_SOURCE_IP'),

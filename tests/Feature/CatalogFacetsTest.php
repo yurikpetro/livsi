@@ -134,8 +134,8 @@ class CatalogFacetsTest extends TestCase
             'sweet' => ['SWEET', ['line' => 'sweet']],
             'warm' => ['WARM', ['line' => 'warm']],
             'base' => ['BASE', ['line' => 'base']],
-            'pro skin' => ['PRO SKIN', ['tab' => 'pro', 'purpose' => ['body', 'face']]],
-            'pro manicure' => ['PRO MANICURE / PEDICURE', ['tab' => 'pro', 'purpose' => ['manicure', 'pedicure']]],
+            'pro skin' => ['PRO SKIN', ['line' => 'pro-skin']],
+            'pro manicure' => ['PRO MANICURE / PEDICURE', ['line' => 'pro-manicure-pedicure']],
         ];
     }
 

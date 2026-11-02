@@ -74,10 +74,7 @@ class QuickView extends Component
     public function render()
     {
         $product = $this->product();
-        $recommendations = Product::active()->with(['line', 'images', 'variants.quota'])
-            ->when($product, fn ($query) => $query->whereKeyNot($product->id)
-                ->orderByRaw('CASE WHEN product_line_id = ? THEN 0 ELSE 1 END', [$product->product_line_id]))
-            ->orderBy('sort')->limit(3)->get();
+        $recommendations = $product?->recommendedProducts() ?? collect();
 
         return view('livewire.quick-view', [
             'product' => $product,

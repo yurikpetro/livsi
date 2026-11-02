@@ -54,15 +54,21 @@
                     <p class="mt-3 max-w-xl text-sm leading-relaxed text-muted">
                         Тогда заказ не потеряется вместе со ссылкой, а в следующий раз
                         имя, телефон и почта подставятся сами. Регистрация не нужна —
-                        вход через Яндекс за один шаг.
+                        выберите удобный способ входа.
                     </p>
 
-                    <form method="POST" action="{{ route('auth.yandex') }}" class="mt-6">
-                        @csrf
-                        <input type="hidden" name="order" value="{{ $order->number }}">
-                        <input type="hidden" name="token" value="{{ $order->access_token }}">
-                        <button type="submit" class="btn btn-dark">Войти через Яндекс</button>
-                    </form>
+                    <div class="mt-6 flex flex-wrap gap-3">
+                        @foreach (['yandex' => ['Яндекс', $yandexReady], 'vk' => ['ВКонтакте', $vkReady], 'mail' => ['Mail.ru', $vkReady]] as $provider => [$label, $ready])
+                            @if ($ready)
+                                <form method="POST" action="{{ route('auth.' . $provider) }}">
+                                    @csrf
+                                    <input type="hidden" name="order" value="{{ $order->number }}">
+                                    <input type="hidden" name="token" value="{{ $order->access_token }}">
+                                    <button type="submit" class="btn btn-dark">Войти через {{ $label }}</button>
+                                </form>
+                            @endif
+                        @endforeach
+                    </div>
                 </div>
             @endif
         @endguest
@@ -95,6 +101,9 @@
                             <dd>−{{ Money::rub($order->discount_total) }}</dd>
                         </div>
                     @endif
+                    <div>
+                        <dt>Доставка</dt><dd>{{ $order->delivery_quote ? ($order->delivery_price > 0 ? Money::rub($order->delivery_price) : 'Бесплатно') : 'Согласуем отдельно' }}</dd>
+                    </div>
                     <div>
                         <dt>Итого оплачено</dt>
                         <dd class="font-bold">{{ Money::rub($order->total) }}</dd>
@@ -131,7 +140,7 @@
                         <div><dt>Пожелание по ПВЗ</dt><dd>{{ $order->delivery_point_hint }}</dd></div>
                     @endif
                 </dl>
-                <p class="mt-4 text-xs leading-relaxed text-muted">{{ $order->delivery_point_id ? 'Доступность выбранного ПВЗ и срок доставки подтвердит менеджер.' : 'Стоимость доставки и пункт выдачи согласуем отдельно.' }} В оплату выше включены только товары.</p>
+                <p class="mt-4 text-xs leading-relaxed text-muted">{{ $order->delivery_quote ? 'Доставка рассчитана и включена в итог заказа. Отправку подтвердит менеджер.' : 'Стоимость доставки и пункт выдачи согласуем отдельно. В оплату выше включены только товары.' }}</p>
 
                 <p class="mt-6 text-xs leading-relaxed text-muted">
                     Сохраните ссылку на эту страницу — по ней заказ открывается без входа.

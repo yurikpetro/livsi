@@ -20,7 +20,7 @@
             @if ($order->delivery_city) · {{ $order->delivery_city }}@endif.
             @if ($order->delivery_region) Регион: {{ $order->delivery_region }}.@endif
             @if ($order->delivery_point_address) Предпочтительный ПВЗ: {{ $order->delivery_point_address }}.@endif
-            {{ $order->delivery_point_id ? 'Доступность выбранного ПВЗ и срок доставки менеджер подтвердит отдельно.' : 'Стоимость доставки и конкретный пункт выдачи менеджер согласует отдельно.' }}
+            {{ $order->delivery_quote ? 'Доставка рассчитана и включена в итог заказа. Отправку подтвердит менеджер.' : 'Стоимость доставки и конкретный пункт выдачи менеджер согласует отдельно.' }}
         </p>
     @endif
 

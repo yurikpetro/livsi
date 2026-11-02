@@ -26,12 +26,14 @@ class ShopOverview extends StatsOverviewWidget
 
         // «Заканчивается» и «нет в наличии» считаем по той же формуле,
         // что и витрина: выделено минус зарезервировано минус продано.
-        $quotas    = StockQuota::all();
+        $quotas = StockQuota::all();
         $outOfStock = $quotas->filter(fn (StockQuota $q) => $q->available() < 1)->count();
-        $lowStock   = $quotas->filter(fn (StockQuota $q) => $q->available() > 0 && $q->isLow())->count();
+        $lowStock = $quotas->filter(fn (StockQuota $q) => $q->available() > 0 && $q->isLow())->count();
 
         // Без веса и габаритов доставку посчитать нельзя — это блокер запуска.
-        $withoutDimensions = ProductVariant::where(fn ($q) => $q->whereNull('weight_g')
+        $withoutDimensions = ProductVariant::where(fn ($q) => $q->where('dimensions_verified', false)
+            ->orWhere('weight_g', '<=', 0)->orWhere('length_mm', '<=', 0)->orWhere('width_mm', '<=', 0)->orWhere('height_mm', '<=', 0)
+            ->orWhereNull('weight_g')
             ->orWhereNull('length_mm')
             ->orWhereNull('width_mm')
             ->orWhereNull('height_mm'))->count();
@@ -42,11 +44,11 @@ class ShopOverview extends StatsOverviewWidget
                 ->color($newLeads > 0 ? 'warning' : 'success'),
 
             Stat::make('Активных товаров', Product::where('is_active', true)->count())
-                ->description(Product::where('is_active', false)->count() . ' скрыто')
+                ->description(Product::where('is_active', false)->count().' скрыто')
                 ->color('gray'),
 
             Stat::make('Нет в наличии', $outOfStock)
-                ->description($lowStock . ' заканчивается')
+                ->description($lowStock.' заканчивается')
                 ->color($outOfStock > 0 ? 'danger' : 'success'),
 
             Stat::make('Без веса и габаритов', $withoutDimensions)

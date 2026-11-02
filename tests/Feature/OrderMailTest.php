@@ -36,6 +36,7 @@ class OrderMailTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->mockCalculatedDelivery();
 
         $this->seed(CatalogSeeder::class);
 
@@ -113,6 +114,7 @@ class OrderMailTest extends TestCase
             'phone' => '+79001112233',
             'email' => 'buyer@example.com',
             'delivery_method' => 'cdek_point',
+            'delivery_quote_token' => 'calculated-delivery',
             'delivery_city' => 'Москва',
             'consent' => '1',
         ])->assertRedirect();

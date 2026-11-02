@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -12,17 +14,29 @@ class Product extends Model
 {
     protected $guarded = [];
 
+    protected $attributes = [
+        'auto_recommendations' => true,
+    ];
+
     protected $casts = [
-        'is_pro'       => 'boolean',
-        'is_bundle'    => 'boolean',
-        'is_active'    => 'boolean',
-        'rating'       => 'float',
-        'vat_rate'     => 'float',
+        'auto_recommendations' => 'boolean',
+        'recommended_product_ids' => 'array',
+        'is_pro' => 'boolean',
+        'is_bundle' => 'boolean',
+        'is_active' => 'boolean',
+        'rating' => 'float',
+        'vat_rate' => 'float',
         'published_at' => 'datetime',
     ];
 
     protected static function booted(): void
     {
+        static::saving(function (Product $product): void {
+            if (! $product->exists || $product->isDirty('product_line_id')) {
+                $product->is_pro = $product->line()->whereIn('code', ProductLine::PROFESSIONAL_CODES)->exists();
+            }
+        });
+
         // Поисковый текст пересобирается после сохранения, а не до: связи
         // (назначения, задачи) синхронизируются уже после самой модели.
         static::saved(fn (Product $product) => $product->rebuildSearchText());
@@ -31,6 +45,19 @@ class Product extends Model
     public function line(): BelongsTo
     {
         return $this->belongsTo(ProductLine::class, 'product_line_id');
+    }
+
+    public function isProfessional(): bool
+    {
+        return $this->line?->isProfessional() || $this->is_pro;
+    }
+
+    /** Старый флаг сохраняет в общей подборке PRO товары, ожидающие выбора линейки. */
+    public function scopeProfessional(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $query): Builder => $query
+            ->whereHas('line', fn (Builder $line): Builder => $line->whereIn('code', ProductLine::PROFESSIONAL_CODES))
+            ->orWhere('is_pro', true));
     }
 
     public function purposes(): BelongsToMany
@@ -71,6 +98,34 @@ class Product extends Model
     public function defaultVariant(): ?ProductVariant
     {
         return $this->variants->firstWhere('is_default', true) ?? $this->variants->first();
+    }
+
+    /** @return Collection<int, Product> */
+    public function recommendedProducts(int $limit = 3): Collection
+    {
+        $query = self::active()
+            ->whereKeyNot($this->getKey())
+            ->with(['line', 'images', 'variants.quota']);
+
+        if ($this->auto_recommendations) {
+            return $query
+                ->orderByRaw('CASE WHEN product_line_id = ? THEN 0 ELSE 1 END', [$this->product_line_id])
+                ->orderBy('sort')
+                ->orderBy('id')
+                ->limit($limit)
+                ->get();
+        }
+
+        $ids = $this->recommended_product_ids ?? [];
+        $products = $query->whereKey($ids)->get()->keyBy('id');
+
+        return new Collection(collect($ids)
+            ->unique()
+            ->map(fn (int|string $id): ?Product => $products->get($id))
+            ->filter()
+            ->take($limit)
+            ->values()
+            ->all());
     }
 
     /** Минимальная цена среди активных вариантов, в копейках. */

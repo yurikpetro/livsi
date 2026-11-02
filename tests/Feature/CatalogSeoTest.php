@@ -53,7 +53,7 @@ class CatalogSeoTest extends TestCase
             $variant->quota->update(['allocated' => 0]);
         }
 
-        $this->get('/product/' . $product->slug)
+        $this->get('/product/'.$product->slug)
             ->assertOk()
             ->assertSee('schema.org/OutOfStock', escape: false);
     }
@@ -66,7 +66,7 @@ class CatalogSeoTest extends TestCase
         // иначе четыре варианта сортировки дали бы четыре дубля страницы.
         $this->get('/catalog?line=fresh&sort=price_desc')
             ->assertOk()
-            ->assertSee('<link rel="canonical" href="' . route('catalog.index', ['line' => 'fresh']) . '">', escape: false);
+            ->assertSee('<link rel="canonical" href="'.route('catalog.index', ['line' => 'fresh']).'">', escape: false);
     }
 
     public function test_pagination_keeps_its_own_canonical(): void
@@ -74,12 +74,12 @@ class CatalogSeoTest extends TestCase
         $html = $this->get('/catalog?page=2')->assertOk()->getContent();
 
         // Вторая страница не должна склеиваться с первой.
-        $this->assertStringNotContainsString('canonical" href="' . route('catalog.index') . '"', $html);
+        $this->assertStringNotContainsString('canonical" href="'.route('catalog.index').'"', $html);
     }
 
     public function test_search_results_are_not_indexed(): void
     {
-        $this->get('/catalog?q=' . urlencode('скраб'))
+        $this->get('/catalog?q='.urlencode('скраб'))
             ->assertOk()
             ->assertSee('name="robots" content="noindex, follow"', escape: false);
     }
@@ -170,7 +170,7 @@ class CatalogSeoTest extends TestCase
 
         $this->assertGreaterThan(1, $product->images->count());
 
-        $html = $this->get('/product/' . $product->slug)->assertOk()->getContent();
+        $html = $this->get('/product/'.$product->slug)->assertOk()->getContent();
 
         foreach ($product->images as $image) {
             $this->assertStringContainsString($image->path, $html);
@@ -184,7 +184,7 @@ class CatalogSeoTest extends TestCase
         $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
         $product->images()->where('is_primary', false)->delete();
 
-        $this->get('/product/' . $product->slug)
+        $this->get('/product/'.$product->slug)
             ->assertOk()
             ->assertDontSee('aria-label="Кадр 1"', escape: false);
     }
@@ -199,10 +199,31 @@ class CatalogSeoTest extends TestCase
             ->assertDontSee('>Состав<', escape: false);
     }
 
-    public function test_pro_product_shows_active_ingredients(): void
+    public function test_pro_product_shows_description(): void
     {
         $this->get('/product/keratoliticheskiy-gel-dlya-stop')
             ->assertOk()
-            ->assertSee('Действующие вещества');
+            ->assertSee('Описание');
+    }
+
+    public function test_product_description_is_visible_and_escaped_without_internal_fields(): void
+    {
+        $product = Product::where('slug', 'skrab-dlya-tela')->firstOrFail();
+        $product->update([
+            'sku' => 'PRIVATE-PRODUCT-001',
+            'active_ingredients' => 'Описание <script>alert("xss")</script>',
+            'rating' => 4.8,
+            'reviews_count' => 10,
+            'reviews_source' => 'PRIVATE-RATING-SOURCE',
+        ]);
+
+        $this->get('/product/'.$product->slug)
+            ->assertSee('Описание <script>alert("xss")</script>')
+            ->assertDontSee('<script>alert("xss")</script>', escape: false)
+            ->assertDontSee('PRIVATE-PRODUCT-001')
+            ->assertDontSee('PRIVATE-RATING-SOURCE')
+            ->assertDontSee('>Назначение<', escape: false)
+            ->assertDontSee('>Задача<', escape: false)
+            ->assertDontSee('>Артикул<', escape: false);
     }
 }

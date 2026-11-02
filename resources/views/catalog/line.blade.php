@@ -6,12 +6,12 @@
     $bg       = $isPro ? 'var(--color-pro-light)' : ($line->color_bg ?: 'var(--color-shell)');
     $ink      = $isPro ? 'var(--color-pro-blue)' : ($line->color_ink ?: 'var(--color-ink)');
     $text     = $isPro
-        ? 'Отдельная линейка профессиональных товаров для B2B-направления: точные протоколы, развёрнутые описания и указание действующих веществ.'
+        ? 'Профессиональные линейки PRO SKIN и PRO MANICURE / PEDICURE: точные протоколы и уход для мастеров.'
         : $line->description;
 @endphp
 
 @section('title', ($isPro ? 'LIVSI PRO' : ($line->seo_title ?: 'Линейка ' . $line->title)) . ' — LIVSI')
-@section('description', $isPro ? $text : ($line->seo_description ?: $text))
+@section('description', ($isPro ? $text : ($line->seo_description ?: $text)) ?? '')
 
 @section('content')
     {{-- Цвет линейки берётся из брендбука и хранится в самой линейке,
@@ -19,7 +19,7 @@
     <section class="py-14 md:py-20" style="background: {{ $bg }}">
         <div class="site-container">
             <div class="eyebrow" style="color: {{ $ink }}">
-                {{ $isPro ? 'Для мастеров' : 'Ароматическая линейка' }}
+                {{ $isPro ? 'Для мастеров' : 'Линейка' }}
             </div>
 
             <h1 class="mt-4 text-5xl md:text-7xl">

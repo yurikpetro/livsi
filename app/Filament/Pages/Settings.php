@@ -9,8 +9,8 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -62,20 +62,27 @@ class Settings extends Page implements HasForms
      * чтобы форма не падала на свежей базе без сидера.
      */
     public const KEYS = [
+        'delivery_calculation_enabled' => false,
+        'delivery_calculation_test' => false,
+        'delivery_origin_address' => '',
+        'delivery_pickup_type' => null,
+        'delivery_origin_points' => [],
+        'delivery_padding_mm' => null,
+        'delivery_packaging_weight_g' => null,
         'free_shipping_threshold' => 100000,
-        'gift_threshold'          => 500000,
-        'topbar_text'             => '',
-        'work_hours'              => '',
-        'manager_email'           => '',
-        'telegram_url'            => '',
-        'whatsapp_url'            => '',
-        'vat_not_payer'           => false,
-        'vat_rate_default'        => null,
-        'vat_codes'               => Vat::DEFAULT_CODES,
-        'reviews_eyebrow'         => 'Отзывы покупателей',
-        'reviews_score'           => '4.9',
-        'reviews_score_caption'   => 'Средняя оценка',
-        'reviews_score_note'      => 'По отзывам покупателей LIVSI',
+        'gift_threshold' => 500000,
+        'topbar_text' => '',
+        'work_hours' => '',
+        'manager_email' => '',
+        'telegram_url' => '',
+        'whatsapp_url' => '',
+        'vat_not_payer' => false,
+        'vat_rate_default' => null,
+        'vat_codes' => Vat::DEFAULT_CODES,
+        'reviews_eyebrow' => 'Отзывы покупателей',
+        'reviews_score' => '4.9',
+        'reviews_score_caption' => 'Средняя оценка',
+        'reviews_score_note' => 'По отзывам покупателей LIVSI',
     ];
 
     public function mount(): void
@@ -93,6 +100,24 @@ class Settings extends Page implements HasForms
     {
         return $schema
             ->components([
+                Section::make('Расчёт доставки')
+                    ->description('СДЭК и Яндекс: товары стоят вертикально в один ряд, ширина суммируется, длина и высота берутся максимальные. Прибавляются запас с каждой стороны и масса упаковки. Укажите проверенные параметры; итоговая коробка должна соответствовать расчёту. Ozon пока рассчитывается вручную.')
+                    ->schema([
+                        Toggle::make('delivery_calculation_enabled')->label('Автоматический расчёт')->live(),
+                        Toggle::make('delivery_calculation_test')->label('Тестировать с временными габаритами')
+                            ->helperText('Разрешает использовать неподтверждённые размеры только при тестовом ключе оплаты. Реальные замеры подтвердите в карточках вариантов, затем выключите этот режим.'),
+                        TextInput::make('delivery_origin_address')->label('Полный адрес отгрузки')->maxLength(500)
+                            ->required(fn (Get $get): bool => (bool) $get('delivery_calculation_enabled')),
+                        Select::make('delivery_pickup_type')->label('Передача перевозчику')
+                            ->options([1 => 'Забор курьером со склада', 2 => 'Сдаём в пункт приёма'])
+                            ->required(fn (Get $get): bool => (bool) $get('delivery_calculation_enabled')),
+                        KeyValue::make('delivery_origin_points')->label('ID пунктов приёма ApiShip по службам')
+                            ->helperText('При самостоятельной сдаче: ключ cdek или yataxi, значение — ID пункта приёма ApiShip.'),
+                        TextInput::make('delivery_padding_mm')->label('Запас упаковки с каждой стороны, мм')->integer()->minValue(0)->maxValue(1000)
+                            ->required(fn (Get $get): bool => (bool) $get('delivery_calculation_enabled')),
+                        TextInput::make('delivery_packaging_weight_g')->label('Масса коробки и защиты, г')->integer()->minValue(0)->maxValue(100000)
+                            ->required(fn (Get $get): bool => (bool) $get('delivery_calculation_enabled')),
+                    ])->columns(2),
                 Section::make('Пороги и промо')
                     ->description('Числа, которые видит покупатель в корзине: прогресс до бесплатной доставки и до подарка. Сами правила — со сроками действия и списком подарков на выбор — в разделе «Промо-правила».')
                     ->schema([

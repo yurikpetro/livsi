@@ -2,32 +2,33 @@
 
 namespace App\Filament\Resources\Products\Schemas;
 
+use App\Filament\Resources\ProductVariants\Schemas\ProductVariantForm;
 use App\Models\Product;
+use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 /**
  * Карточка товара — главный экран, с которым работает заказчик.
  *
- * Сгенерированная версия была нерабочей: поле `documents` осталось от колонки,
- * удалённой миграцией 000011, и сохранение падало с SQL-ошибкой; назначений
- * и задач не было вовсе, хотя это две из трёх осей навигации; линейка
- * вводилась числовым идентификатором.
+ * Внутренний артикул относится к товару; артикулы вариантов задаются отдельно.
  */
 class ProductForm
 {
-    /** Бейдж на карточке — три значения, которые понимает витрина. */
+    /** Бейджи подборок на карточке товара. */
     public const BADGES = [
-        'new'  => 'Новинка',
+        'new' => 'Новинка',
         'best' => 'Бестселлер',
-        'pro'  => 'PRO',
     ];
 
     public static function configure(Schema $schema): Schema
@@ -56,6 +57,13 @@ class ProductForm
                             ->unique(ignoreRecord: true)
                             ->helperText('Часть адреса: /product/скраб-для-тела. Менять у опубликованного товара нельзя — сломаются ссылки.'),
 
+                        TextInput::make('sku')
+                            ->label('Артикул')
+                            ->maxLength(255)
+                            ->unique(ignoreRecord: true)
+                            ->helperText('Для внутреннего учёта. На сайте не отображается.')
+                            ->columnSpanFull(),
+
                         Textarea::make('short_description')
                             ->label('Краткое описание')
                             ->rows(2)
@@ -78,42 +86,42 @@ class ProductForm
                     ])
                     ->columns(2),
 
+                Section::make('Варианты товара')
+                    ->description('Добавляйте и редактируйте варианты здесь. Изменения сохраняются вместе с товаром.')
+                    ->schema([
+                        Repeater::make('variants')
+                            ->hiddenLabel()
+                            ->relationship()
+                            ->schema(ProductVariantForm::components(inline: true))
+                            ->defaultItems(0)
+                            ->addActionLabel('Добавить вариант')
+                            ->deleteAction(fn (Action $action): Action => $action->requiresConfirmation())
+                            ->collapsible()
+                            ->itemLabel(fn (array $state): string => collect([
+                                $state['option_volume'] ?? null,
+                                $state['option_aroma'] ?? null,
+                                $state['sku'] ?? null,
+                            ])->filter()->implode(' · ') ?: 'Новый вариант'),
+                    ])
+                    ->columnSpanFull(),
+
                 Section::make('Навигация по каталогу')
-                    ->description('Три независимые оси: линейка одна, назначений и задач может быть несколько. По ним работают фильтры и меню.')
+                    ->description('Линейка и тип товара определяют его разделы в каталоге.')
                     ->schema([
                         Select::make('product_line_id')
-                            ->label('Ароматическая линейка')
-                            ->relationship('line', 'title')
+                            ->label('Линейка')
+                            ->relationship('line', 'title', fn (Builder $query): Builder => $query->orderBy('sort'))
                             ->searchable()
                             ->preload()
                             ->placeholder('без линейки')
                             ->helperText('У товара ровно одна линейка либо ни одной.'),
 
-                        Toggle::make('is_pro')
-                            ->label('Профессиональный (PRO)')
-                            ->helperText('Отдельный флаг, а не пятая линейка.'),
-
                         Toggle::make('is_bundle')
                             ->label('Набор')
                             ->helperText('Состав набора задаётся отдельно.'),
 
-                        Select::make('purposes')
-                            ->label('Назначение')
-                            ->relationship('purposes', 'title')
-                            ->multiple()
-                            ->preload()
-                            ->helperText('Для чего средство: руки, стопы, лицо, тело, маникюр, педикюр.')
-                            ->columnSpanFull(),
-
-                        Select::make('tasks')
-                            ->label('Задача')
-                            ->relationship('tasks', 'title')
-                            ->multiple()
-                            ->preload()
-                            ->helperText('Что средство делает: увлажнение, очищение, размягчение и так далее.')
-                            ->columnSpanFull(),
                     ])
-                    ->columns(3),
+                    ->columns(2),
 
                 Section::make('Описание и состав')
                     ->schema([
@@ -131,8 +139,9 @@ class ProductForm
                             ->placeholder('24 месяца'),
 
                         Textarea::make('active_ingredients')
-                            ->label('Активные компоненты')
+                            ->label('Описание')
                             ->rows(3)
+                            ->helperText('Подробное описание в карточке товара и быстром просмотре.')
                             ->columnSpanFull(),
 
                         Textarea::make('composition')
@@ -149,34 +158,33 @@ class ProductForm
                     ->columns(3)
                     ->collapsed(),
 
-                Section::make('Отзывы и рейтинг')
-                    ->description('Рейтинг на витрине всегда показывается вместе с площадкой-источником: «★ 4,9 · 326 отзывов на Ozon». Отзывы собраны не на сайте, и выдавать их за свои нельзя.')
+                Section::make('Рекомендации')
                     ->schema([
-                        TextInput::make('rating')
-                            ->label('Оценка')
-                            ->numeric()
-                            ->minValue(1)
-                            ->maxValue(5)
-                            ->step(0.1)
-                            // Оценка без источника на витрине не выводится вообще,
-                            // поэтому три поля обязательны только вместе.
-                            ->live(onBlur: true)
-                            ->requiredWith('reviews_count,reviews_source'),
+                        Toggle::make('auto_recommendations')
+                            ->label('Автоматический подбор рекомендаций')
+                            ->default(true)
+                            ->live()
+                            ->helperText('Сначала товары той же линейки, затем остальные. Выключите, чтобы выбрать рекомендации вручную.'),
 
-                        TextInput::make('reviews_count')
-                            ->label('Количество отзывов')
-                            ->numeric()
-                            ->minValue(0)
-                            ->requiredWith('rating'),
-
-                        TextInput::make('reviews_source')
-                            ->label('Площадка-источник')
-                            ->maxLength(100)
-                            ->placeholder('Ozon')
-                            ->requiredWith('rating')
-                            ->helperText('Обязательно, если указана оценка.'),
-                    ])
-                    ->columns(3),
+                        Select::make('recommended_product_ids')
+                            ->label('Рекомендуемые товары')
+                            ->multiple()
+                            ->searchable()
+                            ->allowHtml()
+                            ->afterContent(view('filament.forms.product-recommendation-styles'))
+                            ->placeholder('Название или артикул товара')
+                            ->searchPrompt('Введите название или артикул')
+                            ->searchDebounce(300)
+                            ->options(fn (?Product $record): array => self::recommendationOptions($record))
+                            ->getSearchResultsUsing(fn (string $search, ?Product $record): array => self::recommendationOptions($record, $search))
+                            ->getOptionLabelsUsing(fn (array $values, ?Product $record): array => self::recommendationProductLabels($record, $values))
+                            ->maxItems(3)
+                            ->nestedRecursiveRules([
+                                fn (?Product $record) => Rule::in(self::recommendationProducts($record)->pluck('id')->all()),
+                            ])
+                            ->visible(fn (Get $get): bool => ! $get('auto_recommendations'))
+                            ->helperText('Начните вводить название или внутренний артикул и выберите товар. До трёх товаров в порядке выбора. Пустой список скрывает рекомендации.'),
+                    ]),
 
                 Section::make('Публикация, налоги и SEO')
                     ->schema([
@@ -214,5 +222,45 @@ class ProductForm
                     ->columns(3)
                     ->collapsed(),
             ]);
+    }
+
+    /** @return array<int, string> */
+    private static function recommendationOptions(?Product $record, string $search = ''): array
+    {
+        $search = mb_strtolower(trim($search));
+
+        return self::recommendationProducts($record)
+            ->with('images')
+            ->get(['id', 'title', 'sku'])
+            ->filter(fn (Product $product): bool => $search === '' || str_contains(mb_strtolower($product->title.' '.$product->sku), $search))
+            ->take(50)
+            ->mapWithKeys(fn (Product $product): array => [
+                $product->id => view('filament.forms.product-recommendation-option', ['product' => $product])->render(),
+            ])
+            ->all();
+    }
+
+    /**
+     * @param  array<int, int|string>  $values
+     * @return array<int, string>
+     */
+    private static function recommendationProductLabels(?Product $record, array $values): array
+    {
+        return self::recommendationProducts($record)
+            ->whereKey($values)
+            ->get(['id', 'title', 'sku'])
+            ->mapWithKeys(fn (Product $product): array => [
+                $product->id => e($product->title.($product->sku ? ' · '.$product->sku : '')),
+            ])
+            ->all();
+    }
+
+    /** @return Builder<Product> */
+    private static function recommendationProducts(?Product $record): Builder
+    {
+        return Product::active()
+            ->when($record, fn (Builder $query): Builder => $query->whereKeyNot($record->getKey()))
+            ->orderBy('sort')
+            ->orderBy('id');
     }
 }

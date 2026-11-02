@@ -81,7 +81,9 @@ class ProductVariantsTable
                 Filter::make('without_dimensions')
                     ->label('Без веса или габаритов')
                     ->query(fn (Builder $query) => $query->where(
-                        fn (Builder $q) => $q->whereNull('weight_g')
+                        fn (Builder $q) => $q->where('dimensions_verified', false)
+                            ->orWhere('weight_g', '<=', 0)->orWhere('length_mm', '<=', 0)->orWhere('width_mm', '<=', 0)->orWhere('height_mm', '<=', 0)
+                            ->orWhereNull('weight_g')
                             ->orWhereNull('length_mm')
                             ->orWhereNull('width_mm')
                             ->orWhereNull('height_mm'),

@@ -63,7 +63,7 @@ class CatalogTest extends TestCase
         $this->assertSame(2, $this->productCount($response->getContent()));
     }
 
-    /** PRO — это флаг на товаре, а не пятая линейка. */
+    /** Общая подборка PRO объединяет профессиональные линейки. */
     public function test_pro_tab_returns_only_professional_products(): void
     {
         $response = $this->get('/catalog?tab=pro');
@@ -88,7 +88,7 @@ class CatalogTest extends TestCase
     {
         $product = Product::where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
 
-        $this->get('/product/' . $product->slug)
+        $this->get('/product/'.$product->slug)
             ->assertOk()
             ->assertSee($product->title)
             ->assertSee('180 мл')
@@ -116,7 +116,7 @@ class CatalogTest extends TestCase
             $variant->quota->update(['allocated' => 0]);
         }
 
-        $this->get('/product/' . $product->slug)
+        $this->get('/product/'.$product->slug)
             ->assertOk()
             ->assertSee('Нет в наличии');
     }

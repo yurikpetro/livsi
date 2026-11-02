@@ -55,6 +55,8 @@ class CatalogSeeder extends Seeder
                 'description' => 'Про тепло, комфорт и уют. Тёплые и пряные ароматы, более насыщенные текстуры и плотный уход.'],
             ['code' => 'base',  'title' => 'BASE',  'subtitle' => 'базовый',          'color_bg' => '#f5e2b7', 'color_ink' => '#cc8c34', 'sort' => 40,
                 'description' => 'Базовый уход без ароматической доминанты. Универсальные продукты, которые подходят к любой другой линейке.'],
+            ['code' => 'pro-skin', 'title' => 'PRO SKIN', 'subtitle' => null, 'color_bg' => '#99d0f7', 'color_ink' => '#111111', 'sort' => 50],
+            ['code' => 'pro-manicure-pedicure', 'title' => 'PRO MANICURE / PEDICURE', 'subtitle' => null, 'color_bg' => '#d0dd56', 'color_ink' => '#111111', 'sort' => 60],
         ];
 
         $out = [];
@@ -190,9 +192,7 @@ class CatalogSeeder extends Seeder
                 'slug' => 'keratoliticheskiy-gel-dlya-stop',
                 'title' => 'Кератолитический гель для стоп',
                 'short' => 'Точное действие для контролируемого педикюра',
-                'line' => null,
-                'is_pro' => true,
-                'badge' => 'pro',
+                'line' => 'pro-manicure-pedicure',
                 'aroma' => 'профессиональная формула',
                 'effect' => 'Размягчение гиперкератоза',
                 'rating' => 4.9,

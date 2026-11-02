@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Services\FavoriteService;
 use App\Services\SocialAuthService;
+use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -31,8 +32,7 @@ class YandexAuthController extends Controller
         private readonly YandexId $yandex,
         private readonly SocialAuthService $accounts,
         private readonly FavoriteService $favorites,
-    ) {
-    }
+    ) {}
 
     public function redirect(Request $request): RedirectResponse
     {
@@ -55,7 +55,7 @@ class YandexAuthController extends Controller
     public function callback(Request $request): RedirectResponse
     {
         $expected = $request->session()->pull(self::STATE);
-        $orderId  = $request->session()->pull(self::ATTACH_ORDER);
+        $orderId = $request->session()->pull(self::ATTACH_ORDER);
 
         $back = $this->backTo($orderId);
 
@@ -72,7 +72,7 @@ class YandexAuthController extends Controller
 
         try {
             $profile = $this->yandex->profile((string) $request->query('code'));
-            $user    = $this->accounts->login($profile);
+            $user = $this->accounts->login($profile);
         } catch (Throwable $e) {
             Log::error('Вход через Яндекс не удался.', ['error' => $e->getMessage()]);
 
@@ -91,7 +91,7 @@ class YandexAuthController extends Controller
             $this->accounts->attachOrder($user, $order);
         }
 
-        return $back->with('status', 'Аккаунт создан, заказ сохранён.');
+        return $back->with('status', $orderId ? 'Вы вошли, заказ сохранён.' : 'Вы вошли в аккаунт.');
     }
 
     public function logout(Request $request): RedirectResponse
@@ -114,7 +114,7 @@ class YandexAuthController extends Controller
     private function verifiedOrder(Request $request): ?Order
     {
         $number = $request->string('order')->trim()->value();
-        $token  = $request->string('token')->value();
+        $token = $request->string('token')->value();
 
         if ($number === '' || $token === '') {
             return null;
@@ -140,7 +140,7 @@ class YandexAuthController extends Controller
      */
     private function failure(Throwable $e): string
     {
-        return str_contains($e->getMessage(), 'занят')
+        return $e instanceof DomainException || str_contains($e->getMessage(), 'занят')
             ? $e->getMessage()
             : 'Войти через Яндекс не получилось. Попробуйте позже.';
     }

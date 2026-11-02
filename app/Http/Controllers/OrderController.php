@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Auth\VkId;
 use App\Auth\YandexId;
 use App\Models\Order;
 use App\Payments\PaymentGateway;
 use App\Services\PaymentService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -16,8 +18,8 @@ class OrderController extends Controller
         private readonly PaymentGateway $gateway,
         private readonly PaymentService $payments,
         private readonly YandexId $yandex,
-    ) {
-    }
+        private readonly VkId $vk,
+    ) {}
 
     /**
      * Заказ по ссылке или из кабинета.
@@ -30,12 +32,17 @@ class OrderController extends Controller
      * Сравнение токена постоянное по времени: обычное сравнение строк
      * утекает информацию о том, сколько символов совпало.
      */
-    public function show(Request $request, string $order): View
+    public function show(Request $request, string $order): View|RedirectResponse
     {
         $record = Order::with('items')->where('number', $order)->first();
 
         if (! $record || ! $this->allowed($request, $record)) {
             throw new NotFoundHttpException;
+        }
+
+        if (! $request->user() && $record->user_id === null && $this->vk->isConfigured()
+            && $canonicalUrl = $this->vk->canonicalPageUrl($request)) {
+            return redirect()->to($canonicalUrl);
         }
 
         $payment = $record->lastPayment();
@@ -45,17 +52,19 @@ class OrderController extends Controller
         // сразу после того, как заплатил.
         if ($payment && ! $payment->isFinal() && $this->gateway->isConfigured()) {
             $payment = $this->gateway->refreshStatus($payment);
-            $record  = $this->payments->sync($payment);
+            $record = $this->payments->sync($payment);
             $record->load('items');
         }
 
         return view('pages.order', [
-            'order'   => $record,
+            'order' => $record,
             'payment' => $payment,
             // Без ключей провайдера кнопка входа ведёт в тупик — не показываем.
-            'canLinkAccount' => $this->yandex->isConfigured(),
+            'canLinkAccount' => $this->yandex->isConfigured() || $this->vk->isConfigured(),
+            'yandexReady' => $this->yandex->isConfigured(),
+            'vkReady' => $this->vk->isConfigured(),
             // Заказ доступен по токену — индексировать его нельзя.
-            'robots'  => 'noindex, nofollow',
+            'robots' => 'noindex, nofollow',
         ]);
     }
 

@@ -92,6 +92,9 @@
                         </div>
 
                         <div class="modal-details">
+                            @if (filled($product->active_ingredients))
+                                <section><h3>Описание</h3><p class="whitespace-pre-line">{{ $product->active_ingredients }}</p></section>
+                            @endif
                             @foreach (['Состав' => $product->composition, 'Применение' => $product->application] as $label => $text)
                                 <section><h3>{{ $label }}</h3><p>{{ $text ?: 'Информация уточняется. Следуйте инструкции на упаковке.' }}</p></section>
                             @endforeach

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\Auth\VkAuthController;
 use App\Http\Controllers\Auth\YandexAuthController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CatalogController;
@@ -8,12 +9,14 @@ use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\CityGeocodeController;
 use App\Http\Controllers\DeclarationController;
 use App\Http\Controllers\DeliveryPointsController;
+use App\Http\Controllers\DeliveryQuoteController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LeadRequestController;
 use App\Http\Controllers\LegalPageController;
 use App\Http\Controllers\LineController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\OzonClientCheckController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\PrintOrderController;
@@ -67,6 +70,12 @@ Route::get('/contacts', [PageController::class, 'contacts'])->name('contacts');
 
 // Оформление заказа и оплата.
 Route::get('/checkout', [CheckoutController::class, 'index'])->name('checkout.index');
+Route::post('/delivery/quote', DeliveryQuoteController::class)
+    ->middleware('throttle:delivery-quotes')
+    ->name('delivery.quote');
+Route::post('/delivery/ozon/check-client', OzonClientCheckController::class)
+    ->middleware('throttle:ozon-clients')
+    ->name('delivery.ozon.check-client');
 Route::get('/delivery/points', DeliveryPointsController::class)
     ->middleware('throttle:delivery-points')
     ->name('delivery.points');
@@ -122,6 +131,20 @@ Route::post('/auth/yandex', [YandexAuthController::class, 'redirect'])
 // Адрес возврата зарегистрирован у провайдера посимвольно — менять нельзя.
 Route::get('/auth/yandex/callback', [YandexAuthController::class, 'callback'])
     ->name('auth.yandex.callback');
+
+Route::post('/auth/vk', [VkAuthController::class, 'redirect'])
+    ->defaults('provider', 'vk')
+    ->middleware(['guest', 'throttle:20,60'])
+    ->name('auth.vk');
+
+Route::post('/auth/mail', [VkAuthController::class, 'redirect'])
+    ->defaults('provider', 'mail')
+    ->middleware(['guest', 'throttle:20,60'])
+    ->name('auth.mail');
+
+Route::get('/auth/vk/callback', [VkAuthController::class, 'callback'])
+    ->middleware('guest')
+    ->name('auth.vk.callback');
 
 Route::post('/logout', [YandexAuthController::class, 'logout'])->name('logout');
 

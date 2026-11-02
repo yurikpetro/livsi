@@ -15,6 +15,20 @@ class CatalogController extends Controller
             return redirect($query->urlForCategory(['line' => $query->line]));
         }
 
+        if ($query->tab === 'pro') {
+            $purposes = $query->purposes;
+            sort($purposes);
+            $line = match ($purposes) {
+                ['body', 'face'] => 'pro-skin',
+                ['manicure', 'pedicure'] => 'pro-manicure-pedicure',
+                default => null,
+            };
+
+            if ($line !== null) {
+                return redirect($query->urlForCategory(['line' => $line]), 301);
+            }
+        }
+
         $facets = $query->facets();
 
         return view('catalog.index', [
@@ -44,12 +58,7 @@ class CatalogController extends Controller
 
         $product->load(['line', 'images', 'variants.quota', 'purposes', 'tasks', 'reviews', 'declarations']);
 
-        $related = Product::active()
-            ->where('id', '!=', $product->id)
-            ->when($product->product_line_id, fn ($q) => $q->where('product_line_id', $product->product_line_id))
-            ->with(['line', 'images', 'variants.quota'])
-            ->take(4)
-            ->get();
+        $related = $product->recommendedProducts();
 
         return view('catalog.show', compact('product', 'related'));
     }

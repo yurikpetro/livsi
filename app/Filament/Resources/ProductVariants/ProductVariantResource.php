@@ -18,6 +18,8 @@ class ProductVariantResource extends Resource
 {
     protected static ?string $model = ProductVariant::class;
 
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSquares2x2;
 
     protected static string|\UnitEnum|null $navigationGroup = 'Каталог';

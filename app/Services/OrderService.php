@@ -57,7 +57,7 @@ class OrderService
                 'number' => 'tmp-'.Str::random(24),
                 'items_total' => $subtotal,
                 'discount_total' => $discount,
-                'total' => $subtotal - $discount,
+                'total' => $subtotal - $discount + (int) ($customer['delivery_price'] ?? 0),
                 'gift_variant_id' => $giftValid ? $gift->product_variant_id : null,
                 'status' => Order::STATUS_AWAITING_PAYMENT,
                 'access_token' => Str::random(48),

@@ -6,9 +6,11 @@ use App\Http\Requests\StoreOrderRequest;
 use App\Payments\PaymentGateway;
 use App\Services\ApiShipClient;
 use App\Services\CartService;
+use App\Services\DeliveryQuoteService;
 use App\Services\DeliverySelection;
 use App\Services\OrderMailer;
 use App\Services\OrderService;
+use App\Services\OzonDeliveryService;
 use App\Services\PaymentService;
 use App\Services\PromoService;
 use App\Support\Text;
@@ -16,6 +18,7 @@ use App\Support\Utm;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class CheckoutController extends Controller
@@ -28,6 +31,8 @@ class CheckoutController extends Controller
         private readonly OrderMailer $mailer,
         private readonly ApiShipClient $apiShip,
         private readonly PromoService $promos,
+        private readonly DeliveryQuoteService $quotes,
+        private readonly OzonDeliveryService $ozon,
     ) {}
 
     public function index(Request $request)
@@ -41,11 +46,14 @@ class CheckoutController extends Controller
         return view('pages.checkout', [
             'cart' => $cart,
             'gateway' => $this->gateway,
+            'deliveryCalculationEnabled' => $this->quotes->enabled(),
+            'deliveryCalculationTest' => $this->quotes->testing(),
             'remainingToFreeShipping' => $this->promos->remainingToFreeShipping($cart->subtotal()),
             'pointMethods' => array_values(array_filter(
                 DeliverySelection::pickupMethods(),
                 fn (string $method) => ($key = DeliverySelection::providerKey($method)) && $this->apiShip->isProviderActive($key),
             )),
+            'ozonClientCheckEnabled' => $this->apiShip->isProviderActive('ozondel'),
             'mapsApiKey' => (string) config('livsi.delivery.maps_api_key'),
             'suggestApiKey' => (string) config('livsi.delivery.suggest_api_key'),
             // Личная страница: в поиске ей делать нечего.
@@ -61,7 +69,6 @@ class CheckoutController extends Controller
             return redirect()->route('cart.index')->with('status', 'Корзина пуста.');
         }
 
-        $point = null;
         $pointId = $request->validated('delivery_point_id');
         $requestedMethod = $request->validated('delivery_method');
         $pointMethod = $requestedMethod === DeliverySelection::PICKUP_POINT
@@ -69,21 +76,35 @@ class CheckoutController extends Controller
             : $requestedMethod;
         $providerKey = DeliverySelection::providerKey($pointMethod);
 
-        if ($pointId && $providerKey && $this->apiShip->isProviderActive($providerKey)) {
+        if ($providerKey === 'ozondel') {
             try {
-                $point = $this->apiShip->point(
-                    $pointId,
-                    $request->validated('delivery_city'),
-                    $providerKey,
-                    $request->validated('delivery_region'),
-                );
+                $canDeliver = $this->ozon->canDeliver($request->validated('phone'), $request->session()->getId());
+            } catch (ValidationException $exception) {
+                throw $exception;
             } catch (Throwable $exception) {
-                Log::warning('Не удалось подтвердить ПВЗ ApiShip, заказ остаётся в ручном режиме.', [
-                    'provider' => $providerKey,
-                    'error_type' => $exception::class,
-                ]);
+                return back()->withInput()->withErrors(['delivery_point_id' => 'Не удалось проверить доставку Ozon. Повторите проверку или выберите другую службу.']);
+            }
+            if (! $canDeliver) {
+                return back()->withInput()->withErrors(['delivery_point_id' => 'Ozon не подтвердил доставку на этот номер. Проверьте номер в аккаунте Ozon или выберите другую службу.']);
             }
         }
+
+        if ($requestedMethod === DeliverySelection::STAVROPOL_COURIER) {
+            return back()->withInput()->withErrors(['delivery_method' => 'Курьерская доставка временно недоступна. Выберите пункт выдачи.']);
+        }
+        if (! $this->quotes->enabled()) {
+            return back()->withInput()->withErrors(['delivery_quote' => 'Расчёт доставки временно недоступен. Попробуйте позже.']);
+        }
+        if (! $request->filled('delivery_quote_token')) {
+            return back()->withInput()->withErrors(['delivery_quote' => 'Выберите пункт выдачи и дождитесь расчёта доставки перед оплатой.']);
+        }
+        $quote = $this->quotes->accept($request->validated('delivery_quote_token'), $cart, [
+            'delivery_city' => $request->validated('delivery_city'),
+            'delivery_region' => $request->validated('delivery_region') ?: null,
+            'delivery_point_method' => $pointMethod,
+            'delivery_point_id' => $pointId,
+        ], $request->session()->getId());
+        $point = $quote['point'];
 
         try {
             $order = $this->orders->createFromCart($cart, [
@@ -92,7 +113,9 @@ class CheckoutController extends Controller
                 'customer_phone' => Text::utf8($request->string('phone')->trim()->value()),
                 'customer_email' => Text::utf8($request->string('email')->trim()->value()),
                 'comment' => Text::utf8($request->string('comment')->trim()->value()) ?: null,
-                'delivery_method' => $point ? $pointMethod : $requestedMethod,
+                'delivery_method' => $pointMethod,
+                'delivery_price' => $quote['price'],
+                'delivery_quote' => $quote,
                 'delivery_country_code' => config('livsi.delivery.country_code'),
                 'delivery_city' => Text::utf8($point['city'] ?? $request->string('delivery_city')->trim()->value()),
                 'delivery_region' => Text::utf8($request->string('delivery_region')->trim()->value()) ?: null,

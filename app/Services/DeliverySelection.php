@@ -35,7 +35,7 @@ class DeliverySelection
         return match ($method) {
             self::CDEK_POINT => 'cdek',
             self::YANDEX_POINT => 'yataxi',
-            self::OZON_POINT => 'ozonlog',
+            self::OZON_POINT => in_array('ozondel', config('livsi.apiship.active_providers', []), true) ? 'ozondel' : 'ozonlog',
             default => null,
         };
     }

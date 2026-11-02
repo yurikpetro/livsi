@@ -16,27 +16,36 @@
                 <form method="POST" action="{{ route('auth.yandex') }}" class="mt-7">
                     @csrf
                     <button type="submit" class="btn btn-dark auth-method">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             stroke-width="1.6" aria-hidden="true">
-                            <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path>
-                            <path d="M4.5 20a7.5 7.5 0 0 1 15 0"></path>
-                        </svg>
+                        <img src="{{ asset('img/auth-yandex.svg') }}?v=2" class="auth-method-icon" width="28" height="28" alt="" aria-hidden="true">
                         Войти через Яндекс
                     </button>
                 </form>
-            @else
+            @endif
+
+            @if ($vkReady)
+                <div class="mt-3 grid gap-3">
+                    @foreach (['vk' => 'ВКонтакте', 'mail' => 'Mail.ru'] as $provider => $label)
+                        <form method="POST" action="{{ route('auth.' . $provider) }}">
+                            @csrf
+                            <button type="submit" class="btn btn-dark auth-method">
+                                <img src="{{ asset('img/auth-' . $provider . '.svg') }}?v=2" class="auth-method-icon" width="28" height="28" alt="" aria-hidden="true">
+                                Войти через {{ $label }}
+                            </button>
+                        </form>
+                    @endforeach
+                </div>
+            @endif
+
+            @if (! $yandexReady && ! $vkReady)
                 <p class="mt-7 border-l-4 border-ink bg-shell px-5 py-4 text-sm">
                     Вход временно недоступен. Оформить заказ можно без него.
                 </p>
             @endif
 
-            {{-- Основным способом заказчик назвал код из СМС (ответ, п. 1.1),
-                 VK — вторым. Пишем о них словами: выключенная кнопка выглядит
-                 как рабочая, по ней жмут и идут в поддержку. --}}
             <div class="auth-divider">Скоро</div>
 
             <p class="auth-soon">
-                Вход по коду из СМС и через ВКонтакте
+                Вход по коду из СМС
             </p>
 
             <p class="auth-note">

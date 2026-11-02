@@ -74,7 +74,11 @@ class ImagesRelationManager extends RelationManager
             ->recordTitleAttribute('path')
             ->defaultSort('sort')
             ->columns([
-                ImageColumn::make('path')->label('Фото')->square(),
+                ImageColumn::make('path')
+                    ->label('Фото')
+                    ->disk('public_images')
+                    ->visibility('public')
+                    ->square(),
                 TextColumn::make('alt')->label('Альт-текст')->wrap()->placeholder('не заполнен'),
                 IconColumn::make('is_primary')->label('Главное')->boolean(),
                 TextColumn::make('sort')->label('Порядок'),

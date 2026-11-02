@@ -31,10 +31,10 @@
             <i>Быстрый просмотр</i>
         </button>
 
-        @if ($product->badge)
+        @if (in_array($product->badge, ['new', 'best'], true))
             <span style="background: {{ $product->line?->color_bg ?? '#a8d8ef' }}" class="pointer-events-none absolute left-3 top-3 z-[2] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em]
                 ">
-                {{ ['new' => 'Новинка', 'best' => 'Бестселлер', 'pro' => 'PRO'][$product->badge] ?? $product->badge }}
+                {{ ['new' => 'Новинка', 'best' => 'Бестселлер'][$product->badge] }}
             </span>
         @endif
 

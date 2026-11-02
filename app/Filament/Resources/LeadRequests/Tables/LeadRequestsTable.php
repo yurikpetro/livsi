@@ -16,6 +16,7 @@ class LeadRequestsTable
     {
         return $table
             ->defaultSort('created_at', 'desc')
+            ->deferFilters(false)
             ->columns([
                 TextColumn::make('created_at')
                     ->label('Получена')
@@ -41,30 +42,25 @@ class LeadRequestsTable
                 TextColumn::make('subject')
                     ->label('Предмет')
                     ->state(fn (LeadRequest $record) => $record->type === LeadRequest::TYPE_CONTRACT
-                        ? trim(($record->categoryLabel() ?? '—') . ' · ' . ($record->planned_volume ?? 'объём не указан'))
-                        : trim(($record->city ?? '—') . ' · ' . ($record->salesFormatLabel() ?? 'формат не указан'))),
+                        ? trim(($record->categoryLabel() ?? '—').' · '.($record->planned_volume ?? 'объём не указан'))
+                        : trim(($record->city ?? '—').' · '.($record->salesFormatLabel() ?? 'формат не указан'))),
 
                 TextColumn::make('status')
                     ->label('Статус')
                     ->badge()
                     ->formatStateUsing(fn (string $state) => LeadRequest::statuses()[$state] ?? $state)
                     ->color(fn (string $state) => match ($state) {
-                        LeadRequest::STATUS_NEW         => 'warning',
+                        LeadRequest::STATUS_NEW => 'warning',
                         LeadRequest::STATUS_IN_PROGRESS => 'info',
-                        LeadRequest::STATUS_DONE        => 'success',
-                        LeadRequest::STATUS_REJECTED    => 'danger',
-                        default                         => 'gray',
+                        LeadRequest::STATUS_DONE => 'success',
+                        LeadRequest::STATUS_REJECTED => 'danger',
+                        default => 'gray',
                     }),
             ])
             ->filters([
                 SelectFilter::make('type')
                     ->label('Тип заявки')
                     ->options(LeadRequest::types()),
-
-                SelectFilter::make('status')
-                    ->label('Статус')
-                    ->options(LeadRequest::statuses())
-                    ->multiple(),
             ])
             ->recordActions([
                 EditAction::make(),

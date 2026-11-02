@@ -23,6 +23,8 @@ class ProductsTable
             ->columns([
                 ImageColumn::make('primary_image')
                     ->label('Фото')
+                    ->disk('public_images')
+                    ->visibility('public')
                     ->state(fn (Product $record) => $record->primaryImage()?->path)
                     ->square(),
 
@@ -38,13 +40,17 @@ class ProductsTable
                     ->badge()
                     ->sortable(),
 
+                TextColumn::make('sku')
+                    ->label('Артикул')
+                    ->searchable()
+                    ->toggleable(),
+
                 TextColumn::make('badge')
                     ->label('Бейдж')
                     ->badge()
                     ->formatStateUsing(fn (?string $state) => match ($state) {
-                        'new'   => 'Новинка',
-                        'best'  => 'Бестселлер',
-                        'pro'   => 'PRO',
+                        'new' => 'Новинка',
+                        'best' => 'Бестселлер',
                         default => '—',
                     }),
 
@@ -57,10 +63,6 @@ class ProductsTable
                     ->label('Вариантов')
                     ->counts('variants'),
 
-                IconColumn::make('is_pro')
-                    ->label('PRO')
-                    ->boolean(),
-
                 IconColumn::make('is_bundle')
                     ->label('Набор')
                     ->boolean(),
@@ -68,13 +70,6 @@ class ProductsTable
                 IconColumn::make('is_active')
                     ->label('Активен')
                     ->boolean(),
-
-                TextColumn::make('rating')
-                    ->label('Рейтинг')
-                    ->formatStateUsing(fn (Product $record) => $record->rating
-                        ? $record->rating . ' · ' . $record->reviews_count . ' на ' . $record->reviews_source
-                        : '—')
-                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('slug')
                     ->label('Адрес (slug)')
@@ -86,7 +81,6 @@ class ProductsTable
                     ->label('Линейка')
                     ->relationship('line', 'title'),
 
-                TernaryFilter::make('is_pro')->label('Для мастеров (PRO)'),
                 TernaryFilter::make('is_bundle')->label('Наборы'),
                 TernaryFilter::make('is_active')->label('Активен'),
             ])

@@ -27,7 +27,7 @@ class YandexAuthTest extends TestCase
         parent::setUp();
 
         config([
-            'livsi.yandex.client_id'     => 'test-client',
+            'livsi.yandex.client_id' => 'test-client',
             'livsi.yandex.client_secret' => 'test-secret',
         ]);
     }
@@ -37,14 +37,14 @@ class YandexAuthTest extends TestCase
     private function order(array $overrides = []): Order
     {
         return Order::create(array_merge([
-            'number'         => 'L-' . Str::upper(Str::random(6)),
-            'customer_name'  => 'Иван',
+            'number' => 'L-'.Str::upper(Str::random(6)),
+            'customer_name' => 'Иван',
             'customer_phone' => '+79001112233',
             'customer_email' => 'ivan@example.com',
-            'items_total'    => 100000,
-            'total'          => 100000,
-            'consent_at'     => now(),
-            'access_token'   => Str::random(48),
+            'items_total' => 100000,
+            'total' => 100000,
+            'consent_at' => now(),
+            'access_token' => Str::random(48),
         ], $overrides));
     }
 
@@ -53,11 +53,11 @@ class YandexAuthTest extends TestCase
     {
         Http::fake([
             '*oauth.yandex.ru/token*' => Http::response(['access_token' => 'token-1']),
-            '*login.yandex.ru/info*'  => Http::response(array_merge([
-                'id'            => '1234567',
+            '*login.yandex.ru/info*' => Http::response(array_merge([
+                'id' => '1234567',
                 'default_email' => 'buyer@yandex.ru',
-                'first_name'    => 'Иван',
-                'last_name'     => 'Петров',
+                'first_name' => 'Иван',
+                'last_name' => 'Петров',
                 'default_phone' => ['id' => 1, 'number' => '+7 900 111-22-33'],
             ], $info)),
         ]);
@@ -72,7 +72,7 @@ class YandexAuthTest extends TestCase
         ] : []);
 
         return $this->get(route('auth.yandex.callback', [
-            'code'  => 'auth-code',
+            'code' => 'auth-code',
             'state' => $this->stateFrom($start),
         ]));
     }
@@ -156,6 +156,20 @@ class YandexAuthTest extends TestCase
         $this->assertSame(1, SocialAccount::count());
     }
 
+    public function test_yandex_login_reuses_a_vk_customer_by_provider_phone_without_email(): void
+    {
+        $customer = User::factory()->create(['email' => 'buyer@mail.ru', 'phone' => '+79001112233']);
+        $customer->socialAccounts()->create(['provider' => 'vk', 'provider_user_id' => 'vk-123', 'email' => $customer->email, 'phone' => '+79001112233']);
+        $this->fakeYandex(['default_email' => null]);
+
+        $this->signIn()->assertRedirect(route('home'))->assertSessionHas('status', 'Вы вошли в аккаунт.');
+
+        $this->assertAuthenticatedAs($customer);
+        $this->assertDatabaseCount('users', 1);
+        $this->assertDatabaseCount('social_accounts', 2);
+        Http::assertSentCount(2);
+    }
+
     /**
      * Подделанный state не должен впускать.
      *
@@ -198,18 +212,12 @@ class YandexAuthTest extends TestCase
 
     // ─────────────────────────────────── чужое не отдаём
 
-    /**
-     * Совпадение почты не делает человека владельцем аккаунта.
-     *
-     * Провайдер ручается только за свой идентификатор. Завести у него ящик
-     * с чужим адресом и войти в чужой кабинет — самый дешёвый способ угона,
-     * а для админской почты это отдало бы админку.
-     */
-    public function test_matching_email_does_not_take_over_an_existing_account(): void
+    /** Администраторов нельзя связывать через клиентский вход. */
+    public function test_matching_email_does_not_take_over_an_admin_account(): void
     {
         $admin = User::create([
-            'name'     => 'Администратор',
-            'email'    => 'buyer@yandex.ru',
+            'name' => 'Администратор',
+            'email' => 'buyer@yandex.ru',
             'password' => 'секрет',
             'is_admin' => true,
         ]);
@@ -236,7 +244,7 @@ class YandexAuthTest extends TestCase
         ]);
 
         $this->get(route('auth.yandex.callback', [
-            'code'  => 'auth-code',
+            'code' => 'auth-code',
             'state' => $this->stateFrom($start),
         ]));
 
@@ -256,19 +264,21 @@ class YandexAuthTest extends TestCase
         $this->assertSame($owner->id, $order->fresh()->user_id);
     }
 
-    /** Телефон уникален: занятый чужим аккаунтом просто не записывается. */
-    public function test_phone_taken_by_someone_else_is_not_stolen(): void
+    /** Старый неподтверждённый контакт не даёт входа и не создаёт дубликат. */
+    public function test_legacy_phone_requires_login_with_the_original_provider(): void
     {
         User::create([
-            'name'  => 'Кто-то',
+            'name' => 'Кто-то',
             'email' => 'someone@example.com',
             'phone' => '+79001112233',
         ]);
 
         $this->fakeYandex();
-        $this->signIn();
+        $this->signIn()->assertSessionHas('status', 'Этот телефон уже указан в аккаунте. Войдите прежним способом, чтобы подтвердить привязку.');
 
-        $this->assertNull(User::where('email', 'buyer@yandex.ru')->sole()->phone);
+        $this->assertGuest();
+        $this->assertDatabaseCount('users', 1);
+        $this->assertDatabaseCount('social_accounts', 0);
     }
 
     /** Покупатель не должен попадать в Back Office. */

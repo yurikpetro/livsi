@@ -2,16 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Auth\VkId;
 use App\Auth\YandexId;
 use App\Models\Order;
 use App\Services\CartService;
 use App\Support\Phone;
 use App\Support\Text;
+use Closure;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Closure;
 
 /**
  * Личный кабинет покупателя.
@@ -26,28 +27,30 @@ use Closure;
  */
 class AccountController extends Controller
 {
-    public function __construct(private readonly CartService $carts)
-    {
-    }
+    public function __construct(private readonly CartService $carts) {}
 
     /**
      * Страница входа.
      *
-     * Пока способ один — Яндекс. Вход по коду из СМС заказчик назвал
-     * основным, но за ним договор с провайдером; место под него здесь же.
+     * Вход по коду из СМС ждёт подключения провайдера.
      */
-    public function login(YandexId $yandex): View
+    public function login(Request $request, YandexId $yandex, VkId $vk): View|RedirectResponse
     {
+        if ($vk->isConfigured() && $canonicalUrl = $vk->canonicalPageUrl($request)) {
+            return redirect()->to($canonicalUrl);
+        }
+
         return view('pages.login', [
             'yandexReady' => $yandex->isConfigured(),
-            'robots'      => 'noindex, nofollow',
+            'vkReady' => $vk->isConfigured(),
+            'robots' => 'noindex, nofollow',
         ]);
     }
 
     public function index(Request $request): View
     {
         return view('pages.account', [
-            'user'   => $request->user(),
+            'user' => $request->user(),
             'orders' => $request->user()->orders()
                 ->with('items')
                 ->latest()
@@ -71,7 +74,7 @@ class AccountController extends Controller
         $request->merge(['phone' => Phone::format($raw) ?? $raw]);
 
         $data = $request->validate([
-            'name'  => ['required', 'string', 'max:120'],
+            'name' => ['required', 'string', 'max:120'],
             'phone' => [
                 'nullable',
                 'string',
@@ -89,7 +92,7 @@ class AccountController extends Controller
         ]);
 
         $request->user()->update([
-            'name'  => Text::utf8($data['name']),
+            'name' => Text::utf8($data['name']),
             'phone' => filled($data['phone'] ?? null) ? $data['phone'] : null,
         ]);
 
@@ -139,6 +142,6 @@ class AccountController extends Controller
 
         return redirect()->route('cart.index')->with('status', $skipped === []
             ? 'Заказ собран заново — проверьте корзину.'
-            : 'Часть позиций недоступна и не добавлена: ' . implode(', ', $skipped) . '.');
+            : 'Часть позиций недоступна и не добавлена: '.implode(', ', $skipped).'.');
     }
 }
