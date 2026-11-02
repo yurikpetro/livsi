@@ -43,7 +43,11 @@ class RefundService
         return match (Fulfillment::current($order)) {
             Fulfillment::SHIPPED, Fulfillment::AT_PICKUP => 'Посылка уже у службы — заявку отменить нельзя. После возврата денег дождитесь, пока посылка вернётся.',
             Fulfillment::DELIVERED => 'Покупатель уже получил заказ. Возвращайте деньги, когда товар вернулся к вам.',
-            default => $order->shipment_external_id ? 'Заявка у службы будет отменена.' : null,
+            default => match (true) {
+                filled($order->shipment_external_id) => 'Заявка у службы будет отменена.',
+                filled($order->apiship_order_id) => 'Заказ оформлен через ApiShip — заявку там отмените вручную.',
+                default => null,
+            },
         };
     }
 

@@ -224,7 +224,7 @@ class OrdersController extends Controller
         $by = $request->validate(['by' => ['required', 'string', 'min:2', 'max:120']])['by'];
         $order = $this->order($number);
         if (! DirectShipmentService::isDirectOrder($order)) {
-            $this->fail('Заказ оформлен через ApiShip — отправление отменяется в админке сайта.');
+            $this->fail('Заказ оформлен через ApiShip — заявку отменяют в кабинете ApiShip.');
         }
         $order = $this->shipments->cancel($order, 'Отменил: '.$by, OrderFulfillmentEvent::SOURCE_LIVSIPRO);
 
