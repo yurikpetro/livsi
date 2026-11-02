@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\OrderIssue;
 use App\Models\OrderReceipt;
 use App\Services\DeliverySelection;
+use App\Services\ReceiptService;
 use App\Support\Fulfillment;
 use App\Support\Money;
 use Filament\Forms\Components\Placeholder;
@@ -203,6 +204,12 @@ class OrderForm
                 .($receipt->error ? '<br><span style="color:#dc2626">'.e($receipt->error).'</span>' : '');
         }
 
-        return $lines ? implode('<br>', $lines) : 'Второй чек уйдёт сам, когда заказ получит статус «Получен».';
+        if ($lines) {
+            return implode('<br>', $lines);
+        }
+
+        return app(ReceiptService::class)->enabled()
+            ? 'Второй чек уйдёт сам, когда заказ получит статус «Получен».'
+            : 'Второй чек выключен — включается в «Настройки сайта» → «Налоги и чеки».';
     }
 }

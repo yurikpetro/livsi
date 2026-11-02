@@ -50,6 +50,7 @@ class ReceiptsAndRefundsTest extends TestCase
             'livsi.cdek.client_secret' => 'cdek-secret',
         ]);
         Setting::put('vat_rate_default', '20');
+        Setting::put('closing_receipts_enabled', true);
         Setting::put('closing_receipts_since', now()->subDay()->toIso8601String());
         DeliverySettings::setOrigin('cdek', 'STV7', 'Ставрополь, Доваторцев, 84');
     }
@@ -151,6 +152,27 @@ class ReceiptsAndRefundsTest extends TestCase
             && filled($request->header('Idempotence-Key')[0] ?? null));
         $receipt = $order->receipt(OrderReceipt::KIND_CLOSING);
         $this->assertSame([OrderReceipt::PENDING, 'rcpt-1'], [$receipt->status, $receipt->external_id]);
+    }
+
+    public function test_switched_off_second_receipt_is_not_sent_but_can_be_previewed(): void
+    {
+        Setting::put('closing_receipts_enabled', false);
+        $order = $this->delivered($this->order());
+        Http::fake();
+
+        $this->artisan('receipts:sync')->assertSuccessful();
+        Http::assertNothingSent();
+
+        $this->artisan('receipts:sync', ['--show' => $order->number])
+            ->expectsOutputToContain('выключен в настройках')
+            ->expectsOutputToContain('Итого в чеке: 1 780.00 ₽')
+            ->expectsOutputToContain('ещё не отправлялся')
+            ->assertSuccessful();
+        Http::assertNothingSent();
+        $this->assertNull($order->receipt(OrderReceipt::KIND_CLOSING));
+
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        Livewire::test(EditOrder::class, ['record' => $order->getRouteKey()])->assertSee('Второй чек выключен');
     }
 
     public function test_pending_receipt_is_checked_until_yookassa_registers_it(): void
@@ -368,6 +390,18 @@ class ReceiptsAndRefundsTest extends TestCase
         $this->assertSame(2, (int) $order->shipment_attempt);
         $this->assertSame($order->number.'-2', $order->shipmentRef());
         $this->assertStringContainsString('отменено у службы', $order->fulfillmentEvents()->latest('id')->first()->comment);
+    }
+
+    public function test_order_with_refund_in_progress_leaves_the_assembly_list(): void
+    {
+        $order = $this->order(['fulfillment_status' => Fulfillment::AWAITING]);
+        $this->api('GET', '/orders?view=assembly')->assertJsonCount(1, 'orders')->assertJsonPath('counts.awaiting', 1);
+
+        $order->receipts()->create(['kind' => OrderReceipt::KIND_REFUND, 'status' => OrderReceipt::PENDING, 'idempotence_key' => 'k', 'amount' => 178000]);
+
+        $this->api('GET', '/orders?view=assembly')->assertJsonCount(0, 'orders')->assertJsonPath('counts.awaiting', 0);
+        $this->api('POST', '/orders/'.$order->number.'/assembled', ['by' => 'Мария'])->assertStatus(409)
+            ->assertJsonPath('message', 'По заказу оформлен возврат денег — собирать и отправлять его не нужно.');
     }
 
     public function test_livsipro_cannot_cancel_shipment_after_handover(): void

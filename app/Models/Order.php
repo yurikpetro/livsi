@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -122,6 +123,13 @@ class Order extends Model
     public function receipt(string $kind): ?OrderReceipt
     {
         return $this->receipts()->where('kind', $kind)->first();
+    }
+
+    /** Заказы без оформленного возврата денег: их ещё собирают и везут. */
+    public function scopeWithoutRefund(Builder $query): void
+    {
+        $query->whereDoesntHave('receipts', fn (Builder $q) => $q->where('kind', OrderReceipt::KIND_REFUND)
+            ->whereIn('status', [OrderReceipt::PENDING, OrderReceipt::SUCCEEDED]));
     }
 
     /**

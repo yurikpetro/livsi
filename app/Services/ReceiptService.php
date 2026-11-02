@@ -40,6 +40,12 @@ class ReceiptService
             ->whereNotNull('external_id')->latest('id')->first();
     }
 
+    /** Включён ли второй чек («Настройки сайта» → «Налоги и чеки»). */
+    public function enabled(): bool
+    {
+        return (bool) Setting::get('closing_receipts_enabled', false);
+    }
+
     /**
      * С какого момента закрываем заказы вторым чеком. Ставится при первом
      * запуске: заказы, полученные до появления этой функции, не трогаем.
@@ -58,6 +64,10 @@ class ReceiptService
     /** Заказы, которым пора отправить второй чек. @return Collection<int, Order> */
     public function due(int $limit = 50): Collection
     {
+        if (! $this->enabled()) {
+            return new Collection;
+        }
+
         return Order::query()
             ->where('status', Order::STATUS_PAID)
             ->where('fulfillment_status', Fulfillment::DELIVERED)
