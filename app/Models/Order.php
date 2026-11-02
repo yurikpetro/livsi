@@ -114,6 +114,28 @@ class Order extends Model
         return $this->hasMany(OrderItemMark::class);
     }
 
+    public function receipts(): HasMany
+    {
+        return $this->hasMany(OrderReceipt::class);
+    }
+
+    public function receipt(string $kind): ?OrderReceipt
+    {
+        return $this->receipts()->where('kind', $kind)->first();
+    }
+
+    /**
+     * Номер заказа для службы доставки. Первая заявка — номер как есть,
+     * после отмены отправления — «LV-…-2», «-3»: службы помнят старый номер
+     * и на повтор вернули бы уже отменённую заявку.
+     */
+    public function shipmentRef(): string
+    {
+        $attempt = (int) ($this->shipment_attempt ?? 1);
+
+        return $attempt > 1 ? $this->number.'-'.$attempt : (string) $this->number;
+    }
+
     /** Отправление создано — через ApiShip или напрямую у службы. */
     public function hasShipment(): bool
     {

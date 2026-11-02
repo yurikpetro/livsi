@@ -436,7 +436,7 @@ class OzonCarrier extends HttpCarrier
     /** Ключ повтора — один и тот же для заказа при любом числе попыток. */
     public static function idempotencyKey(Order $order): string
     {
-        $hash = sha1('livsi.shop/ozon/'.$order->id.'/'.$order->number);
+        $hash = sha1('livsi.shop/ozon/'.$order->id.'/'.$order->shipmentRef());
 
         return sprintf('%s-%s-5%s-%s-%s', substr($hash, 0, 8), substr($hash, 8, 4), substr($hash, 13, 3),
             dechex((hexdec(substr($hash, 16, 2)) & 0x3F) | 0x80).substr($hash, 18, 2), substr($hash, 20, 12));
@@ -450,11 +450,11 @@ class OzonCarrier extends HttpCarrier
         $cutoff = $this->cutoff((string) $order->delivery_point_id, $parcel, $declared);
         $names = $order->items->map(fn ($item): string => $item->label().' ×'.$item->quantity)->implode('; ');
         $posting = $this->posting($parcel, $declared, $cutoff) + [
-            'posting_external_id' => $order->number.'-1',
+            'posting_external_id' => $order->shipmentRef().'-1',
             'description' => mb_substr('Косметика LIVSI: '.$names, 0, 500),
         ];
         $response = $this->post('/v1/order/create', [
-            'order_external_id' => $order->number,
+            'order_external_id' => $order->shipmentRef(),
             'recipient' => ['phone_number' => $this->phone($order->customer_phone), 'full_name' => mb_substr($order->customer_name, 0, 200)],
             'delivery' => ['delivery_point' => ['delivery_point_id' => (int) $order->delivery_point_id]],
             'postings' => [$posting],

@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Orders\Pages;
 
 use App\Filament\Resources\Orders\OrderResource;
 use App\Filament\Support\FulfillmentAction;
+use App\Filament\Support\RefundAction;
 use App\Filament\Support\ShipmentAction;
 use App\Models\OrderIssue;
 use Filament\Actions\Action;
@@ -25,6 +26,8 @@ class EditOrder extends EditRecord
             FulfillmentAction::change(),
             ShipmentAction::make(),
             ShipmentAction::check(),
+            ShipmentAction::cancel(),
+            RefundAction::make(),
             Action::make('print')
                 ->label('Распечатать заказ')
                 ->icon(Heroicon::OutlinedPrinter)

@@ -202,6 +202,35 @@ class OrdersController extends Controller
         return response()->json(['order' => $this->full($order)]);
     }
 
+    /** «Вернуть в сборку»: «Собран» нажали по ошибке — пока отправление не создано. */
+    public function reassemble(Request $request, string $number): JsonResponse
+    {
+        $by = $request->validate(['by' => ['required', 'string', 'min:2', 'max:120']])['by'];
+        $order = $this->order($number);
+        if (Fulfillment::current($order) !== Fulfillment::ASSEMBLED) {
+            $this->fail('Вернуть в сборку можно только собранный, но ещё не переданный заказ.');
+        }
+        if ($order->shipment_external_id || in_array($order->shipment_state, ['creating', 'unknown'], true)) {
+            $this->fail('Сначала отмените отправление у службы.');
+        }
+        $order = $this->fulfillment->set($order, Fulfillment::AWAITING, 'Вернул в сборку: '.$by, OrderFulfillmentEvent::SOURCE_LIVSIPRO);
+
+        return response()->json(['order' => $this->full($order)]);
+    }
+
+    /** «Отменить отправление»: снять заявку у службы, пока посылка не передана. */
+    public function cancelShipment(Request $request, string $number): JsonResponse
+    {
+        $by = $request->validate(['by' => ['required', 'string', 'min:2', 'max:120']])['by'];
+        $order = $this->order($number);
+        if (! DirectShipmentService::isDirectOrder($order)) {
+            $this->fail('Заказ оформлен через ApiShip — отправление отменяется в админке сайта.');
+        }
+        $order = $this->shipments->cancel($order, 'Отменил: '.$by, OrderFulfillmentEvent::SOURCE_LIVSIPRO);
+
+        return response()->json(['order' => $this->full($order)]);
+    }
+
     /** Спросить службу о статусе прямо сейчас, не дожидаясь расписания. */
     public function refresh(string $number): JsonResponse
     {
@@ -267,6 +296,13 @@ class OrdersController extends Controller
                 'reference' => $order->shipmentReference(),
                 'tracking' => $order->shipment_tracking_number,
                 'error' => $order->shipment_error,
+            ],
+            // Какие кнопки сейчас уместны — чтобы livsipro не гадал по статусам.
+            'actions' => [
+                'reassemble' => $status === Fulfillment::ASSEMBLED && ! $order->shipment_external_id
+                    && ! in_array($order->shipment_state, ['creating', 'unknown'], true),
+                'cancel_shipment' => filled($order->shipment_external_id) && DirectShipmentService::isDirectOrder($order)
+                    && in_array($status, [Fulfillment::AWAITING, Fulfillment::ASSEMBLED], true),
             ],
         ];
     }

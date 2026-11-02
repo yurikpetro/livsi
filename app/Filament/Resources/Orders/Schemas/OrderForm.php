@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Orders\Schemas;
 
 use App\Models\Order;
 use App\Models\OrderIssue;
+use App\Models\OrderReceipt;
 use App\Services\DeliverySelection;
 use App\Support\Fulfillment;
 use App\Support\Money;
@@ -148,6 +149,10 @@ class OrderForm
                                         ->implode('<br>'),
                             ))
                             ->columnSpanFull(),
+                        Placeholder::make('receipts_overview')
+                            ->label('Второй чек и возврат')
+                            ->content(fn (Order $record) => new HtmlString(self::receiptsText($record)))
+                            ->columnSpanFull(),
                     ])
                     ->collapsed(),
 
@@ -181,5 +186,23 @@ class OrderForm
                     ])
                     ->columns(3),
             ]);
+    }
+
+    /** Второй чек (полный расчёт с КИЗ) и возврат денег — одной-двумя строками. */
+    private static function receiptsText(Order $record): string
+    {
+        $lines = [];
+        foreach ([OrderReceipt::KIND_CLOSING => 'Чек «полный расчёт» с КИЗ', OrderReceipt::KIND_REFUND => 'Возврат денег'] as $kind => $title) {
+            $receipt = $record->receipt($kind);
+            if (! $receipt) {
+                continue;
+            }
+            $lines[] = e($title).': '.e($receipt->statusLabel())
+                .($receipt->amount ? ' · '.e(Money::rub($receipt->amount)) : '')
+                .($receipt->sent_at ? ' · '.$receipt->sent_at->timezone('Europe/Moscow')->format('d.m.Y H:i') : '')
+                .($receipt->error ? '<br><span style="color:#dc2626">'.e($receipt->error).'</span>' : '');
+        }
+
+        return $lines ? implode('<br>', $lines) : 'Второй чек уйдёт сам, когда заказ получит статус «Получен».';
     }
 }

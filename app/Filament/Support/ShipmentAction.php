@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Monitoring\ShipmentNotifications;
 use App\Services\ShipmentAutomation;
 use App\Services\ShipmentService;
+use App\Support\Fulfillment;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
@@ -34,6 +35,32 @@ class ShipmentAction
                 } else {
                     Notification::make()->title('Очередь временно недоступна')->body('Постановка будет повторена автоматически.')->warning()->send();
                 }
+                $record->refresh();
+            });
+    }
+
+    /** Снять заявку у службы, пока посылка не передана (прямые службы). */
+    public static function cancel(): Action
+    {
+        return Action::make('cancelShipment')
+            ->label('Отменить отправление')
+            ->icon(Heroicon::OutlinedXCircle)
+            ->color('gray')
+            ->authorize(fn (): bool => (bool) auth()->user()?->is_admin)
+            ->visible(fn (Order $record): bool => filled($record->shipment_external_id) && DirectShipmentService::isDirectOrder($record)
+                && in_array(Fulfillment::current($record), [Fulfillment::AWAITING, Fulfillment::ASSEMBLED], true))
+            ->requiresConfirmation()
+            ->modalHeading(fn (Order $record): string => 'Отменить отправление · '.$record->number)
+            ->modalDescription('Заявка у службы будет снята. Заказ останется оплаченным, отправление можно будет создать заново.')
+            ->modalSubmitActionLabel('Отменить отправление')
+            ->action(function (Order $record, Action $action): void {
+                try {
+                    app(DirectShipmentService::class)->cancel($record, 'Админка · '.auth()->user()?->email);
+                } catch (ValidationException $exception) {
+                    Notification::make()->title('Отправление не отменено')->body($exception->validator->errors()->first())->danger()->send();
+                    $action->halt();
+                }
+                Notification::make()->title('Отправление отменено')->success()->send();
                 $record->refresh();
             });
     }

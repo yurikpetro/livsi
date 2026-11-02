@@ -2,10 +2,9 @@
 
 namespace App\Payments;
 
-use App\Support\Phone;
-
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Support\Phone;
 
 /**
  * Чек по 54-ФЗ для ЮKassa.
@@ -23,9 +22,7 @@ use App\Models\OrderItem;
  */
 final class ReceiptBuilder
 {
-    public function __construct(private readonly Order $order)
-    {
-    }
+    public function __construct(private readonly Order $order) {}
 
     public function build(): array
     {
@@ -81,14 +78,14 @@ final class ReceiptBuilder
     private function lines(OrderItem $item): array
     {
         $vatCode = Vat::code($item->vat_rate);
-        $total   = $item->total;
-        $qty     = $item->quantity;
+        $total = $item->total;
+        $qty = $item->quantity;
 
         if ($qty < 1 || $total < 1) {
             return [];
         }
 
-        $perUnit  = intdiv($total, $qty);
+        $perUnit = intdiv($total, $qty);
         $remainder = $total - $perUnit * $qty;
 
         if ($remainder === 0) {
@@ -103,18 +100,84 @@ final class ReceiptBuilder
         ];
     }
 
-    private function line(string $description, int $unitPrice, int $quantity, int $vatCode, string $subject = 'commodity'): array
+    /**
+     * Второй чек «полный расчёт» (зачёт предоплаты): те же суммы по штукам,
+     * что и в первом чеке, признак full_payment. Штука с отсканированным КИЗ —
+     * отдельной строкой «маркированный товар» со своим кодом (mark_code_info):
+     * по нему Честный знак выводит код из оборота. Штуки без кода — обычным
+     * товаром (о них предупреждает ReceiptService).
+     *
+     * Код уходит как отсканирован — целиком, с крипто-хвостом и разделителем
+     * GS (в JSON — \u001d), без base64: так требует ЮKassa (ответ поддержки).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function closingItems(): array
+    {
+        $this->order->loadMissing('items.marks');
+        $items = [];
+        foreach ($this->order->items as $item) {
+            $qty = (int) $item->quantity;
+            $total = (int) $item->total;
+            if ($qty < 1 || $total < 1) {
+                continue;
+            }
+            $vatCode = Vat::code($item->vat_rate);
+            // Цены по штукам ровно как в первом чеке: остаток — последней штуке.
+            $per = intdiv($total, $qty);
+            $prices = array_fill(0, $qty, $per);
+            $prices[$qty - 1] += $total - $per * $qty;
+            $codes = $item->marks->sortBy('id')->pluck('code')->values()->all();
+            $plain = [];
+            foreach ($prices as $i => $price) {
+                if (isset($codes[$i]) && is_string($codes[$i]) && $codes[$i] !== '') {
+                    $items[] = $this->line($item->label(), $price, 1, $vatCode, 'marked', 'full_payment')
+                        + ['measure' => 'piece', 'mark_mode' => 0, 'mark_code_info' => ['gs_1m' => $codes[$i]]];
+                } else {
+                    $plain[$price] = ($plain[$price] ?? 0) + 1;
+                }
+            }
+            foreach ($plain as $price => $count) {
+                $items[] = $this->line($item->label(), (int) $price, $count, $vatCode, 'commodity', 'full_payment') + ['measure' => 'piece'];
+            }
+        }
+        if ($this->order->delivery_price > 0) {
+            $items[] = $this->line('Доставка', $this->order->delivery_price, 1, Vat::code(Vat::defaultRate()), 'service', 'full_payment')
+                + ['measure' => 'piece'];
+        }
+
+        return $items;
+    }
+
+    /** Сумма строк чека в копейках. @param list<array<string, mixed>> $items */
+    public static function sum(array $items): int
+    {
+        $total = 0;
+        foreach ($items as $item) {
+            $total += (int) round(((float) $item['amount']['value']) * 100) * (int) $item['quantity'];
+        }
+
+        return $total;
+    }
+
+    /** Покупатель для чека: почта (Чеки от ЮKassa шлют только на почту) и телефон. */
+    public function customer(): array
+    {
+        return array_filter(['email' => $this->order->customer_email, 'phone' => $this->phone()]);
+    }
+
+    private function line(string $description, int $unitPrice, int $quantity, int $vatCode, string $subject = 'commodity', string $mode = 'full_prepayment'): array
     {
         return [
             // 128 символов — ограничение чека.
             'description' => mb_substr($description, 0, 128),
-            'quantity'    => (string) $quantity,
-            'amount'      => [
-                'value'    => number_format($unitPrice / 100, 2, '.', ''),
+            'quantity' => (string) $quantity,
+            'amount' => [
+                'value' => number_format($unitPrice / 100, 2, '.', ''),
                 'currency' => 'RUB',
             ],
-            'vat_code'       => $vatCode,
-            'payment_mode'   => 'full_prepayment',
+            'vat_code' => $vatCode,
+            'payment_mode' => $mode,
             'payment_subject' => $subject,
         ];
     }
