@@ -74,7 +74,7 @@
                 @if ($promoCodes->isNotEmpty())
                     {{-- Личные промокоды: вводятся при оформлении заказа. --}}
                     <div class="eyebrow">Мои промокоды</div>
-                    <div class="mt-5 mb-10 border-t border-ink">
+                    <div class="mt-5 mb-8 border-t border-ink">
                         @foreach ($promoCodes as $promo)
                             @php($state = $promo->stateLabel())
                             <div class="border-b border-line py-4 {{ $state === 'действует' ? '' : 'opacity-60' }}">

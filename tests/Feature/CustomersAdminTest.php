@@ -304,5 +304,12 @@ class CustomersAdminTest extends TestCase
             $this->app['env'] = 'testing';
         }
         $this->assertSame(0, Mailing::count());
+
+        // в админке — уведомление словами, а не молчаливая ошибка
+        $this->mock(MailingService::class, fn ($mock) => $mock->shouldReceive('sendTest')
+            ->andThrow(ValidationException::withMessages(['mailing' => 'Почта сайта не настроена.'])));
+        Livewire::test(ListMailings::class)
+            ->callAction('testMail', ['subject' => 'Проба', 'body' => 'Проверяем, как выглядит письмо.'])
+            ->assertNotified('Письмо не отправлено');
     }
 }

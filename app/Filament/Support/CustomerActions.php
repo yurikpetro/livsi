@@ -28,6 +28,7 @@ final class CustomerActions
             ->authorize(fn (): bool => (bool) auth()->user()?->is_admin)
             ->modalHeading(fn (Customer $record): string => 'Промокод для '.($record->name ?: $record->email))
             ->modalDescription('Личный и одноразовый: подходит только этому клиенту, виден ему в личном кабинете.')
+            ->modalSubmitActionLabel('Выдать')
             ->schema([...PromoFields::make(), TextInput::make('note')->label('Для себя: за что')->maxLength(200)])
             ->action(function (Customer $record, array $data): void {
                 $promo = app(PromoCodeService::class)->issue(PromoFields::spec($data), $record, self::by());
@@ -42,6 +43,7 @@ final class CustomerActions
             ->icon(Heroicon::OutlinedTicket)
             ->authorize(fn (): bool => (bool) auth()->user()?->is_admin)
             ->modalHeading('Промокод каждому отмеченному')
+            ->modalSubmitActionLabel('Выдать')
             ->modalDescription('Каждый получит свой личный одноразовый код — он появится у него в личном кабинете. Письмо при этом не уходит: для письма — «Рассылка».')
             ->schema([...PromoFields::make(), TextInput::make('note')->label('Для себя: за что')->maxLength(200)])
             ->action(function (Collection $records, array $data): void {
