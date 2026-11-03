@@ -11,6 +11,7 @@ use App\Filament\Resources\Mailings\Pages\ListMailings;
 use App\Filament\Resources\Mailings\Pages\ViewMailing;
 use App\Filament\Resources\Mailings\RelationManagers\RecipientsRelationManager;
 use App\Filament\Resources\Orders\Pages\EditOrder;
+use App\Filament\Resources\Orders\Pages\ListOrders;
 use App\Filament\Resources\PromoCodes\Pages\CreatePromoCode;
 use App\Filament\Resources\PromoCodes\Pages\EditPromoCode;
 use App\Filament\Resources\PromoCodes\Pages\ListPromoCodes;
@@ -25,6 +26,7 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Services\CartService;
 use App\Services\OrderService;
+use App\Support\Money;
 use Database\Seeders\CatalogSeeder;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -47,6 +49,14 @@ class CustomersAdminTest extends TestCase
         Setting::put('vat_rate_default', '20');
         $this->admin = User::factory()->create(['is_admin' => true, 'email' => 'boss@livsi.test']);
         $this->actingAs($this->admin);
+        config(['livsi.livsipro.token' => self::TOKEN, 'livsi.livsipro.ips' => []]);
+    }
+
+    private const TOKEN = 'livsipro-test-token-0123456789abcdef';
+
+    private function api(string $method, string $uri, array $data = [])
+    {
+        return $this->withHeader('Authorization', 'Bearer '.self::TOKEN)->json($method, '/api/livsipro'.$uri, $data);
     }
 
     private function customerWith(string $email, bool $consent = true): Customer
@@ -161,7 +171,7 @@ class CustomersAdminTest extends TestCase
         $order = $this->order('SALE10');
 
         Livewire::test(EditOrder::class, ['record' => $order->getRouteKey()])->assertOk()->assertSee('SALE10')->assertSee('общий код');
-        Livewire::test(\App\Filament\Resources\Orders\Pages\ListOrders::class, ['activeTab' => 'all'])->assertSee('промокод SALE10');
+        Livewire::test(ListOrders::class, ['activeTab' => 'all'])->assertSee('промокод SALE10');
     }
 
     public function test_mailing_to_all_consented_test_letter_and_results_page(): void
@@ -200,5 +210,80 @@ class CustomersAdminTest extends TestCase
             '/admin/mailings', '/admin/mailings/create'] as $url) {
             $this->get($url)->assertOk();
         }
+    }
+
+    // ------------------------------------------------------------ livsipro
+
+    public function test_livsipro_lists_and_opens_customers(): void
+    {
+        PromoCode::create(['code' => 'SALE10', 'kind' => PromoCode::PERCENT, 'value' => 10, 'active' => true]);
+        $order = $this->order('SALE10');
+        $this->customerWith('anna@example.test', consent: false);
+        $maria = Customer::where('email', 'maria@example.test')->firstOrFail();
+
+        $this->get('/api/livsipro/customers')->assertStatus(401);
+        // третий — сам администратор: зарегистрированный пользователь тоже клиент
+        $this->api('GET', '/customers')->assertOk()->assertJsonPath('total', 3)->assertJsonPath('counts.all', 3);
+        $this->api('GET', '/customers?q=900 111')->assertOk()->assertJsonPath('total', 1)
+            ->assertJsonPath('customers.0.email', 'maria@example.test')->assertJsonPath('customers.0.phone', '79001112233');
+        $this->api('GET', '/customers?q=ANNA@')->assertOk()->assertJsonPath('customers.0.email', 'anna@example.test');
+        $this->api('GET', '/customers?filter=subscribed')->assertOk()->assertJsonPath('total', 0);
+
+        $this->api('GET', '/customers/'.$maria->id)->assertOk()
+            ->assertJsonPath('customer.city', 'Ставрополь')
+            ->assertJsonPath('orders.0.number', $order->number)
+            ->assertJsonPath('orders.0.status.code', 'awaiting_payment')
+            ->assertJsonPath('orders.0.promo.code', 'SALE10');
+        $this->api('GET', '/customers/999999')->assertNotFound();
+    }
+
+    public function test_livsipro_issues_promo_to_selected_and_shows_promo_base(): void
+    {
+        $anna = $this->customerWith('anna@example.test');
+        $oleg = $this->customerWith('oleg@example.test');
+
+        $this->api('POST', '/customers/promo', ['customer_ids' => [$anna->id, $oleg->id], 'kind' => PromoCode::FIXED, 'value' => 500,
+            'min_total' => 3000, 'days' => 10, 'by' => 'Антон'])
+            ->assertOk()->assertJsonCount(2, 'issued')->assertJsonPath('benefit', 'Скидка '.Money::rub(50000).' на заказ от '.Money::rub(300000));
+
+        $promo = PromoCode::where('customer_id', $anna->id)->sole();
+        $this->assertSame([50000, 300000, 'livsipro · Антон', 1], [(int) $promo->value, (int) $promo->min_total, $promo->issued_by, (int) $promo->max_uses]);
+        $this->assertMatchesRegularExpression('/^LIVSI-[A-HJ-KM-NP-Z2-9]{6}$/', $promo->code);
+
+        $this->api('GET', '/customers/'.$anna->id)->assertOk()->assertJsonPath('promo_codes.0.code', $promo->code)
+            ->assertJsonPath('promo_codes.0.state', 'действует');
+        $this->api('GET', '/promo-codes?q=oleg@')->assertOk()->assertJsonPath('total', 1)
+            ->assertJsonPath('promo_codes.0.customer.email', 'oleg@example.test');
+
+        $this->api('POST', '/customers/promo', ['customer_ids' => [$anna->id], 'kind' => PromoCode::PERCENT, 'value' => 150, 'by' => 'Антон'])
+            ->assertStatus(422);
+    }
+
+    public function test_livsipro_mailing_selected_all_and_test_letter(): void
+    {
+        Mail::fake();
+        $yes = $this->customerWith('yes@example.test');
+        $no = $this->customerWith('no@example.test', consent: false);
+
+        $this->api('POST', '/mailings/test', ['subject' => 'Проба', 'body' => 'Проверяем, как выглядит письмо.', 'email' => 'me@livsi.test',
+            'with_promo' => true, 'promo_kind' => PromoCode::FREE_DELIVERY])->assertOk();
+        Mail::assertSent(MarketingMail::class, fn (MarketingMail $mail): bool => $mail->hasTo('me@livsi.test'));
+
+        $this->api('POST', '/mailings', ['audience' => 'selected', 'customer_ids' => [$no->id], 'subject' => 'Новинки',
+            'body' => 'У нас новые скрабы, заходите.', 'by' => 'Антон'])->assertStatus(422);
+
+        $this->api('POST', '/mailings', ['audience' => 'selected', 'customer_ids' => [$yes->id, $no->id], 'subject' => 'Новинки',
+            'body' => 'У нас новые скрабы, заходите.', 'with_promo' => true, 'promo_kind' => PromoCode::PERCENT, 'promo_value' => 10,
+            'promo_days' => 7, 'by' => 'Антон'])
+            ->assertCreated()->assertJsonPath('mailing.total', 1)->assertJsonPath('skipped', 1)
+            ->assertJsonPath('mailing.created_by', 'livsipro · Антон')->assertJsonPath('mailing.promo', 'Скидка 10 %, на 7 дн.');
+
+        $this->api('POST', '/mailings', ['audience' => 'subscribed', 'subject' => 'Всем', 'body' => 'Письмо всем подписчикам.', 'by' => 'Антон'])
+            ->assertCreated()->assertJsonPath('mailing.total', 1);
+
+        $first = Mailing::query()->orderBy('id')->first();
+        $this->api('GET', '/mailings')->assertOk()->assertJsonCount(2, 'mailings')->assertJsonPath('subscribed', 1);
+        $this->api('GET', '/mailings/'.$first->id)->assertOk()->assertJsonCount(2, 'recipients')
+            ->assertJsonPath('recipients.0.email', 'yes@example.test')->assertJsonPath('recipients.1.status', 'skipped');
     }
 }

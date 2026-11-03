@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Livsipro\CustomersController;
 use App\Http\Controllers\Livsipro\OrdersController;
 use App\Http\Middleware\LivsiproToken;
 use Illuminate\Support\Facades\Route;
@@ -23,4 +24,14 @@ Route::prefix('livsipro')->middleware([LivsiproToken::class, 'throttle:livsipro'
     Route::post('/orders/{number}/cancel-shipment', [OrdersController::class, 'cancelShipment']);
     Route::post('/orders/{number}/restock', [OrdersController::class, 'restock']);
     Route::post('/orders/{number}/refresh', [OrdersController::class, 'refresh']);
+
+    // Клиенты, промокоды, рассылки — на livsipro только для администраторов.
+    Route::get('/customers', [CustomersController::class, 'index']);
+    Route::get('/customers/{id}', [CustomersController::class, 'show'])->whereNumber('id');
+    Route::post('/customers/promo', [CustomersController::class, 'issuePromo']);
+    Route::get('/promo-codes', [CustomersController::class, 'promoCodes']);
+    Route::get('/mailings', [CustomersController::class, 'mailingsIndex']);
+    Route::get('/mailings/{id}', [CustomersController::class, 'mailingShow'])->whereNumber('id');
+    Route::post('/mailings', [CustomersController::class, 'mailingStore']);
+    Route::post('/mailings/test', [CustomersController::class, 'mailingTest']);
 });

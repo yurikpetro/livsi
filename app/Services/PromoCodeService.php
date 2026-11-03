@@ -7,7 +7,6 @@ use App\Models\Mailing;
 use App\Models\PromoCode;
 use App\Models\User;
 use App\Support\Money;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -101,7 +100,8 @@ class PromoCodeService
         $days = isset($spec['days']) && $spec['days'] ? (int) $spec['days'] : null;
 
         for ($try = 0; ; $try++) {
-            $code = 'LIVSI-'.Str::upper(Str::random(6));
+            // Без 0/O и 1/I/L: код человек переписывает с экрана.
+            $code = 'LIVSI-'.collect(range(1, 6))->map(fn (): string => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[random_int(0, 30)])->implode('');
             if (! PromoCode::query()->where('code', $code)->exists() || $try > 5) {
                 break;
             }
