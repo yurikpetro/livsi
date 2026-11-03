@@ -270,6 +270,47 @@ class ReceiptsAndRefundsTest extends TestCase
         $this->assertSame(0, $quota->fresh()->sold);
     }
 
+    public function test_refund_takes_order_out_of_automatic_shipment_queue(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        $order = $this->order(['fulfillment_status' => Fulfillment::AWAITING, 'shipment_automatic' => true, 'shipment_state' => 'queued']);
+        Http::fake(['*/v3/refunds' => Http::response(['id' => 'ref-1', 'status' => 'pending'])]);
+
+        app(RefundService::class)->refund($order, 'Передумал', 'admin');
+
+        $this->assertSame('cancelled', $order->fresh()->shipment_state);
+        $this->artisan('shipments:process', ['--dry-run' => true])->expectsOutputToContain('Отправлений для обработки: 0');
+    }
+
+    public function test_rejected_refund_puts_order_back_in_shipment_queue(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        $order = $this->order(['shipment_automatic' => true, 'shipment_state' => 'queued']);
+        Http::fake(['*/v3/refunds' => Http::response(['type' => 'error', 'description' => 'Недостаточно средств'], 400)]);
+
+        $this->expectException(ValidationException::class);
+        try {
+            app(RefundService::class)->refund($order, 'Тест', 'admin');
+        } finally {
+            $this->assertSame('queued', $order->fresh()->shipment_state);
+        }
+    }
+
+    public function test_refund_waits_while_shipment_is_being_created(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        $order = $this->order(['shipment_automatic' => true, 'shipment_state' => 'creating']);
+        Http::fake();
+
+        try {
+            app(RefundService::class)->refund($order, 'Тест', 'admin');
+            $this->fail('Возврат во время создания отправления должен подождать');
+        } catch (ValidationException $exception) {
+            $this->assertStringContainsString('создаётся у службы', $exception->validator->errors()->first());
+        }
+        Http::assertNothingSent();
+    }
+
     public function test_refund_after_closing_receipt_goes_with_codes(): void
     {
         $this->actingAs(User::factory()->create(['is_admin' => true]));

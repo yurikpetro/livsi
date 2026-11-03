@@ -84,6 +84,21 @@ class RefundService
             $order = $order->fresh();
         }
 
+        // Отправление ещё стоит в очереди на автоматическое создание — снимаем,
+        // чтобы служба не получила заявку по заказу, за который вернули деньги.
+        // Если заявка уходит прямо сейчас — ждём её, иначе останется висеть.
+        $unqueued = false;
+        $previousState = $order->shipment_state;
+        if (! $order->hasShipment()) {
+            if (in_array($order->shipment_state, ['creating', 'unknown'], true)) {
+                $this->fail('Отправление прямо сейчас создаётся у службы — повторите возврат через минуту.');
+            }
+            if (in_array($order->shipment_state, [null, 'queued'], true)) {
+                $unqueued = true;
+                $order->forceFill(['shipment_state' => 'cancelled', 'shipment_status_name' => 'Отменено: возврат денег'])->save();
+            }
+        }
+
         $order->load('items.marks');
         $builder = new ReceiptBuilder($order);
         $receipt = $closing?->status === OrderReceipt::SUCCEEDED
@@ -106,6 +121,10 @@ class RefundService
             $refund->update(['error' => 'Нет связи с ЮKassa — итог неизвестен. Нажмите возврат ещё раз: повтор безопасен.']);
             $this->fail('Нет связи с ЮKassa. Нажмите «Вернуть деньги» ещё раз через минуту — второго возврата не будет, ЮKassa узнает повтор.');
         } catch (RuntimeException $exception) {
+            if ($unqueued) {
+                // Деньги не вернулись — заказ снова ждёт отправления, как до нажатия.
+                $order->forceFill(['shipment_state' => $previousState, 'shipment_status_name' => null])->save();
+            }
             $refund->update(['status' => OrderReceipt::CANCELED, 'error' => mb_substr($exception->getMessage(), 0, 500)]);
             $this->fail('ЮKassa не приняла возврат: '.mb_substr($exception->getMessage(), 0, 200));
         }
