@@ -283,9 +283,15 @@ class OrdersController extends Controller
         return $order;
     }
 
+    /**
+     * Коды можно сканировать и убирать, пока посылка у нас: ждёт сборки или собрана.
+     * Созданное отправление этому не мешает — сайт создаёт его сам сразу после
+     * оплаты, ещё до сборки (иначе заказ застревал: без кодов не «Собран»,
+     * а коды не принимались из-за отправления).
+     */
     private function assertAssembling(Order $order): void
     {
-        if (! in_array(Fulfillment::current($order), [Fulfillment::AWAITING, Fulfillment::ASSEMBLED], true) || $order->shipment_external_id) {
+        if (! in_array(Fulfillment::current($order), [Fulfillment::AWAITING, Fulfillment::ASSEMBLED], true)) {
             $this->fail('Заказ уже передан в доставку — коды менять нельзя.');
         }
     }

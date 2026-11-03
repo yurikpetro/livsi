@@ -1048,6 +1048,22 @@ class DirectDeliveryTest extends TestCase
             ->assertStatus(422);
     }
 
+    /** Отправление создалось само сразу после оплаты — коды всё равно сканируются, потом «Собран». */
+    public function test_marks_accepted_when_shipment_was_created_automatically_before_assembly(): void
+    {
+        $order = $this->order('yataxi', [], 1);
+        $order->forceFill(['shipment_provider' => 'yataxi', 'shipment_external_id' => 'ya-uuid-1', 'shipment_state' => 'created'])->save();
+        $item = $order->items->first();
+
+        $this->api('POST', '/orders/'.$order->number.'/marks', ['item_id' => $item->id, 'by' => 'Мария', ...$this->kiz()])
+            ->assertOk()->assertJsonPath('order.items.0.marks.0.serial', 'Ab1-2C');
+        $mark = $order->marks()->first();
+        $this->api('DELETE', '/orders/'.$order->number.'/marks/'.$mark->id)->assertOk()->assertJsonPath('order.items.0.marks', []);
+        $this->api('POST', '/orders/'.$order->number.'/marks', ['item_id' => $item->id, 'by' => 'Мария', ...$this->kiz()])->assertOk();
+        $this->api('POST', '/orders/'.$order->number.'/assembled', ['by' => 'Мария'])->assertOk()
+            ->assertJsonPath('order.fulfillment.code', Fulfillment::ASSEMBLED);
+    }
+
     public function test_apiship_orders_are_not_sent_to_services_from_livsipro(): void
     {
         $order = $this->order('cdek', ['delivery_quote' => ['provider' => 'cdek', 'tariff_id' => 136], 'fulfillment_status' => Fulfillment::ASSEMBLED]);
