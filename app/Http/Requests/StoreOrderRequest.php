@@ -21,6 +21,7 @@ class StoreOrderRequest extends FormRequest
             'phone' => ['required', 'string', 'min:10', 'max:30'],
             'email' => ['required', 'email:rfc', 'max:255'],
             'comment' => ['nullable', 'string', 'max:1000'],
+            'promo_code' => ['nullable', 'string', 'max:40'],
             'delivery_method' => ['required', Rule::in(array_keys(DeliverySelection::methods()))],
             'delivery_city' => ['required', 'string', 'min:2', 'max:120'],
             'delivery_region' => ['nullable', 'string', 'max:120'],

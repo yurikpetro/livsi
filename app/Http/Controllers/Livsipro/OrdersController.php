@@ -8,10 +8,13 @@ use App\Models\Order;
 use App\Models\OrderFulfillmentEvent;
 use App\Models\OrderItem;
 use App\Models\OrderItemMark;
+use App\Models\OrderReceipt;
 use App\Services\DeliverySelection;
 use App\Services\FulfillmentService;
 use App\Services\ShipmentService;
+use App\Services\StockReturnService;
 use App\Support\Fulfillment;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,38 +40,65 @@ class OrdersController extends Controller
         private readonly DirectShipmentService $shipments,
     ) {}
 
-    /** Список: view=assembly (ждут сборки и собраны), shipped (в пути), all. */
+    /**
+     * Список по разделам: assembly — ждут сборки и собраны; shipped — в пути;
+     * returns — не забрали или вернули после получения, ждут приёмки на склад;
+     * done — получены, отменены до отправки, возвраты приняты; all — все.
+     */
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'view' => ['sometimes', 'in:assembly,shipped,done,all'],
+            'view' => ['sometimes', 'in:assembly,shipped,returns,done,all'],
             'limit' => ['sometimes', 'integer', 'min:1', 'max:500'],
         ]);
         $view = $data['view'] ?? 'assembly';
-        $query = Order::query()->where('status', Order::STATUS_PAID)->withCount('items')->latest('paid_at');
-        match ($view) {
-            'assembly' => $query->where(fn ($q) => $q->whereNull('fulfillment_status')
-                ->orWhereIn('fulfillment_status', [Fulfillment::AWAITING, Fulfillment::ASSEMBLED])),
-            'shipped' => $query->whereIn('fulfillment_status', [Fulfillment::SHIPPED, Fulfillment::AT_PICKUP]),
-            'done' => $query->whereIn('fulfillment_status', [Fulfillment::DELIVERED, Fulfillment::RETURNED]),
-            'all' => null,
-        };
+        $query = $this->section($view)->withCount('items')->latest('paid_at');
 
         return response()->json([
             'orders' => $query->limit($data['limit'] ?? 200)->get()->map(fn (Order $order): array => $this->brief($order))->all(),
             'counts' => [
-                'awaiting' => Order::query()->where('status', Order::STATUS_PAID)
+                'awaiting' => Order::query()->where('status', Order::STATUS_PAID)->withoutRefund()
                     ->where(fn ($q) => $q->whereNull('fulfillment_status')->orWhere('fulfillment_status', Fulfillment::AWAITING))->count(),
-                'assembled' => Order::query()->where('status', Order::STATUS_PAID)->where('fulfillment_status', Fulfillment::ASSEMBLED)->count(),
-                'shipped' => Order::query()->where('status', Order::STATUS_PAID)
-                    ->whereIn('fulfillment_status', [Fulfillment::SHIPPED, Fulfillment::AT_PICKUP])->count(),
+                'assembled' => Order::query()->where('status', Order::STATUS_PAID)->withoutRefund()->where('fulfillment_status', Fulfillment::ASSEMBLED)->count(),
+                'shipped' => $this->section('shipped')->count(),
+                'returns' => $this->section('returns')->count(),
             ],
         ]);
     }
 
+    /** Заказы раздела livsipro. */
+    private function section(string $view): Builder
+    {
+        $paid = fn () => Order::query()->where('status', Order::STATUS_PAID)->withoutRefund();
+        $left = [Fulfillment::SHIPPED, Fulfillment::AT_PICKUP, Fulfillment::DELIVERED];
+
+        return match ($view) {
+            'assembly' => $paid()->where(fn ($q) => $q->whereNull('fulfillment_status')
+                ->orWhereIn('fulfillment_status', [Fulfillment::AWAITING, Fulfillment::ASSEMBLED])),
+            'shipped' => $paid()->whereIn('fulfillment_status', [Fulfillment::SHIPPED, Fulfillment::AT_PICKUP]),
+            'returns' => Order::query()->whereIn('status', [Order::STATUS_PAID, Order::STATUS_REFUNDED])->whereNull('returned_to_stock_at')
+                ->where(fn ($q) => $q->where('fulfillment_status', Fulfillment::RETURNED)
+                    ->orWhere(fn ($q) => $q->where('status', Order::STATUS_REFUNDED)->whereIn('fulfillment_status', $left))),
+            'done' => Order::query()->where(fn ($q) => $q
+                ->where(fn ($q) => $q->where('status', Order::STATUS_PAID)->where('fulfillment_status', Fulfillment::DELIVERED))
+                ->orWhereNotNull('returned_to_stock_at')
+                ->orWhere(fn ($q) => $q->where('status', Order::STATUS_REFUNDED)->whereNull('fulfillment_status'))),
+            default => Order::query()->whereIn('status', [Order::STATUS_PAID, Order::STATUS_REFUNDED]),
+        };
+    }
+
     public function show(string $number): JsonResponse
     {
-        return response()->json(['order' => $this->full($this->order($number))]);
+        return response()->json(['order' => $this->full($this->order($number, false))]);
+    }
+
+    /** «Принят на склад» — вернувшаяся посылка проверена, товар снова в продаже. */
+    public function restock(Request $request, string $number): JsonResponse
+    {
+        $by = $request->validate(['by' => ['required', 'string', 'min:2', 'max:120']])['by'];
+        $order = app(StockReturnService::class)->accept($this->order($number, false), $by, OrderFulfillmentEvent::SOURCE_LIVSIPRO);
+
+        return response()->json(['order' => $this->full($order)]);
     }
 
     /** Отсканированный КИЗ. Разбор кода делает livsipro, здесь — сверка и запись. */
@@ -202,10 +232,39 @@ class OrdersController extends Controller
         return response()->json(['order' => $this->full($order)]);
     }
 
+    /** «Вернуть в сборку»: «Собран» нажали по ошибке — пока отправление не создано. */
+    public function reassemble(Request $request, string $number): JsonResponse
+    {
+        $by = $request->validate(['by' => ['required', 'string', 'min:2', 'max:120']])['by'];
+        $order = $this->order($number);
+        if (Fulfillment::current($order) !== Fulfillment::ASSEMBLED) {
+            $this->fail('Вернуть в сборку можно только собранный, но ещё не переданный заказ.');
+        }
+        if ($order->shipment_external_id || in_array($order->shipment_state, ['creating', 'unknown'], true)) {
+            $this->fail('Сначала отмените отправление у службы.');
+        }
+        $order = $this->fulfillment->set($order, Fulfillment::AWAITING, 'Вернул в сборку: '.$by, OrderFulfillmentEvent::SOURCE_LIVSIPRO);
+
+        return response()->json(['order' => $this->full($order)]);
+    }
+
+    /** «Отменить отправление»: снять заявку у службы, пока посылка не передана. */
+    public function cancelShipment(Request $request, string $number): JsonResponse
+    {
+        $by = $request->validate(['by' => ['required', 'string', 'min:2', 'max:120']])['by'];
+        $order = $this->order($number);
+        if (! DirectShipmentService::isDirectOrder($order)) {
+            $this->fail('Заказ оформлен через ApiShip — заявку отменяют в кабинете ApiShip.');
+        }
+        $order = $this->shipments->cancel($order, 'Отменил: '.$by, OrderFulfillmentEvent::SOURCE_LIVSIPRO);
+
+        return response()->json(['order' => $this->full($order)]);
+    }
+
     /** Спросить службу о статусе прямо сейчас, не дожидаясь расписания. */
     public function refresh(string $number): JsonResponse
     {
-        $order = $this->order($number);
+        $order = $this->order($number, false);
         if (! $order->shipment_external_id && ! in_array($order->shipment_state, ['creating', 'unknown'], true)) {
             return response()->json(['order' => $this->full($order)]);
         }
@@ -213,19 +272,34 @@ class OrdersController extends Controller
         return response()->json(['order' => $this->full($this->shipments->refresh($order))]);
     }
 
-    private function order(string $number): Order
+    /** Заказ по номеру. working — для сборки и отправки: только оплаченный и без возврата. */
+    private function order(string $number, bool $working = true): Order
     {
-        $order = Order::query()->where('number', $number)->where('status', Order::STATUS_PAID)->first();
+        $order = Order::query()->where('number', $number)->whereIn('status', [Order::STATUS_PAID, Order::STATUS_REFUNDED])->first();
         abort_if(! $order, 404, 'Заказ не найден или не оплачен.');
+        abort_if($working && ($order->status !== Order::STATUS_PAID || Order::query()->whereKey($order->id)->withoutRefund()->doesntExist()), 409,
+            'По заказу оформлен возврат денег — собирать и отправлять его не нужно.');
 
         return $order;
     }
 
+    /**
+     * Коды можно сканировать и убирать, пока заказ не получен: при сборке и в
+     * пути. Созданное отправление этому не мешает — сайт создаёт его сам сразу
+     * после оплаты, ещё до сборки. А в пути коды дописывают, если при сборке
+     * их не приняли (так было с заказами 17 и 18): коды нужны для чека и
+     * вывода из оборота, и отправляются они при получении.
+     */
     private function assertAssembling(Order $order): void
     {
-        if (! in_array(Fulfillment::current($order), [Fulfillment::AWAITING, Fulfillment::ASSEMBLED], true) || $order->shipment_external_id) {
-            $this->fail('Заказ уже передан в доставку — коды менять нельзя.');
+        if (! self::marksEditable($order)) {
+            $this->fail('Заказ уже получен или вернулся — коды менять нельзя.');
         }
+    }
+
+    private static function marksEditable(Order $order): bool
+    {
+        return in_array(Fulfillment::current($order), [Fulfillment::AWAITING, Fulfillment::ASSEMBLED, Fulfillment::SHIPPED, Fulfillment::AT_PICKUP], true);
     }
 
     /** GTIN товара из штрих-кода варианта: EAN-13 → 14 знаков с нулём впереди. */
@@ -253,6 +327,16 @@ class OrdersController extends Controller
             'total' => (int) $order->total,
             'fulfillment' => ['code' => $status, 'label' => Fulfillment::statuses()[$status] ?? $status,
                 'at' => $order->fulfillment_status_at?->toIso8601String()],
+            'status' => ['code' => $order->status, 'label' => $order->statusLabel()],
+            'outcome' => $order->outcome(),
+            'promo' => $order->promo_code ? ['code' => $order->promo_code, 'discount' => (int) $order->promo_discount,
+                'free_delivery' => (bool) $order->promo_free_delivery] : null,
+            'refund' => ($refund = $order->receipt(OrderReceipt::KIND_REFUND)) && in_array($refund->status, ['pending', 'succeeded'], true)
+                ? ['amount' => (int) $refund->amount, 'kept_delivery' => (int) ($refund->payload['kept_delivery'] ?? 0), 'state' => $refund->status]
+                : null,
+            'returned_to_stock' => $order->returned_to_stock_at
+                ? ['at' => $order->returned_to_stock_at->toIso8601String(), 'by' => $order->returned_to_stock_by]
+                : null,
             'delivery' => [
                 'method' => $order->delivery_method,
                 'title' => DeliverySelection::label($order->delivery_method),
@@ -267,6 +351,23 @@ class OrdersController extends Controller
                 'reference' => $order->shipmentReference(),
                 'tracking' => $order->shipment_tracking_number,
                 'error' => $order->shipment_error,
+                'via' => match (true) {
+                    filled($order->shipment_external_id) => 'direct',
+                    filled($order->apiship_order_id) => 'apiship',
+                    default => null,
+                },
+            ],
+            // Какие кнопки сейчас уместны — чтобы livsipro не гадал по статусам.
+            'actions' => [
+                'marks' => $order->status === Order::STATUS_PAID && self::marksEditable($order),
+                'restock' => $order->canReturnToStock(),
+                // Этикетку livsipro печатает только у прямого отправления службы;
+                // у отправлений через ApiShip она — в кабинете ApiShip.
+                'label' => filled($order->shipment_external_id) && DirectShipmentService::isDirectOrder($order),
+                'reassemble' => $status === Fulfillment::ASSEMBLED && ! $order->shipment_external_id
+                    && ! in_array($order->shipment_state, ['creating', 'unknown'], true),
+                'cancel_shipment' => filled($order->shipment_external_id) && DirectShipmentService::isDirectOrder($order)
+                    && in_array($status, [Fulfillment::AWAITING, Fulfillment::ASSEMBLED], true),
             ],
         ];
     }

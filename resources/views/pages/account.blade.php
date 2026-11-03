@@ -71,6 +71,27 @@
             </div>
 
             <aside>
+                @if ($promoCodes->isNotEmpty())
+                    {{-- Личные промокоды: вводятся при оформлении заказа. --}}
+                    <div class="eyebrow">Мои промокоды</div>
+                    <div class="mt-5 mb-8 border-t border-ink">
+                        @foreach ($promoCodes as $promo)
+                            @php($state = $promo->stateLabel())
+                            <div class="border-b border-line py-4 {{ $state === 'действует' ? '' : 'opacity-60' }}">
+                                <div class="flex items-baseline justify-between gap-3">
+                                    <strong class="tracking-[0.06em]">{{ $promo->code }}</strong>
+                                    <span class="text-[11px] font-bold uppercase tracking-[0.08em] {{ $state === 'действует' ? 'text-green' : 'text-muted' }}">{{ $state }}</span>
+                                </div>
+                                <p class="mt-1 text-sm">{{ $promo->benefit() }}</p>
+                                @if ($promo->expires_at && $state === 'действует')
+                                    <p class="mt-1 text-xs text-muted">До {{ $promo->expires_at->timezone('Europe/Moscow')->translatedFormat('j F Y') }}</p>
+                                @endif
+                            </div>
+                        @endforeach
+                        <p class="mt-3 text-xs leading-relaxed text-muted">Введите код в поле «Промокод» при оформлении заказа.</p>
+                    </div>
+                @endif
+
                 <div class="eyebrow">Данные</div>
 
                 <form method="POST" action="{{ route('account.update') }}" class="mt-5">

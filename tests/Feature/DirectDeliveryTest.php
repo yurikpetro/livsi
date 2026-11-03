@@ -744,6 +744,65 @@ class DirectDeliveryTest extends TestCase
             && str_contains($request->header('Accept')[0] ?? '', 'application/pdf'));
     }
 
+    public function test_ozon_fresh_posting_not_found_is_approved_after_a_short_wait(): void
+    {
+        Carbon::setTestNow('2026-11-02 21:00:00');
+        $this->connectOzon();
+        Sleep::fake();
+        $order = $this->order('ozondel', ['delivery_point_id' => '1001']);
+        $answers = [404, 404, 200];
+        Http::fake($this->ozonToken() + [
+            '*/v1/delivery-point/check-availability' => Http::response(['results' => [['request_id' => 1, 'cutoff_at' => '2026-11-03T12:00:00Z']]]),
+            '*/v1/order/create' => Http::response(['order_number' => '777', 'postings' => [['request_id' => 1, 'posting_number' => '777-0001-1']]]),
+            '*/v1/posting/approve' => function () use (&$answers) {
+                $code = array_shift($answers) ?? 200;
+
+                return $code === 200 ? Http::response([]) : Http::response(['message' => 'Posting с номером 777-0001-1 не найден'], 404);
+            },
+        ]);
+
+        $result = app(OzonCarrier::class)->createShipment($order, []);
+
+        $this->assertSame('forming', $result['status_code']);
+        $this->assertArrayNotHasKey('approve_error', $result['data']);
+        Sleep::assertSleptTimes(2);
+    }
+
+    public function test_ozon_status_is_updated_right_after_the_label(): void
+    {
+        $this->connectOzon();
+        Sleep::fake();
+        $order = $this->ozonOrder();
+        $order->forceFill(['shipment_status_code' => 'created', 'shipment_status_name' => 'Создано в Ozon, но не подтверждено: HTTP 404'])->save();
+        $statuses = ['created', 'ready_for_shipping'];
+        Http::fake($this->ozonToken() + [
+            '*/v1/posting/info' => function () use (&$statuses) {
+                return Http::response(['postings' => [['posting_number' => '777-0001-1', 'status' => count($statuses) > 1 ? array_shift($statuses) : $statuses[0]]]]);
+            },
+            '*/v1/posting/approve' => Http::response([]),
+            '*/v1/posting/label' => Http::response("%PDF-1.4\nozon label", 200, ['Content-Type' => 'application/pdf']),
+        ]);
+
+        app(DirectShipmentService::class)->label($order);
+
+        $this->assertSame(['ready_for_shipping', 'Готово к отгрузке — можно сдавать в пункт'],
+            [$order->fresh()->shipment_status_code, $order->fresh()->shipment_status_name]);
+    }
+
+    public function test_ozon_canceled_after_handover_is_a_return(): void
+    {
+        $this->connectOzon();
+        $order = $this->ozonOrder();
+        $order->forceFill(['fulfillment_status' => Fulfillment::AT_PICKUP])->save();
+        Http::fake($this->ozonToken() + [
+            '*/v1/posting/info' => Http::response(['postings' => [['posting_number' => '777-0001-1', 'status' => 'canceled']]]),
+        ]);
+
+        $order = app(DirectShipmentService::class)->sync($order);
+
+        $this->assertSame([Fulfillment::RETURNED, 'Не забрали — Ozon везёт посылку обратно'], [$order->fulfillment_status, $order->shipment_status_name]);
+    }
+
     public function test_ozon_label_with_low_balance_tells_to_top_up(): void
     {
         $this->connectOzon();
@@ -985,8 +1044,40 @@ class DirectDeliveryTest extends TestCase
         $order->forceFill(['shipment_provider' => 'cdek', 'shipment_external_id' => 'uuid-9', 'shipment_state' => 'created'])->save();
         $this->api('POST', '/orders/'.$order->number.'/shipped', ['by' => 'Мария'])->assertOk()
             ->assertJsonPath('order.fulfillment.code', Fulfillment::SHIPPED);
+        // в пути коды можно дописать (если при сборке их не приняли), после получения — нет
         $this->api('POST', '/orders/'.$order->number.'/marks', ['item_id' => $order->items->first()->id, 'by' => 'Мария', ...$this->kiz('Q1')])
-            ->assertStatus(422);
+            ->assertStatus(422)->assertJsonFragment(['order' => ['По «Мультипенка, 200 мл» уже отсканировано 1 шт. — больше не нужно.']]);
+        $this->api('GET', '/orders/'.$order->number)->assertJsonPath('order.actions.marks', true);
+        $order->forceFill(['fulfillment_status' => Fulfillment::DELIVERED])->save();
+        $this->api('DELETE', '/orders/'.$order->number.'/marks/'.$order->marks()->first()->id)
+            ->assertStatus(422)->assertJsonFragment(['order' => ['Заказ уже получен или вернулся — коды менять нельзя.']]);
+        $this->api('GET', '/orders/'.$order->number)->assertJsonPath('order.actions.marks', false);
+    }
+
+    public function test_missing_marks_can_be_added_while_parcel_is_on_the_way(): void
+    {
+        $order = $this->order('ozondel', ['fulfillment_status' => Fulfillment::SHIPPED, 'shipment_provider' => 'ozondel',
+            'shipment_external_id' => 'oz-1', 'shipment_state' => 'created'], 1);
+
+        $this->api('POST', '/orders/'.$order->number.'/marks', ['item_id' => $order->items->first()->id, 'by' => 'Антон', ...$this->kiz()])
+            ->assertOk()->assertJsonPath('order.items.0.marks.0.serial', 'Ab1-2C')
+            ->assertJsonPath('order.fulfillment.code', Fulfillment::SHIPPED);
+    }
+
+    /** Отправление создалось само сразу после оплаты — коды всё равно сканируются, потом «Собран». */
+    public function test_marks_accepted_when_shipment_was_created_automatically_before_assembly(): void
+    {
+        $order = $this->order('yataxi', [], 1);
+        $order->forceFill(['shipment_provider' => 'yataxi', 'shipment_external_id' => 'ya-uuid-1', 'shipment_state' => 'created'])->save();
+        $item = $order->items->first();
+
+        $this->api('POST', '/orders/'.$order->number.'/marks', ['item_id' => $item->id, 'by' => 'Мария', ...$this->kiz()])
+            ->assertOk()->assertJsonPath('order.items.0.marks.0.serial', 'Ab1-2C');
+        $mark = $order->marks()->first();
+        $this->api('DELETE', '/orders/'.$order->number.'/marks/'.$mark->id)->assertOk()->assertJsonPath('order.items.0.marks', []);
+        $this->api('POST', '/orders/'.$order->number.'/marks', ['item_id' => $item->id, 'by' => 'Мария', ...$this->kiz()])->assertOk();
+        $this->api('POST', '/orders/'.$order->number.'/assembled', ['by' => 'Мария'])->assertOk()
+            ->assertJsonPath('order.fulfillment.code', Fulfillment::ASSEMBLED);
     }
 
     public function test_apiship_orders_are_not_sent_to_services_from_livsipro(): void

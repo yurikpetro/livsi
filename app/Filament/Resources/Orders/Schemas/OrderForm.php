@@ -4,7 +4,9 @@ namespace App\Filament\Resources\Orders\Schemas;
 
 use App\Models\Order;
 use App\Models\OrderIssue;
+use App\Models\OrderReceipt;
 use App\Services\DeliverySelection;
+use App\Services\ReceiptService;
 use App\Support\Fulfillment;
 use App\Support\Money;
 use Filament\Forms\Components\Placeholder;
@@ -131,6 +133,11 @@ class OrderForm
                                 .($record->discount_total > 0 ? ' · скидка −'.Money::rub($record->discount_total) : '')
                                 .' · итого '.Money::rub($record->total))
                             ->columnSpanFull(),
+
+                        Placeholder::make('promo')->label('Промокод')
+                            ->visible(fn (Order $record): bool => filled($record->promo_code))
+                            ->content(fn (Order $record) => self::promoText($record))
+                            ->columnSpanFull(),
                     ]),
 
                 Section::make('Оплата')
@@ -147,6 +154,10 @@ class OrderForm
                                             .' · '.$p->created_at->format('d.m.Y H:i'))
                                         ->implode('<br>'),
                             ))
+                            ->columnSpanFull(),
+                        Placeholder::make('receipts_overview')
+                            ->label('Второй чек и возврат')
+                            ->content(fn (Order $record) => new HtmlString(self::receiptsText($record)))
                             ->columnSpanFull(),
                     ])
                     ->collapsed(),
@@ -181,5 +192,41 @@ class OrderForm
                     ])
                     ->columns(3),
             ]);
+    }
+
+    /** Промокод заказа: код, что дал и чей он. */
+    public static function promoText(Order $record): string
+    {
+        $promo = $record->promoCode;
+
+        return $record->promo_code
+            .($record->promo_discount > 0 ? ' — скидка '.Money::rub((int) $record->promo_discount) : '')
+            .($record->promo_free_delivery ? ' — бесплатная доставка' : '')
+            .($promo?->customer ? ' · личный код клиента '.($promo->customer->name ?: $promo->customer->email) : ($promo ? ' · общий код' : ''))
+            .($promo?->issued_by ? ' · выдал '.$promo->issued_by : '');
+    }
+
+    /** Второй чек (полный расчёт с КИЗ) и возврат денег — одной-двумя строками. */
+    private static function receiptsText(Order $record): string
+    {
+        $lines = [];
+        foreach ([OrderReceipt::KIND_CLOSING => 'Чек «полный расчёт» с КИЗ', OrderReceipt::KIND_REFUND => 'Возврат денег'] as $kind => $title) {
+            $receipt = $record->receipt($kind);
+            if (! $receipt) {
+                continue;
+            }
+            $lines[] = e($title).': '.e($receipt->statusLabel())
+                .($receipt->amount ? ' · '.e(Money::rub($receipt->amount)) : '')
+                .($receipt->sent_at ? ' · '.$receipt->sent_at->timezone('Europe/Moscow')->format('d.m.Y H:i') : '')
+                .($receipt->error ? '<br><span style="color:#dc2626">'.e($receipt->error).'</span>' : '');
+        }
+
+        if ($lines) {
+            return implode('<br>', $lines);
+        }
+
+        return app(ReceiptService::class)->enabled()
+            ? 'Второй чек уйдёт сам, когда заказ получит статус «Получен».'
+            : 'Второй чек выключен — включается в «Настройки сайта» → «Налоги и чеки».';
     }
 }

@@ -6,8 +6,10 @@ use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\PromoCode;
 use App\Models\StockQuota;
 use App\Models\StockQuotaMovement;
+use App\Models\User;
 use App\Payments\Vat;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -27,9 +29,13 @@ use RuntimeException;
  */
 class OrderService
 {
-    public function __construct(private readonly PromoService $promo) {}
+    public function __construct(
+        private readonly PromoService $promo,
+        private readonly PromoCodeService $promoCodes,
+    ) {}
 
-    public function createFromCart(Cart $cart, array $customer): Order
+    /** @param  ?string  $promoCode  промокод покупателя — проверяется ещё раз под блокировкой */
+    public function createFromCart(Cart $cart, array $customer, ?string $promoCode = null): Order
     {
         $items = $cart->paidItems();
 
@@ -37,7 +43,7 @@ class OrderService
             throw new RuntimeException('Корзина пуста.');
         }
 
-        return DB::transaction(function () use ($cart, $customer, $items) {
+        return DB::transaction(function () use ($cart, $customer, $items, $promoCode) {
             $gift = $cart->giftItem();
 
             // Подарок действителен, только если сумма всё ещё выше порога:
@@ -48,6 +54,21 @@ class OrderService
 
             // Скидка не может быть больше самой корзины.
             $discount = min($discount, $subtotal);
+
+            // Промокод: строку кода блокируем, чтобы два заказа одновременно
+            // не потратили одноразовый код дважды.
+            $promo = null;
+            if (filled($promoCode)) {
+                PromoCode::query()->where('code', PromoCodeService::normalize($promoCode))->lockForUpdate()->first();
+                $promo = $this->promoCodes->check($promoCode, $subtotal - $discount, (string) ($customer['customer_email'] ?? ''),
+                    $customer['customer_phone'] ?? null, isset($customer['user_id']) ? User::find($customer['user_id']) : null);
+                $discount += $promo['discount'];
+                if ($promo['free_delivery']) {
+                    $customer['delivery_price'] = 0;
+                }
+                $customer += ['promo_code_id' => $promo['promo']->id, 'promo_code' => $promo['promo']->code,
+                    'promo_discount' => $promo['discount'], 'promo_free_delivery' => $promo['free_delivery']];
+            }
 
             $order = Order::create(array_merge($customer, [
                 // Настоящий номер проставляется сразу после вставки: он

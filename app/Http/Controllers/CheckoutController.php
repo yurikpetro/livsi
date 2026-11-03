@@ -12,6 +12,7 @@ use App\Services\OrderMailer;
 use App\Services\OrderService;
 use App\Services\OzonDeliveryService;
 use App\Services\PaymentService;
+use App\Services\PromoCodeService;
 use App\Services\PromoService;
 use App\Support\Text;
 use App\Support\Utm;
@@ -33,6 +34,7 @@ class CheckoutController extends Controller
         private readonly PromoService $promos,
         private readonly DeliveryQuoteService $quotes,
         private readonly OzonDeliveryService $ozon,
+        private readonly PromoCodeService $promoCodes,
     ) {}
 
     public function index(Request $request)
@@ -45,6 +47,7 @@ class CheckoutController extends Controller
 
         return view('pages.checkout', [
             'cart' => $cart,
+            'promo' => $this->appliedPromo($request, $cart),
             'gateway' => $this->gateway,
             'deliveryCalculationEnabled' => $this->quotes->enabled(),
             'deliveryCalculationTest' => $this->quotes->testing(),
@@ -59,6 +62,67 @@ class CheckoutController extends Controller
             // Личная страница: в поиске ей делать нечего.
             'robots' => 'noindex, nofollow',
         ]);
+    }
+
+    /** «Применить» промокод: проверяем и запоминаем в сессии оформления. */
+    public function applyPromo(Request $request): RedirectResponse
+    {
+        $cart = $this->carts->currentOrNull();
+        if (! $cart || $cart->isEmpty()) {
+            return redirect()->route('cart.index')->with('status', 'Корзина пуста.');
+        }
+        $data = $request->validate(['promo_code' => ['required', 'string', 'max:40'],
+            'email' => ['nullable', 'string', 'max:255'], 'phone' => ['nullable', 'string', 'max:40']],
+            ['promo_code.required' => 'Введите промокод.']);
+        $email = (string) ($data['email'] ?? $request->user()?->email ?? '');
+        try {
+            $promo = $this->promoCodes->check($data['promo_code'], $this->goods($cart), $email, $data['phone'] ?? null, $request->user());
+        } catch (ValidationException $exception) {
+            $request->session()->forget('checkout_promo');
+
+            return redirect()->route('checkout.index')->withInput($request->except('_token'))->withErrors($exception->errors());
+        }
+        $request->session()->put('checkout_promo', ['code' => $promo['promo']->code, 'free_delivery' => $promo['free_delivery'],
+            'email' => $email, 'phone' => $data['phone'] ?? null]);
+
+        return redirect()->route('checkout.index')->withInput($request->except(['_token', 'delivery_quote_token']))
+            ->with('status', 'Промокод '.$promo['promo']->code.' применён: '.mb_strtolower($promo['title']).'.');
+    }
+
+    public function removePromo(Request $request): RedirectResponse
+    {
+        $request->session()->forget('checkout_promo');
+
+        return redirect()->route('checkout.index')->withInput($request->except(['_token', 'delivery_quote_token']));
+    }
+
+    /** Применённый промокод для страницы оформления; устаревший — убираем. */
+    private function appliedPromo(Request $request, $cart): ?array
+    {
+        $stored = $request->session()->get('checkout_promo');
+        if (! is_array($stored) || empty($stored['code'])) {
+            return null;
+        }
+        try {
+            $promo = $this->promoCodes->check($stored['code'], $this->goods($cart), (string) ($stored['email'] ?? ''), $stored['phone'] ?? null, $request->user());
+        } catch (ValidationException $exception) {
+            $request->session()->forget('checkout_promo');
+            $request->session()->now('promo_lost', $exception->validator->errors()->first());
+
+            return null;
+        }
+
+        return ['code' => $promo['promo']->code, 'title' => $promo['title'], 'discount' => $promo['discount'], 'free_delivery' => $promo['free_delivery']];
+    }
+
+    /** Товары к оплате после подарка — от этой суммы считается скидка по промокоду. */
+    private function goods($cart): int
+    {
+        $subtotal = $cart->subtotal();
+        $gift = $cart->giftItem();
+        $giftDiscount = $gift && $this->promos->isGiftUnlocked($subtotal) ? (int) $gift->variant->price : 0;
+
+        return max(0, $subtotal - min($giftDiscount, $subtotal));
     }
 
     public function store(StoreOrderRequest $request): RedirectResponse
@@ -132,7 +196,13 @@ class CheckoutController extends Controller
                 'ip' => $request->ip(),
                 'user_agent' => mb_substr((string) $request->userAgent(), 0, 255),
                 'utm' => Utm::current($request),
-            ]);
+            ], $request->session()->get('checkout_promo.code') ?: ($request->string('promo_code')->trim()->value() ?: null));
+        } catch (ValidationException $e) {
+            // Промокод перестал подходить (истёк, использован в другом заказе) —
+            // снимаем его; доставку нужно пересчитать, если он давал бесплатную.
+            $request->session()->forget('checkout_promo');
+
+            return back()->withInput()->withErrors($e->errors());
         } catch (Throwable $e) {
             // Заказ не создан — корзину не трогаем, человек может поправить
             // количество и попробовать снова.

@@ -142,6 +142,9 @@ class DirectShipmentService
 
     public function label(Order $order, string $size = '75x120'): string
     {
+        if (! $order->shipment_external_id && $order->apiship_order_id) {
+            $this->fail('Отправление создано через ApiShip — этикетку скачайте в кабинете ApiShip.');
+        }
         if (! $order->shipment_external_id) {
             $this->fail('Сначала создайте отправление — этикетку выдаёт служба.');
         }
@@ -149,19 +152,58 @@ class DirectShipmentService
         if (! str_starts_with($pdf, '%PDF')) {
             $this->fail('Служба ещё не подготовила этикетку. Повторите через минуту.');
         }
+        // Ради этикетки служба могла подтвердить отправление — обновим статус
+        // в заказе сразу, а не через 15 минут по расписанию.
+        try {
+            $this->sync($order->fresh());
+        } catch (Throwable $exception) {
+            Log::info('Статус после этикетки не обновился.', ['order' => $order->number, 'error' => mb_substr($exception->getMessage(), 0, 200)]);
+        }
 
         return $pdf;
     }
 
-    public function cancel(Order $order): Order
+    /**
+     * Снять заявку у службы, пока посылка не передана. После отмены заказ
+     * снова готов к созданию отправления: следующая заявка уйдёт с номером
+     * «LV-…-2» (Order::shipmentRef), старая остаётся в журнале заказа.
+     */
+    public function cancel(Order $record, ?string $by = null, string $source = OrderFulfillmentEvent::SOURCE_MANUAL): Order
     {
+        $order = $record->fresh();
         if (! $order->shipment_external_id) {
             $this->fail('Отправление у службы не создано — отменять нечего.');
         }
-        $this->carrierFor($order)->cancel($order);
-        $order->forceFill(['shipment_state' => 'cancelled', 'shipment_status_name' => 'Отменено'])->save();
+        if (in_array(Fulfillment::current($order), [Fulfillment::SHIPPED, Fulfillment::AT_PICKUP, Fulfillment::DELIVERED, Fulfillment::RETURNED], true)) {
+            $this->fail('Посылка уже передана службе — отменить заявку отсюда нельзя. Оформите возврат через службу.');
+        }
+        $reference = $order->shipmentReference().($order->shipment_tracking_number ? ' ('.$order->shipment_tracking_number.')' : '');
+        try {
+            $this->carrierFor($order)->cancel($order);
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            Log::warning('Служба не отменила отправление.', ['order' => $order->number, 'error' => mb_substr($exception->getMessage(), 0, 300)]);
+            $this->fail('Служба не отменила заявку: '.mb_substr(preg_replace('/^.*?HTTP \d+ /u', '', $exception->getMessage()), 0, 200));
+        }
 
-        return $order;
+        DB::transaction(function () use ($order, $reference, $by, $source): void {
+            $locked = Order::query()->lockForUpdate()->findOrFail($order->id);
+            $locked->forceFill([
+                'shipment_state' => 'cancelled', 'shipment_external_id' => null, 'shipment_tracking_number' => null,
+                'shipment_status_code' => null, 'shipment_status_name' => 'Отменено', 'shipment_data' => null,
+                'shipment_error' => null, 'shipment_attempt' => (int) ($locked->shipment_attempt ?? 1) + 1,
+            ])->save();
+            OrderFulfillmentEvent::create([
+                'order_id' => $locked->id,
+                'user_id' => $source === OrderFulfillmentEvent::SOURCE_MANUAL ? auth()->id() : null,
+                'status' => Fulfillment::current($locked) ?? Fulfillment::ASSEMBLED,
+                'source' => $source,
+                'comment' => mb_substr('Отправление '.$reference.' отменено у службы'.($by ? '. '.$by : ''), 0, 500),
+            ]);
+        });
+
+        return $order->fresh();
     }
 
     private function carrierFor(Order $order): Carrier

@@ -190,7 +190,7 @@ final class Fulfillment
             $event->status => $event->created_at,
         ]);
 
-        return collect($flow)->map(function (string $status, int $index) use ($order, $position, $times): array {
+        $steps = collect($flow)->map(function (string $status, int $index) use ($order, $position, $times): array {
             $reached = $position !== false && $index <= $position;
 
             return [
@@ -202,6 +202,17 @@ final class Fulfillment
                 'time' => $reached ? ($times[$status] ?? ($status === self::AWAITING ? $order->paid_at : null)) : null,
             ];
         })->all();
+
+        // Пройденный шаг без своей отметки (служба сообщила «передан», а «Собран»
+        // не нажимали) случился не позже следующего шага — показываем его время,
+        // а не прочерк.
+        for ($i = count($steps) - 2; $i >= 0; $i--) {
+            if ($steps[$i]['reached'] && $steps[$i]['time'] === null && $steps[$i + 1]['time'] !== null) {
+                $steps[$i]['time'] = $steps[$i + 1]['time'];
+            }
+        }
+
+        return $steps;
     }
 
     /**
@@ -211,6 +222,11 @@ final class Fulfillment
      */
     public static function forCustomer(Order $order): ?array
     {
+        // Деньги вернули — покупатель видит «Заказ отменён» вверху страницы,
+        // ход доставки ему больше не нужен.
+        if ($order->status === Order::STATUS_REFUNDED) {
+            return null;
+        }
         $courier = self::isCourier($order);
 
         return match (self::current($order)) {

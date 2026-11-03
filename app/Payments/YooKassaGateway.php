@@ -4,7 +4,10 @@ namespace App\Payments;
 
 use App\Models\Order;
 use App\Models\Payment;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -139,6 +142,69 @@ class YooKassaGateway implements PaymentGateway
     }
 
     /**
+     * Отдельный чек (второй чек «полный расчёт» с КИЗ). Ключ повтора —
+     * постоянный для заказа: повтор после обрыва вернёт тот же чек.
+     *
+     * @param  array<string, mixed>  $body
+     * @return array<string, mixed>
+     */
+    public function createReceipt(array $body, string $key): array
+    {
+        $this->guard();
+
+        return $this->answer($this->client()->withHeaders(['Idempotence-Key' => $key])->post('/receipts', $body), 'чек');
+    }
+
+    /** @return array<string, mixed> */
+    public function receipt(string $id): array
+    {
+        $this->guard();
+
+        return $this->answer($this->client()->get('/receipts/'.$id), 'статус чека');
+    }
+
+    /**
+     * Возврат денег. Без receipt ЮKassa сама пробьёт чек возврата по данным
+     * платежа (возврат предоплаты); после второго чека передаём свой — с КИЗ,
+     * чтобы коды вернулись в оборот.
+     *
+     * @param  array<string, mixed>|null  $receipt
+     * @return array<string, mixed>
+     */
+    public function createRefund(string $paymentId, int $amount, ?array $receipt, string $description, string $key): array
+    {
+        $this->guard();
+
+        return $this->answer($this->client()->withHeaders(['Idempotence-Key' => $key])->post('/refunds', array_filter([
+            'payment_id' => $paymentId,
+            'amount' => ['value' => number_format($amount / 100, 2, '.', ''), 'currency' => 'RUB'],
+            'description' => mb_substr($description, 0, 250),
+            'receipt' => $receipt,
+        ])), 'возврат');
+    }
+
+    /** @return array<string, mixed> */
+    public function refund(string $id): array
+    {
+        $this->guard();
+
+        return $this->answer($this->client()->get('/refunds/'.$id), 'статус возврата');
+    }
+
+    /** Ответ ЮKassa или исключение с её объяснением (description и parameter). */
+    private function answer(Response $response, string $what): array
+    {
+        if ($response->successful() && is_array($response->json())) {
+            return $response->json();
+        }
+        $json = (array) $response->json();
+        $text = trim(($json['description'] ?? '').(isset($json['parameter']) ? ' ('.$json['parameter'].')' : ''));
+        Log::warning('ЮKassa отказала: '.$what, ['status' => $response->status(), 'code' => $json['code'] ?? null, 'description' => $text]);
+
+        throw new RuntimeException('ЮKassa, '.$what.': '.($text !== '' ? $text : 'HTTP '.$response->status()));
+    }
+
+    /**
      * Перенести ответ провайдера в запись платежа.
      *
      * Используется и при создании, и при опросе статуса, и при вебхуке —
@@ -180,8 +246,11 @@ class YooKassaGateway implements PaymentGateway
             ->acceptJson()
             ->timeout(20)
             // Сеть иногда моргает; повтор безопасен, потому что запрос
-            // идёт с ключом идемпотентности.
-            ->retry(2, 300, throw: false);
+            // идёт с ключом идемпотентности. Отказ по существу (4xx) не
+            // повторяем — ответ будет тот же.
+            ->retry(2, 300, fn ($exception) => $exception instanceof ConnectionException
+                || ($exception instanceof RequestException
+                    && ($exception->response->serverError() || $exception->response->status() === 429)), throw: false);
     }
 
     private function guard(): void

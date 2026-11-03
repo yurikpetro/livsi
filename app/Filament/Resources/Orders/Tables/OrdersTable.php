@@ -43,12 +43,15 @@ class OrdersTable
                 TextColumn::make('total')
                     ->label('Сумма')
                     ->state(fn (Order $record) => Money::rub($record->total))
+                    ->description(fn (Order $record): ?string => $record->promo_code ? 'промокод '.$record->promo_code : null)
                     ->sortable(),
 
                 TextColumn::make('status')
                     ->label('Статус')
                     ->badge()
                     ->formatStateUsing(fn (string $state) => Order::statuses()[$state] ?? $state)
+                    // Итог по деньгам и доставке вместе: «Отменён до отправки», «Не забрал…»
+                    ->description(fn (Order $record): ?string => $record->outcome())
                     ->color(fn (string $state) => match ($state) {
                         Order::STATUS_PAID => 'success',
                         Order::STATUS_AWAITING_PAYMENT => 'warning',

@@ -296,7 +296,7 @@ class CdekCarrier extends HttpCarrier
         }
         $response = $this->call('post', '/orders', [
             'type' => 1,
-            'number' => $order->number,
+            'number' => $order->shipmentRef(),
             'tariff_code' => (int) ($order->delivery_quote['tariff_id'] ?? 0),
             'comment' => 'livsi.shop '.$order->number,
             'shipment_point' => $this->origin(),
@@ -346,7 +346,7 @@ class CdekCarrier extends HttpCarrier
 
     public function findShipment(Order $order): ?array
     {
-        $response = $this->call('get', '/orders', ['im_number' => $order->number]);
+        $response = $this->call('get', '/orders', ['im_number' => $order->shipmentRef()]);
         if (in_array($response->status(), [400, 404], true)) {
             return null;
         }

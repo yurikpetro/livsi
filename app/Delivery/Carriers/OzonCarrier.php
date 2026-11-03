@@ -436,7 +436,7 @@ class OzonCarrier extends HttpCarrier
     /** Ключ повтора — один и тот же для заказа при любом числе попыток. */
     public static function idempotencyKey(Order $order): string
     {
-        $hash = sha1('livsi.shop/ozon/'.$order->id.'/'.$order->number);
+        $hash = sha1('livsi.shop/ozon/'.$order->id.'/'.$order->shipmentRef());
 
         return sprintf('%s-%s-5%s-%s-%s', substr($hash, 0, 8), substr($hash, 8, 4), substr($hash, 13, 3),
             dechex((hexdec(substr($hash, 16, 2)) & 0x3F) | 0x80).substr($hash, 18, 2), substr($hash, 20, 12));
@@ -450,11 +450,11 @@ class OzonCarrier extends HttpCarrier
         $cutoff = $this->cutoff((string) $order->delivery_point_id, $parcel, $declared);
         $names = $order->items->map(fn ($item): string => $item->label().' ×'.$item->quantity)->implode('; ');
         $posting = $this->posting($parcel, $declared, $cutoff) + [
-            'posting_external_id' => $order->number.'-1',
+            'posting_external_id' => $order->shipmentRef().'-1',
             'description' => mb_substr('Косметика LIVSI: '.$names, 0, 500),
         ];
         $response = $this->post('/v1/order/create', [
-            'order_external_id' => $order->number,
+            'order_external_id' => $order->shipmentRef(),
             'recipient' => ['phone_number' => $this->phone($order->customer_phone), 'full_name' => mb_substr($order->customer_name, 0, 200)],
             'delivery' => ['delivery_point' => ['delivery_point_id' => (int) $order->delivery_point_id]],
             'postings' => [$posting],
@@ -474,7 +474,7 @@ class OzonCarrier extends HttpCarrier
         $approveError = null;
         foreach ($postings as $posting) {
             try {
-                $this->approve($posting);
+                $this->approveFresh($posting);
             } catch (Throwable $exception) {
                 $approveError = $exception->getMessage();
             }
@@ -492,6 +492,27 @@ class OzonCarrier extends HttpCarrier
     private function approve(string $posting): void
     {
         $this->ok($this->post('/v1/posting/approve', ['posting_number' => $posting], 20), 'подтверждение отгрузки');
+    }
+
+    /**
+     * Подтверждение сразу после создания. Ozon заводит отправление не
+     * мгновенно: в первые секунды на подтверждение он отвечает 404
+     * «Posting не найден». Ждём и повторяем, остальные отказы — сразу наверх.
+     */
+    private function approveFresh(string $posting): void
+    {
+        for ($try = 1; ; $try++) {
+            try {
+                $this->approve($posting);
+
+                return;
+            } catch (RuntimeException $exception) {
+                if ($try >= 4 || ! str_contains($exception->getMessage(), 'HTTP 404')) {
+                    throw $exception;
+                }
+                Sleep::for(2)->seconds();
+            }
+        }
     }
 
     /**
@@ -549,6 +570,11 @@ class OzonCarrier extends HttpCarrier
         $info = $this->postingInfo($posting);
         $status = (string) ($info['status'] ?? '');
         [$name, $fulfillment] = self::STATUSES[$status] ?? [$status !== '' ? 'Ozon: '.$status : null, null];
+        // Отмена после передачи в доставку у Ozon значит возврат: покупатель
+        // не забрал или отказался — посылка едет обратно к нам.
+        if ($status === 'canceled' && in_array(Fulfillment::current($order), [Fulfillment::SHIPPED, Fulfillment::AT_PICKUP], true)) {
+            [$name, $fulfillment] = ['Не забрали — Ozon везёт посылку обратно', Fulfillment::RETURNED];
+        }
         if ($status === 'in_delivery_point' && is_string($info['storage_expires_at'] ?? null)) {
             $name .= ', хранится до '.Carbon::parse($info['storage_expires_at'])->timezone('Europe/Moscow')->format('d.m');
         }

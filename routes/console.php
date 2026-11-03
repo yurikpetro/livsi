@@ -17,3 +17,7 @@ Schedule::command('delivery:points')->dailyAt('00:20')->withoutOverlapping(120);
 Schedule::command('delivery:statuses')->everyFifteenMinutes()->withoutOverlapping(30);
 // «Обновить пункты выдачи» в админке: заявку забираем раз в минуту.
 Schedule::command('delivery:points --requested')->everyMinute()->withoutOverlapping(60)->runInBackground();
+// Второй чек «полный расчёт» с КИЗ полученным заказам; итог чеков и возвратов в обработке.
+Schedule::command('receipts:sync')->everyFiveMinutes()->withoutOverlapping(10);
+// Рассылки клиентам: по 30 писем в минуту.
+Schedule::command('mailings:send')->everyMinute()->withoutOverlapping(10);

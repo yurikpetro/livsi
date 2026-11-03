@@ -4,13 +4,17 @@ namespace App\Filament\Resources\Orders\Pages;
 
 use App\Filament\Resources\Orders\OrderResource;
 use App\Filament\Support\FulfillmentAction;
+use App\Filament\Support\RefundAction;
 use App\Filament\Support\ShipmentAction;
+use App\Filament\Support\StockReturnAction;
 use App\Models\OrderIssue;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Validation\ValidationException;
 
@@ -56,6 +60,19 @@ class EditOrder extends EditRecord
 
                     Notification::make()->title('Обращение записано')->success()->send();
                 }),
+
+            StockReturnAction::make(),
+
+            // Отмены — за отдельной кнопкой «Отменить…»: случайно не нажать и шапка не разъезжается.
+            ActionGroup::make([
+                ShipmentAction::cancel(),
+                RefundAction::make(),
+            ])
+                ->label('Отменить…')
+                ->icon(Heroicon::OutlinedXCircle)
+                ->color('danger')
+                ->dropdownWidth(Width::ExtraSmall)
+                ->button(),
         ];
     }
 }

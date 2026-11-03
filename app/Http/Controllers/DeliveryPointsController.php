@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Delivery\DeliveryGateway;
+use App\Delivery\DeliverySettings;
 use App\Services\DeliverySelection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,6 +34,7 @@ class DeliveryPointsController extends Controller
             $offset = (int) ($data['offset'] ?? 0);
             $cacheKey = 'delivery-points:'.hash('sha256', implode('|', [
                 $providerKey, mb_strtolower($data['city']), mb_strtolower($data['region'] ?? ''), $offset,
+                implode(',', DeliverySettings::hiddenPoints($providerKey)),
             ]));
             $result = Cache::remember($cacheKey, now()->addMinutes(10), fn () => $apiShip->points(
                 $data['city'], $providerKey, $offset, self::PER_PAGE, $data['region'] ?? null,

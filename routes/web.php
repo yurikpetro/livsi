@@ -21,6 +21,7 @@ use App\Http\Controllers\PageController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\PrintOrderController;
 use App\Http\Controllers\SitemapController;
+use App\Http\Controllers\UnsubscribeController;
 use App\Http\Middleware\CaptureUtm;
 use App\Models\LegalPage;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -82,9 +83,17 @@ Route::get('/delivery/points', DeliveryPointsController::class)
 Route::post('/delivery/city/geocode', CityGeocodeController::class)
     ->middleware('throttle:delivery-geocode')
     ->name('delivery.city.geocode');
+// Промокод: кнопка «Применить» отправляет форму оформления сюда и возвращает обратно.
+Route::post('/checkout/promo', [CheckoutController::class, 'applyPromo'])->middleware('throttle:20,1')->name('checkout.promo');
+Route::post('/checkout/promo/remove', [CheckoutController::class, 'removePromo'])->name('checkout.promo.remove');
 Route::post('/checkout', [CheckoutController::class, 'store'])
     ->middleware('throttle:20,60')
     ->name('checkout.store');
+
+// Отписка от рассылки по подписанной ссылке из письма.
+// POST — «отписаться в один клик» из почтовой программы (List-Unsubscribe-Post): без формы и без CSRF.
+Route::match(['get', 'post'], '/unsubscribe/{customer}', UnsubscribeController::class)
+    ->middleware('signed')->withoutMiddleware([PreventRequestForgery::class])->name('unsubscribe');
 
 // Заказ открывается по номеру и токену из письма: кабинета у гостя нет.
 Route::get('/order/{order}', [OrderController::class, 'show'])->name('order.show');

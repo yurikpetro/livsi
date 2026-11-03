@@ -18,6 +18,14 @@
             'Оплата не прошла или срок ожидания истёк. Товары снова доступны в каталоге.',
             'border-danger',
         ],
+        Order::STATUS_REFUNDED => [
+            'Заказ отменён, деньги возвращены',
+            (($refund = $order->receipt(\App\Models\OrderReceipt::KIND_REFUND)) && $refund->amount
+                ? 'Вернули ' . Money::rub((int) $refund->amount) . (($refund->payload['kept_delivery'] ?? 0) > 0 ? ' — сумму заказа без стоимости доставки' : '')
+                : 'Вернули деньги')
+                . ' на карту или счёт, с которого вы платили. Чек возврата отправлен на ' . $order->customer_email . '. Срок зачисления зависит от банка.',
+            'border-ink',
+        ],
         default => [
             'Ждём оплату',
             'Если платёжная страница закрылась, оплату можно продолжить по кнопке ниже.',
@@ -36,7 +44,7 @@
             <h1 class="text-3xl md:text-4xl">{{ $state[0] }}</h1>
             <p class="mt-3 max-w-xl text-sm leading-relaxed text-muted">{{ $state[1] }}</p>
 
-            @if (! $order->isPaid() && $order->status !== Order::STATUS_CANCELLED && $payment?->confirmation_url)
+            @if ($order->status === Order::STATUS_AWAITING_PAYMENT && $payment?->confirmation_url)
                 <a href="{{ $payment->confirmation_url }}" class="btn btn-dark mt-6">
                     Продолжить оплату <span aria-hidden="true">→</span>
                 </a>
@@ -97,14 +105,20 @@
                         <dt>Товары</dt>
                         <dd>{{ Money::rub($order->items_total) }}</dd>
                     </div>
-                    @if ($order->discount_total > 0)
+                    @if ($order->discount_total - $order->promo_discount > 0)
                         <div>
                             <dt>Скидка за подарок</dt>
-                            <dd>−{{ Money::rub($order->discount_total) }}</dd>
+                            <dd>−{{ Money::rub($order->discount_total - $order->promo_discount) }}</dd>
+                        </div>
+                    @endif
+                    @if ($order->promo_code && $order->promo_discount > 0)
+                        <div>
+                            <dt>Промокод {{ $order->promo_code }}</dt>
+                            <dd>−{{ Money::rub($order->promo_discount) }}</dd>
                         </div>
                     @endif
                     <div>
-                        <dt>Доставка</dt><dd>{{ $order->delivery_quote ? ($order->delivery_price > 0 ? Money::rub($order->delivery_price) : 'Бесплатно') : 'Согласуем отдельно' }}</dd>
+                        <dt>Доставка</dt><dd>{{ $order->delivery_quote ? ($order->delivery_price > 0 ? Money::rub($order->delivery_price) : ($order->promo_free_delivery ? 'Бесплатно по промокоду '.$order->promo_code : 'Бесплатно')) : 'Согласуем отдельно' }}</dd>
                     </div>
                     <div>
                         <dt>Итого оплачено</dt>
@@ -120,7 +134,7 @@
                     <div><dt>Телефон</dt><dd>{{ $order->customer_phone }}</dd></div>
                     <div><dt>Почта</dt><dd>{{ $order->customer_email }}</dd></div>
                     @if ($payment)
-                        <div><dt>Оплата</dt><dd>{{ $payment->statusLabel() }}</dd></div>
+                        <div><dt>Оплата</dt><dd>{{ $order->status === Order::STATUS_REFUNDED ? 'Возвращена' : $payment->statusLabel() }}</dd></div>
                     @endif
                 </dl>
 
