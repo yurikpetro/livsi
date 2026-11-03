@@ -23,7 +23,14 @@ class PromoCodeForm
             Section::make('Промокод')->schema([
                 TextInput::make('code')->label('Код')->required()->maxLength(40)
                     ->default(fn (): string => 'LIVSI-'.Str::upper(Str::random(6)))
-                    ->unique(ignoreRecord: true)
+                    // уникальность — уже приведённого кода: «sale 10» и «SALE10» один и тот же код
+                    ->rule(fn (?PromoCode $record): \Closure => function (string $attribute, $value, \Closure $fail) use ($record): void {
+                        $taken = PromoCode::query()->where('code', PromoCodeService::normalize((string) $value))
+                            ->when($record, fn ($q) => $q->whereKeyNot($record->getKey()))->exists();
+                        if ($taken) {
+                            $fail('Такой код уже есть — придумайте другой.');
+                        }
+                    })
                     ->dehydrateStateUsing(fn (?string $state): string => PromoCodeService::normalize($state))
                     ->helperText('Покупатель вводит его при оформлении. Регистр и пробелы не важны.'),
                 Select::make('kind')->label('Что даёт')->options(PromoCode::kinds())->default(PromoCode::PERCENT)

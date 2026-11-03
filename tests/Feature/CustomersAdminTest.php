@@ -165,6 +165,14 @@ class CustomersAdminTest extends TestCase
         $this->assertSame(25000, (int) $promo->fresh()->value);
 
         Livewire::test(ListPromoCodes::class)->assertCanSeeTableRecords([$promo])->assertSee('SUMMER300');
+
+        // тот же код другими буквами и пробелами — не дубль в базе, а понятная ошибка в форме
+        Livewire::test(CreatePromoCode::class)
+            ->fillForm(['code' => 'Summer 300', 'kind' => PromoCode::PERCENT, 'value' => '5'])
+            ->call('create')
+            ->assertHasFormErrors(['code']);
+        $this->assertSame(1, PromoCode::count());
+        Livewire::test(EditPromoCode::class, ['record' => $promo->getRouteKey()])->fillForm(['note' => 'летняя'])->call('save')->assertHasNoFormErrors();
     }
 
     public function test_order_page_and_list_show_used_promo(): void
