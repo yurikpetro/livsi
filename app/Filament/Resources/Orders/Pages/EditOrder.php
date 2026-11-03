@@ -6,6 +6,7 @@ use App\Filament\Resources\Orders\OrderResource;
 use App\Filament\Support\FulfillmentAction;
 use App\Filament\Support\RefundAction;
 use App\Filament\Support\ShipmentAction;
+use App\Filament\Support\StockReturnAction;
 use App\Models\OrderIssue;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -59,6 +60,8 @@ class EditOrder extends EditRecord
 
                     Notification::make()->title('Обращение записано')->success()->send();
                 }),
+
+            StockReturnAction::make(),
 
             // Отмены — за отдельной кнопкой «Отменить…»: случайно не нажать и шапка не разъезжается.
             ActionGroup::make([

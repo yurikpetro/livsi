@@ -43,6 +43,7 @@ class RefundService
         return match (Fulfillment::current($order)) {
             Fulfillment::SHIPPED, Fulfillment::AT_PICKUP => 'Посылка уже у службы — заявку отменить нельзя. После возврата денег дождитесь, пока посылка вернётся.',
             Fulfillment::DELIVERED => 'Покупатель уже получил заказ. Возвращайте деньги, когда товар вернулся к вам.',
+            Fulfillment::RETURNED => 'Покупатель не забрал заказ, посылка возвращается. Обычно возвращают сумму без стоимости доставки.',
             default => match (true) {
                 filled($order->shipment_external_id) => 'Заявка у службы будет отменена.',
                 filled($order->apiship_order_id) => 'Заказ оформлен через ApiShip — заявку там отмените вручную.',
@@ -59,7 +60,13 @@ class RefundService
             && ! ($refund && in_array($refund->status, [OrderReceipt::PENDING, OrderReceipt::SUCCEEDED], true));
     }
 
-    public function refund(Order $record, string $reason, string $by): OrderReceipt
+    /** Сколько удержать за доставку по выбору «без стоимости доставки». */
+    public function deliveryToKeep(Order $order): int
+    {
+        return max(0, (int) $order->delivery_price);
+    }
+
+    public function refund(Order $record, string $reason, string $by, bool $keepDelivery = false): OrderReceipt
     {
         $order = $record->fresh();
         if ($order->status !== Order::STATUS_PAID) {
@@ -101,10 +108,25 @@ class RefundService
 
         $order->load('items.marks');
         $builder = new ReceiptBuilder($order);
-        $receipt = $closing?->status === OrderReceipt::SUCCEEDED
-            ? ['customer' => $builder->customer(), 'items' => $builder->closingItems()]
-            : null;
-        $amount = (int) $payment->amount;
+        $keep = $keepDelivery ? $this->deliveryToKeep($order) : 0;
+        if ($keepDelivery && $keep < 1) {
+            $this->fail('Покупатель не платил за доставку — удерживать нечего. Верните всю сумму.');
+        }
+        $amount = (int) $payment->amount - $keep;
+        // Чек возврата. Полный возврат до второго чека ЮKassa пробьёт сама. После
+        // второго чека — свой, с КИЗ; при удержании доставки — свой без строки доставки.
+        $items = match (true) {
+            $closing?->status === OrderReceipt::SUCCEEDED => $builder->closingItems(),
+            $keep > 0 => $builder->build()['items'],
+            default => null,
+        };
+        if ($items !== null && $keep > 0) {
+            $items = array_values(array_filter($items, fn (array $item): bool => ($item['payment_subject'] ?? '') !== 'service'));
+        }
+        if ($items !== null && ReceiptBuilder::sum($items) !== $amount) {
+            $this->fail('Сумма чека возврата не сходится с суммой возврата. Верните всю сумму или пробейте чек вручную.');
+        }
+        $receipt = $items !== null ? ['customer' => $builder->customer(), 'items' => $items] : null;
         // Прошлая попытка оборвалась на связи (итог неизвестен) — повторяем с тем же
         // ключом: если ЮKassa тот возврат уже провела, она вернёт его, а не сделает второй.
         $attempt = (int) ($previous?->payload['attempt'] ?? 0) + ($previous?->status === OrderReceipt::NEW ? 0 : 1);
@@ -112,7 +134,7 @@ class RefundService
             ['order_id' => $order->id, 'kind' => OrderReceipt::KIND_REFUND],
             ['status' => OrderReceipt::NEW, 'external_id' => null, 'error' => null, 'response' => null, 'done_at' => null,
                 'idempotence_key' => ReceiptService::key('refund/'.$order->id.'/'.$attempt), 'amount' => $amount, 'created_by' => mb_substr($by, 0, 120),
-                'payload' => ['reason' => mb_substr($reason, 0, 500), 'attempt' => $attempt, 'with_receipt' => $receipt !== null]],
+                'payload' => ['reason' => mb_substr($reason, 0, 500), 'attempt' => $attempt, 'with_receipt' => $receipt !== null, 'kept_delivery' => $keep]],
         );
 
         try {
@@ -133,7 +155,8 @@ class RefundService
             'order_id' => $order->id, 'user_id' => auth()->id(),
             'status' => Fulfillment::current($order) ?? Fulfillment::AWAITING,
             'source' => OrderFulfillmentEvent::SOURCE_MANUAL,
-            'comment' => mb_substr('Отмена заказа, возврат '.number_format($amount / 100, 2, ',', ' ').' ₽: '.$reason.' · '.$by, 0, 500),
+            'comment' => mb_substr('Отмена заказа, возврат '.number_format($amount / 100, 2, ',', ' ').' ₽'
+                .($keep ? ' (без доставки '.number_format($keep / 100, 2, ',', ' ').' ₽)' : '').': '.$reason.' · '.$by, 0, 500),
         ]);
 
         return $this->apply($refund, $answer);

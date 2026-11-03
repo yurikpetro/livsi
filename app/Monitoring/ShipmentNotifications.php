@@ -6,6 +6,7 @@ use App\Filament\Resources\Orders\OrderResource;
 use App\Jobs\SendShipmentTelegram;
 use App\Models\Order;
 use App\Services\DeliverySelection;
+use App\Support\Fulfillment;
 use Illuminate\Bus\UniqueLock;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -55,9 +56,10 @@ class ShipmentNotifications
             'failed' => '❌ Отправление не создано',
             'unknown' => '⚠️ Результат создания отправления не подтверждён',
             'cancelled' => '🚫 Отправление отменено',
-            default => $order->shipment_error ? '⚠️ Не удалось проверить отправление'
+            default => $order->fulfillment_status === Fulfillment::RETURNED ? '↩️ Посылку не забрали — едет обратно'
+                : ($order->shipment_error ? '⚠️ Не удалось проверить отправление'
                 : ($order->shipment_notified_at && ($order->shipment_provider_status || $order->shipment_status_code)
-                    ? '🚚 Статус отправления изменился' : '📦 Отправление создано'),
+                    ? '🚚 Статус отправления изменился' : '📦 Отправление создано')),
         };
         $lines = ['Заказ: '.$order->number, 'Доставка: '.DeliverySelection::label($order->delivery_method),
             'Статус: '.$order->shipmentLabel()];

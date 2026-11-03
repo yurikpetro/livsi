@@ -20,7 +20,10 @@
         ],
         Order::STATUS_REFUNDED => [
             'Заказ отменён, деньги возвращены',
-            'Вернули полную сумму на карту или счёт, с которого вы платили. Чек возврата отправлен на ' . $order->customer_email . '. Срок зачисления зависит от банка.',
+            (($refund = $order->receipt(\App\Models\OrderReceipt::KIND_REFUND)) && $refund->amount
+                ? 'Вернули ' . Money::rub((int) $refund->amount) . (($refund->payload['kept_delivery'] ?? 0) > 0 ? ' — сумму заказа без стоимости доставки' : '')
+                : 'Вернули деньги')
+                . ' на карту или счёт, с которого вы платили. Чек возврата отправлен на ' . $order->customer_email . '. Срок зачисления зависит от банка.',
             'border-ink',
         ],
         default => [

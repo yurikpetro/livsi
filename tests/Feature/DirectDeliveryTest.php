@@ -789,6 +789,20 @@ class DirectDeliveryTest extends TestCase
             [$order->fresh()->shipment_status_code, $order->fresh()->shipment_status_name]);
     }
 
+    public function test_ozon_canceled_after_handover_is_a_return(): void
+    {
+        $this->connectOzon();
+        $order = $this->ozonOrder();
+        $order->forceFill(['fulfillment_status' => Fulfillment::AT_PICKUP])->save();
+        Http::fake($this->ozonToken() + [
+            '*/v1/posting/info' => Http::response(['postings' => [['posting_number' => '777-0001-1', 'status' => 'canceled']]]),
+        ]);
+
+        $order = app(DirectShipmentService::class)->sync($order);
+
+        $this->assertSame([Fulfillment::RETURNED, 'Не забрали — Ozon везёт посылку обратно'], [$order->fulfillment_status, $order->shipment_status_name]);
+    }
+
     public function test_ozon_label_with_low_balance_tells_to_top_up(): void
     {
         $this->connectOzon();

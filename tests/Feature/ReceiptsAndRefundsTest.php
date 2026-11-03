@@ -14,9 +14,11 @@ use App\Models\ProductVariant;
 use App\Models\Setting;
 use App\Models\StockQuota;
 use App\Models\User;
+use App\Monitoring\ShipmentNotifications;
 use App\Payments\ReceiptBuilder;
 use App\Services\ReceiptService;
 use App\Services\RefundService;
+use App\Services\StockReturnService;
 use App\Support\Fulfillment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
@@ -283,7 +285,7 @@ class ReceiptsAndRefundsTest extends TestCase
 
         $this->actingAs(User::factory()->create(['is_admin' => true]));
         Livewire::test(EditOrder::class, ['record' => $order->getRouteKey()])
-            ->assertSee('Заказ отменён, деньги возвращены. Отгрузки не было.')
+            ->assertSee('Отменён до отправки')
             ->assertDontSee('Статус доставки появится после оплаты');
         $this->assertSame('Деньги возвращены', $order->statusLabel());
     }
@@ -472,6 +474,104 @@ class ReceiptsAndRefundsTest extends TestCase
         $this->assertSame(Order::STATUS_PAID, $order->fresh()->status);
     }
 
+    // ------------------------------------------------------------ итоги, возврат без доставки, приёмка
+
+    public function test_outcome_tells_money_and_delivery_together(): void
+    {
+        $cases = [
+            [Order::STATUS_REFUNDED, null, null, 'Отменён до отправки'],
+            [Order::STATUS_PAID, Fulfillment::RETURNED, null, 'Не забрал · едет обратно'],
+            [Order::STATUS_PAID, Fulfillment::RETURNED, now(), 'Не забрал · принят на склад'],
+            [Order::STATUS_REFUNDED, Fulfillment::RETURNED, null, 'Не забрал · деньги возвращены'],
+            [Order::STATUS_REFUNDED, Fulfillment::DELIVERED, now(), 'Возврат после получения · принят на склад'],
+            [Order::STATUS_REFUNDED, Fulfillment::SHIPPED, null, 'Деньги возвращены, посылка в пути'],
+            [Order::STATUS_PAID, Fulfillment::SHIPPED, null, null],
+        ];
+        foreach ($cases as [$status, $delivery, $stock, $expected]) {
+            $order = new Order(['status' => $status, 'fulfillment_status' => $delivery, 'returned_to_stock_at' => $stock]);
+            $this->assertSame($expected, $order->outcome(), $status.' / '.$delivery);
+        }
+    }
+
+    public function test_refund_without_delivery_keeps_delivery_and_sends_goods_only_receipt(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        $order = $this->order(['delivery_price' => 30000, 'total' => 208000, 'fulfillment_status' => Fulfillment::RETURNED]);
+        Http::fake(['*/v3/refunds' => Http::response(['id' => 'ref-1', 'status' => 'succeeded'])]);
+
+        $refund = app(RefundService::class)->refund($order, 'Не забрал', 'admin', keepDelivery: true);
+
+        Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v3/refunds')
+            && $request['amount'] === ['value' => '1780.00', 'currency' => 'RUB']
+            && count($request['receipt']['items']) === 1 && $request['receipt']['items'][0]['payment_mode'] === 'full_prepayment'
+            && $request['receipt']['items'][0]['payment_subject'] === 'commodity');
+        $this->assertSame([178000, 30000], [(int) $refund->amount, $refund->payload['kept_delivery']]);
+        $this->assertSame(Fulfillment::RETURNED, $order->fresh()->fulfillment_status);   // посылка возвращается — статус доставки остаётся
+        $this->get(route('order.show', ['order' => $order->number, 'token' => $order->access_token]))
+            ->assertSee('без стоимости доставки');
+    }
+
+    public function test_nothing_to_keep_when_delivery_was_free(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        $order = $this->order(['delivery_price' => 0]);
+        Http::fake();
+
+        $this->expectException(ValidationException::class);
+        app(RefundService::class)->refund($order, 'Тест', 'admin', keepDelivery: true);
+    }
+
+    public function test_returned_parcel_is_taken_back_to_stock_once(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true, 'email' => 'sklad@livsi.shop']));
+        $order = $this->order(['fulfillment_status' => Fulfillment::RETURNED]);
+        $quota = StockQuota::create(['product_variant_id' => $order->items->first()->product_variant_id, 'allocated' => 10, 'reserved' => 0, 'sold' => 5]);
+
+        Livewire::test(EditOrder::class, ['record' => $order->getRouteKey()])
+            ->assertActionVisible('returnToStock')
+            ->callAction('returnToStock')
+            ->assertNotified('Принят на склад — товар снова в продаже');
+
+        $order->refresh();
+        $this->assertSame(3, $quota->fresh()->sold);
+        $this->assertSame(0, $order->marks()->count());
+        $this->assertSame('sklad@livsi.shop', $order->returned_to_stock_by);
+        $this->assertSame('Не забрал · принят на склад', $order->outcome());
+        $this->assertStringContainsString('коды «Честного знака» освобождены: 2', $order->fulfillmentEvents()->latest('id')->first()->comment);
+
+        $this->expectException(ValidationException::class);
+        app(StockReturnService::class)->accept($order, 'ещё раз');
+    }
+
+    public function test_delivered_paid_order_cannot_be_put_back_to_stock(): void
+    {
+        $order = $this->order(['fulfillment_status' => Fulfillment::DELIVERED]);
+
+        $this->assertFalse($order->canReturnToStock());
+        $this->expectException(ValidationException::class);
+        app(StockReturnService::class)->accept($order, 'склад');
+    }
+
+    public function test_admin_refund_offers_amount_without_delivery(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        $order = $this->order(['delivery_price' => 30000, 'total' => 208000, 'fulfillment_status' => Fulfillment::RETURNED]);
+        Http::fake(['*/v3/refunds' => Http::response(['id' => 'ref-1', 'status' => 'succeeded'])]);
+
+        Livewire::test(EditOrder::class, ['record' => $order->getRouteKey()])
+            ->callAction('refundOrder', ['amount' => 'without_delivery', 'reason' => 'Не забрал'])
+            ->assertHasNoActionErrors();
+
+        Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v3/refunds') && $request['amount']['value'] === '1780.00');
+    }
+
+    public function test_returned_parcel_heading_in_telegram(): void
+    {
+        $order = $this->order(['fulfillment_status' => Fulfillment::RETURNED, 'shipment_state' => 'created', 'shipment_automatic' => true]);
+
+        $this->assertStringContainsString('Посылку не забрали', app(ShipmentNotifications::class)->toHtml($order));
+    }
+
     // ------------------------------------------------------------ livsipro
 
     public function test_livsipro_does_not_offer_label_for_apiship_shipment(): void
@@ -533,6 +633,30 @@ class ReceiptsAndRefundsTest extends TestCase
         $this->api('GET', '/orders?view=assembly')->assertJsonCount(0, 'orders')->assertJsonPath('counts.awaiting', 0);
         $this->api('POST', '/orders/'.$order->number.'/assembled', ['by' => 'Мария'])->assertStatus(409)
             ->assertJsonPath('message', 'По заказу оформлен возврат денег — собирать и отправлять его не нужно.');
+    }
+
+    public function test_livsipro_returns_section_and_restock(): void
+    {
+        $returned = $this->order(['fulfillment_status' => Fulfillment::RETURNED]);
+        $refundedBefore = $this->order(['status' => Order::STATUS_REFUNDED, 'fulfillment_status' => null]);
+        $this->order(['fulfillment_status' => Fulfillment::SHIPPED]);
+
+        $this->api('GET', '/orders?view=returns')->assertOk()
+            ->assertJsonPath('orders.0.number', $returned->number)->assertJsonCount(1, 'orders')
+            ->assertJsonPath('orders.0.outcome', 'Не забрал · едет обратно')
+            ->assertJsonPath('orders.0.actions.restock', true)
+            ->assertJsonPath('counts.returns', 1)->assertJsonPath('counts.shipped', 1);
+        $this->api('GET', '/orders?view=done')->assertJsonPath('orders.0.number', $refundedBefore->number);
+        $this->api('GET', '/orders/'.$refundedBefore->number)->assertOk()
+            ->assertJsonPath('order.status.label', 'Деньги возвращены')->assertJsonPath('order.outcome', 'Отменён до отправки');
+
+        $this->api('POST', '/orders/'.$returned->number.'/restock', ['by' => 'Мария'])->assertOk()
+            ->assertJsonPath('order.outcome', 'Не забрал · принят на склад')
+            ->assertJsonPath('order.returned_to_stock.by', 'Мария')
+            ->assertJsonPath('order.actions.restock', false);
+        $this->api('GET', '/orders?view=returns')->assertJsonCount(0, 'orders');
+        $this->api('POST', '/orders/'.$returned->number.'/restock', ['by' => 'Мария'])->assertStatus(422);
+        $this->api('POST', '/orders/'.$refundedBefore->number.'/assembled', ['by' => 'Мария'])->assertStatus(409);
     }
 
     public function test_livsipro_cannot_cancel_shipment_after_handover(): void

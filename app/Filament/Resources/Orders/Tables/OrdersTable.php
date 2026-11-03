@@ -49,6 +49,8 @@ class OrdersTable
                     ->label('Статус')
                     ->badge()
                     ->formatStateUsing(fn (string $state) => Order::statuses()[$state] ?? $state)
+                    // Итог по деньгам и доставке вместе: «Отменён до отправки», «Не забрал…»
+                    ->description(fn (Order $record): ?string => $record->outcome())
                     ->color(fn (string $state) => match ($state) {
                         Order::STATUS_PAID => 'success',
                         Order::STATUS_AWAITING_PAYMENT => 'warning',

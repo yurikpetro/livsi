@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Fulfillment;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -27,6 +28,7 @@ class Order extends Model
         'marketing_consent_at' => 'datetime',
         'paid_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'returned_to_stock_at' => 'datetime',
     ];
 
     public const STATUS_AWAITING_PAYMENT = 'awaiting_payment';
@@ -142,6 +144,38 @@ class Order extends Model
         $attempt = (int) ($this->shipment_attempt ?? 1);
 
         return $attempt > 1 ? $this->number.'-'.$attempt : (string) $this->number;
+    }
+
+    /**
+     * Итог заказа одной строкой — когда деньги и доставка вместе говорят
+     * больше, чем по отдельности: «отменён до отправки», «не забрал»,
+     * «возврат после получения». У обычного заказа в пути — null.
+     */
+    public function outcome(): ?string
+    {
+        $delivery = Fulfillment::current($this);
+        $refunded = $this->status === self::STATUS_REFUNDED;
+        $stock = $this->returned_to_stock_at ? ' · принят на склад' : '';
+
+        return match (true) {
+            $refunded && in_array($delivery, [null, Fulfillment::AWAITING, Fulfillment::ASSEMBLED], true) => 'Отменён до отправки',
+            $delivery === Fulfillment::RETURNED && $refunded => 'Не забрал · деньги возвращены'.$stock,
+            $delivery === Fulfillment::RETURNED => $this->returned_to_stock_at ? 'Не забрал · принят на склад' : 'Не забрал · едет обратно',
+            $refunded && $delivery === Fulfillment::DELIVERED => 'Возврат после получения'.$stock,
+            $refunded => 'Деньги возвращены, посылка в пути',
+            default => null,
+        };
+    }
+
+    /** Можно ли принять товар заказа обратно на склад. */
+    public function canReturnToStock(): bool
+    {
+        $delivery = Fulfillment::current($this);
+
+        return ! $this->returned_to_stock_at && (
+            ($delivery === Fulfillment::RETURNED && in_array($this->status, [self::STATUS_PAID, self::STATUS_REFUNDED], true))
+            || ($this->status === self::STATUS_REFUNDED && in_array($delivery, [Fulfillment::SHIPPED, Fulfillment::AT_PICKUP, Fulfillment::DELIVERED], true))
+        );
     }
 
     /** Отправление создано — через ApiShip или напрямую у службы. */

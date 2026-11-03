@@ -21,5 +21,6 @@ Route::prefix('livsipro')->middleware([LivsiproToken::class, 'throttle:livsipro'
     Route::post('/orders/{number}/shipped', [OrdersController::class, 'shipped']);
     Route::post('/orders/{number}/reassemble', [OrdersController::class, 'reassemble']);
     Route::post('/orders/{number}/cancel-shipment', [OrdersController::class, 'cancelShipment']);
+    Route::post('/orders/{number}/restock', [OrdersController::class, 'restock']);
     Route::post('/orders/{number}/refresh', [OrdersController::class, 'refresh']);
 });

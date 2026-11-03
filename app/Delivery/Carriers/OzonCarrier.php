@@ -570,6 +570,11 @@ class OzonCarrier extends HttpCarrier
         $info = $this->postingInfo($posting);
         $status = (string) ($info['status'] ?? '');
         [$name, $fulfillment] = self::STATUSES[$status] ?? [$status !== '' ? 'Ozon: '.$status : null, null];
+        // Отмена после передачи в доставку у Ozon значит возврат: покупатель
+        // не забрал или отказался — посылка едет обратно к нам.
+        if ($status === 'canceled' && in_array(Fulfillment::current($order), [Fulfillment::SHIPPED, Fulfillment::AT_PICKUP], true)) {
+            [$name, $fulfillment] = ['Не забрали — Ozon везёт посылку обратно', Fulfillment::RETURNED];
+        }
         if ($status === 'in_delivery_point' && is_string($info['storage_expires_at'] ?? null)) {
             $name .= ', хранится до '.Carbon::parse($info['storage_expires_at'])->timezone('Europe/Moscow')->format('d.m');
         }
