@@ -284,16 +284,22 @@ class OrdersController extends Controller
     }
 
     /**
-     * Коды можно сканировать и убирать, пока посылка у нас: ждёт сборки или собрана.
-     * Созданное отправление этому не мешает — сайт создаёт его сам сразу после
-     * оплаты, ещё до сборки (иначе заказ застревал: без кодов не «Собран»,
-     * а коды не принимались из-за отправления).
+     * Коды можно сканировать и убирать, пока заказ не получен: при сборке и в
+     * пути. Созданное отправление этому не мешает — сайт создаёт его сам сразу
+     * после оплаты, ещё до сборки. А в пути коды дописывают, если при сборке
+     * их не приняли (так было с заказами 17 и 18): коды нужны для чека и
+     * вывода из оборота, и отправляются они при получении.
      */
     private function assertAssembling(Order $order): void
     {
-        if (! in_array(Fulfillment::current($order), [Fulfillment::AWAITING, Fulfillment::ASSEMBLED], true)) {
-            $this->fail('Заказ уже передан в доставку — коды менять нельзя.');
+        if (! self::marksEditable($order)) {
+            $this->fail('Заказ уже получен или вернулся — коды менять нельзя.');
         }
+    }
+
+    private static function marksEditable(Order $order): bool
+    {
+        return in_array(Fulfillment::current($order), [Fulfillment::AWAITING, Fulfillment::ASSEMBLED, Fulfillment::SHIPPED, Fulfillment::AT_PICKUP], true);
     }
 
     /** GTIN товара из штрих-кода варианта: EAN-13 → 14 знаков с нулём впереди. */
@@ -353,6 +359,7 @@ class OrdersController extends Controller
             ],
             // Какие кнопки сейчас уместны — чтобы livsipro не гадал по статусам.
             'actions' => [
+                'marks' => $order->status === Order::STATUS_PAID && self::marksEditable($order),
                 'restock' => $order->canReturnToStock(),
                 // Этикетку livsipro печатает только у прямого отправления службы;
                 // у отправлений через ApiShip она — в кабинете ApiShip.

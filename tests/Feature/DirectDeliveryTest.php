@@ -1044,8 +1044,24 @@ class DirectDeliveryTest extends TestCase
         $order->forceFill(['shipment_provider' => 'cdek', 'shipment_external_id' => 'uuid-9', 'shipment_state' => 'created'])->save();
         $this->api('POST', '/orders/'.$order->number.'/shipped', ['by' => 'Мария'])->assertOk()
             ->assertJsonPath('order.fulfillment.code', Fulfillment::SHIPPED);
+        // в пути коды можно дописать (если при сборке их не приняли), после получения — нет
         $this->api('POST', '/orders/'.$order->number.'/marks', ['item_id' => $order->items->first()->id, 'by' => 'Мария', ...$this->kiz('Q1')])
-            ->assertStatus(422);
+            ->assertStatus(422)->assertJsonFragment(['order' => ['По «Мультипенка, 200 мл» уже отсканировано 1 шт. — больше не нужно.']]);
+        $this->api('GET', '/orders/'.$order->number)->assertJsonPath('order.actions.marks', true);
+        $order->forceFill(['fulfillment_status' => Fulfillment::DELIVERED])->save();
+        $this->api('DELETE', '/orders/'.$order->number.'/marks/'.$order->marks()->first()->id)
+            ->assertStatus(422)->assertJsonFragment(['order' => ['Заказ уже получен или вернулся — коды менять нельзя.']]);
+        $this->api('GET', '/orders/'.$order->number)->assertJsonPath('order.actions.marks', false);
+    }
+
+    public function test_missing_marks_can_be_added_while_parcel_is_on_the_way(): void
+    {
+        $order = $this->order('ozondel', ['fulfillment_status' => Fulfillment::SHIPPED, 'shipment_provider' => 'ozondel',
+            'shipment_external_id' => 'oz-1', 'shipment_state' => 'created'], 1);
+
+        $this->api('POST', '/orders/'.$order->number.'/marks', ['item_id' => $order->items->first()->id, 'by' => 'Антон', ...$this->kiz()])
+            ->assertOk()->assertJsonPath('order.items.0.marks.0.serial', 'Ab1-2C')
+            ->assertJsonPath('order.fulfillment.code', Fulfillment::SHIPPED);
     }
 
     /** Отправление создалось само сразу после оплаты — коды всё равно сканируются, потом «Собран». */
