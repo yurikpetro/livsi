@@ -390,6 +390,21 @@ class ReceiptsAndRefundsTest extends TestCase
 
     // ------------------------------------------------------------ livsipro
 
+    public function test_livsipro_does_not_offer_label_for_apiship_shipment(): void
+    {
+        $order = $this->order(['fulfillment_status' => Fulfillment::ASSEMBLED, 'delivery_quote' => null,
+            'delivery_method' => 'ozon_point', 'apiship_order_id' => 777, 'shipment_state' => 'created']);
+        Http::fake();
+
+        $this->api('GET', '/orders/'.$order->number)
+            ->assertJsonPath('order.shipment.via', 'apiship')
+            ->assertJsonPath('order.shipment.reference', 'ApiShip №777')
+            ->assertJsonPath('order.actions.label', false);
+        $this->api('GET', '/orders/'.$order->number.'/label')->assertStatus(422)
+            ->assertJsonPath('message', 'Отправление создано через ApiShip — этикетку скачайте в кабинете ApiShip.');
+        Http::assertNothingSent();
+    }
+
     public function test_livsipro_returns_assembled_order_back_to_assembly(): void
     {
         $order = $this->order(['fulfillment_status' => Fulfillment::ASSEMBLED]);
@@ -411,7 +426,8 @@ class ReceiptsAndRefundsTest extends TestCase
             '*/v2/orders/uuid-1' => Http::response(['entity' => ['uuid' => 'uuid-1']]),
         ]);
 
-        $this->api('GET', '/orders/'.$order->number)->assertJsonPath('order.actions.cancel_shipment', true);
+        $this->api('GET', '/orders/'.$order->number)->assertJsonPath('order.actions.cancel_shipment', true)
+            ->assertJsonPath('order.actions.label', true)->assertJsonPath('order.shipment.via', 'direct');
         $this->api('POST', '/orders/'.$order->number.'/cancel-shipment', ['by' => 'Мария'])->assertOk()
             ->assertJsonPath('order.shipment.state', 'cancelled')
             ->assertJsonPath('order.actions.reassemble', true);

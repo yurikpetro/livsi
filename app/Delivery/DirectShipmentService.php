@@ -142,6 +142,9 @@ class DirectShipmentService
 
     public function label(Order $order, string $size = '75x120'): string
     {
+        if (! $order->shipment_external_id && $order->apiship_order_id) {
+            $this->fail('Отправление создано через ApiShip — этикетку скачайте в кабинете ApiShip.');
+        }
         if (! $order->shipment_external_id) {
             $this->fail('Сначала создайте отправление — этикетку выдаёт служба.');
         }

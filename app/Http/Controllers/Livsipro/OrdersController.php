@@ -298,9 +298,17 @@ class OrdersController extends Controller
                 'reference' => $order->shipmentReference(),
                 'tracking' => $order->shipment_tracking_number,
                 'error' => $order->shipment_error,
+                'via' => match (true) {
+                    filled($order->shipment_external_id) => 'direct',
+                    filled($order->apiship_order_id) => 'apiship',
+                    default => null,
+                },
             ],
             // Какие кнопки сейчас уместны — чтобы livsipro не гадал по статусам.
             'actions' => [
+                // Этикетку livsipro печатает только у прямого отправления службы;
+                // у отправлений через ApiShip она — в кабинете ApiShip.
+                'label' => filled($order->shipment_external_id) && DirectShipmentService::isDirectOrder($order),
                 'reassemble' => $status === Fulfillment::ASSEMBLED && ! $order->shipment_external_id
                     && ! in_array($order->shipment_state, ['creating', 'unknown'], true),
                 'cancel_shipment' => filled($order->shipment_external_id) && DirectShipmentService::isDirectOrder($order)
