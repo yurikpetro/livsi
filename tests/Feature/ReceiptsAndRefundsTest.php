@@ -278,6 +278,7 @@ class ReceiptsAndRefundsTest extends TestCase
 
         $this->get(route('order.show', ['order' => $order->number, 'token' => $order->access_token]))->assertOk()
             ->assertSee('Заказ отменён, деньги возвращены')
+            ->assertSee('Возвращена')
             ->assertDontSee('Ждём оплату')->assertDontSee('Продолжить оплату')->assertDontSee('Статус доставки');
 
         $this->actingAs(User::factory()->create(['is_admin' => true]));

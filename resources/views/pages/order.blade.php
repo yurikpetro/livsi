@@ -125,7 +125,7 @@
                     <div><dt>Телефон</dt><dd>{{ $order->customer_phone }}</dd></div>
                     <div><dt>Почта</dt><dd>{{ $order->customer_email }}</dd></div>
                     @if ($payment)
-                        <div><dt>Оплата</dt><dd>{{ $payment->statusLabel() }}</dd></div>
+                        <div><dt>Оплата</dt><dd>{{ $order->status === Order::STATUS_REFUNDED ? 'Возвращена' : $payment->statusLabel() }}</dd></div>
                     @endif
                 </dl>
 
