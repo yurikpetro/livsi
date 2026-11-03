@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -112,6 +113,35 @@ class Order extends Model
     public function marks(): HasMany
     {
         return $this->hasMany(OrderItemMark::class);
+    }
+
+    public function receipts(): HasMany
+    {
+        return $this->hasMany(OrderReceipt::class);
+    }
+
+    public function receipt(string $kind): ?OrderReceipt
+    {
+        return $this->receipts()->where('kind', $kind)->first();
+    }
+
+    /** Заказы без оформленного возврата денег: их ещё собирают и везут. */
+    public function scopeWithoutRefund(Builder $query): void
+    {
+        $query->whereDoesntHave('receipts', fn (Builder $q) => $q->where('kind', OrderReceipt::KIND_REFUND)
+            ->whereIn('status', [OrderReceipt::PENDING, OrderReceipt::SUCCEEDED]));
+    }
+
+    /**
+     * Номер заказа для службы доставки. Первая заявка — номер как есть,
+     * после отмены отправления — «LV-…-2», «-3»: службы помнят старый номер
+     * и на повтор вернули бы уже отменённую заявку.
+     */
+    public function shipmentRef(): string
+    {
+        $attempt = (int) ($this->shipment_attempt ?? 1);
+
+        return $attempt > 1 ? $this->number.'-'.$attempt : (string) $this->number;
     }
 
     /** Отправление создано — через ApiShip или напрямую у службы. */

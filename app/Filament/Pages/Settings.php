@@ -83,6 +83,7 @@ class Settings extends Page implements HasForms
         'vat_not_payer' => false,
         'vat_rate_default' => null,
         'vat_codes' => Vat::DEFAULT_CODES,
+        'closing_receipts_enabled' => false,
         'reviews_eyebrow' => 'Отзывы покупателей',
         'reviews_score' => '4.9',
         'reviews_score_caption' => 'Средняя оценка',
@@ -213,6 +214,11 @@ class Settings extends Page implements HasForms
                             ->visible(fn (Get $get) => ! $get('vat_not_payer'))
                             ->columnSpanFull()
                             ->helperText('Коды уже проставлены по документации ЮKassa: 0 % — 2, 10 % — 3, 20 % — 4, 5 % — 7, 7 % — 8, 22 % — 11. Обратите внимание: у ставки 5 % код 7, а у ставки 7 % код 8, их легко перепутать. Менять таблицу нужно только если закон введёт новую ставку — тогда добавьте строку и впишите код от провайдера. Строка с пустым кодом не работает: платёж по такой ставке не создастся.'),
+
+                        Toggle::make('closing_receipts_enabled')
+                            ->label('Второй чек «полный расчёт» с кодами маркировки')
+                            ->columnSpanFull()
+                            ->helperText('Когда заказ получает статус «Получен», сайт сам пробивает через ЮKassa закрывающий чек по той же оплате: у каждой штуки — её код «Честного знака», коды выходят из оборота. Включайте, когда в ЮKassa подключены «Чеки от ЮKassa» по ФФД 1.2. Заказы, полученные до включения, не трогаются.'),
                     ])
                     ->columns(2),
 

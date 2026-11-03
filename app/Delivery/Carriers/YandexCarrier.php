@@ -176,7 +176,7 @@ class YandexCarrier extends HttpCarrier
     public function createShipment(Order $order, array $sender): array
     {
         $parcel = $this->parcel($order);
-        $place = 'L'.preg_replace('/\D/', '', $order->number).'-1';
+        $place = 'L'.preg_replace('/\D/', '', $order->number).'-'.max(1, (int) $order->shipment_attempt);
         $items = [];
         foreach ($this->units($order) as $unit) {
             $variant = $unit['item']->variant;
@@ -198,7 +198,7 @@ class YandexCarrier extends HttpCarrier
         }
 
         $response = $this->http(40)->post('/api/b2b/platform/request/create?send_unix=false', [
-            'info' => ['operator_request_id' => $order->number, 'comment' => 'livsi.shop '.$order->number],
+            'info' => ['operator_request_id' => $order->shipmentRef(), 'comment' => 'livsi.shop '.$order->number],
             'source' => ['platform_station' => ['platform_id' => $this->origin()]],
             'destination' => ['type' => 'platform_station', 'platform_station' => ['platform_id' => (string) $order->delivery_point_id]],
             'items' => $items,
@@ -224,7 +224,7 @@ class YandexCarrier extends HttpCarrier
 
     public function findShipment(Order $order): ?array
     {
-        $response = $this->http()->get('/api/b2b/platform/request/info', ['request_code' => $order->number]);
+        $response = $this->http()->get('/api/b2b/platform/request/info', ['request_code' => $order->shipmentRef()]);
         if ($response->status() === 404) {
             return null;
         }

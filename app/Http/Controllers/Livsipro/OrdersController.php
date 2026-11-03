@@ -45,7 +45,7 @@ class OrdersController extends Controller
             'limit' => ['sometimes', 'integer', 'min:1', 'max:500'],
         ]);
         $view = $data['view'] ?? 'assembly';
-        $query = Order::query()->where('status', Order::STATUS_PAID)->withCount('items')->latest('paid_at');
+        $query = Order::query()->where('status', Order::STATUS_PAID)->withoutRefund()->withCount('items')->latest('paid_at');
         match ($view) {
             'assembly' => $query->where(fn ($q) => $q->whereNull('fulfillment_status')
                 ->orWhereIn('fulfillment_status', [Fulfillment::AWAITING, Fulfillment::ASSEMBLED])),
@@ -57,10 +57,10 @@ class OrdersController extends Controller
         return response()->json([
             'orders' => $query->limit($data['limit'] ?? 200)->get()->map(fn (Order $order): array => $this->brief($order))->all(),
             'counts' => [
-                'awaiting' => Order::query()->where('status', Order::STATUS_PAID)
+                'awaiting' => Order::query()->where('status', Order::STATUS_PAID)->withoutRefund()
                     ->where(fn ($q) => $q->whereNull('fulfillment_status')->orWhere('fulfillment_status', Fulfillment::AWAITING))->count(),
-                'assembled' => Order::query()->where('status', Order::STATUS_PAID)->where('fulfillment_status', Fulfillment::ASSEMBLED)->count(),
-                'shipped' => Order::query()->where('status', Order::STATUS_PAID)
+                'assembled' => Order::query()->where('status', Order::STATUS_PAID)->withoutRefund()->where('fulfillment_status', Fulfillment::ASSEMBLED)->count(),
+                'shipped' => Order::query()->where('status', Order::STATUS_PAID)->withoutRefund()
                     ->whereIn('fulfillment_status', [Fulfillment::SHIPPED, Fulfillment::AT_PICKUP])->count(),
             ],
         ]);
@@ -202,6 +202,35 @@ class OrdersController extends Controller
         return response()->json(['order' => $this->full($order)]);
     }
 
+    /** «Вернуть в сборку»: «Собран» нажали по ошибке — пока отправление не создано. */
+    public function reassemble(Request $request, string $number): JsonResponse
+    {
+        $by = $request->validate(['by' => ['required', 'string', 'min:2', 'max:120']])['by'];
+        $order = $this->order($number);
+        if (Fulfillment::current($order) !== Fulfillment::ASSEMBLED) {
+            $this->fail('Вернуть в сборку можно только собранный, но ещё не переданный заказ.');
+        }
+        if ($order->shipment_external_id || in_array($order->shipment_state, ['creating', 'unknown'], true)) {
+            $this->fail('Сначала отмените отправление у службы.');
+        }
+        $order = $this->fulfillment->set($order, Fulfillment::AWAITING, 'Вернул в сборку: '.$by, OrderFulfillmentEvent::SOURCE_LIVSIPRO);
+
+        return response()->json(['order' => $this->full($order)]);
+    }
+
+    /** «Отменить отправление»: снять заявку у службы, пока посылка не передана. */
+    public function cancelShipment(Request $request, string $number): JsonResponse
+    {
+        $by = $request->validate(['by' => ['required', 'string', 'min:2', 'max:120']])['by'];
+        $order = $this->order($number);
+        if (! DirectShipmentService::isDirectOrder($order)) {
+            $this->fail('Заказ оформлен через ApiShip — заявку отменяют в кабинете ApiShip.');
+        }
+        $order = $this->shipments->cancel($order, 'Отменил: '.$by, OrderFulfillmentEvent::SOURCE_LIVSIPRO);
+
+        return response()->json(['order' => $this->full($order)]);
+    }
+
     /** Спросить службу о статусе прямо сейчас, не дожидаясь расписания. */
     public function refresh(string $number): JsonResponse
     {
@@ -217,6 +246,8 @@ class OrdersController extends Controller
     {
         $order = Order::query()->where('number', $number)->where('status', Order::STATUS_PAID)->first();
         abort_if(! $order, 404, 'Заказ не найден или не оплачен.');
+        abort_if(Order::query()->whereKey($order->id)->withoutRefund()->doesntExist(), 409,
+            'По заказу оформлен возврат денег — собирать и отправлять его не нужно.');
 
         return $order;
     }
@@ -267,6 +298,13 @@ class OrdersController extends Controller
                 'reference' => $order->shipmentReference(),
                 'tracking' => $order->shipment_tracking_number,
                 'error' => $order->shipment_error,
+            ],
+            // Какие кнопки сейчас уместны — чтобы livsipro не гадал по статусам.
+            'actions' => [
+                'reassemble' => $status === Fulfillment::ASSEMBLED && ! $order->shipment_external_id
+                    && ! in_array($order->shipment_state, ['creating', 'unknown'], true),
+                'cancel_shipment' => filled($order->shipment_external_id) && DirectShipmentService::isDirectOrder($order)
+                    && in_array($status, [Fulfillment::AWAITING, Fulfillment::ASSEMBLED], true),
             ],
         ];
     }

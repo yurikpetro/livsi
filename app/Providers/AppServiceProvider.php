@@ -5,9 +5,12 @@ namespace App\Providers;
 use App\Payments\PaymentGateway;
 use App\Payments\YooKassaGateway;
 use App\Services\CartService;
+use Filament\Support\Facades\FilamentView;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -35,5 +38,11 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('delivery-points', fn (Request $request): Limit => Limit::perMinute(30)->by($request->ip()));
         RateLimiter::for('livsipro', fn (Request $request): Limit => Limit::perMinute(240)->by($request->ip()));
         RateLimiter::for('delivery-geocode', fn (Request $request): Limit => Limit::perMinute(10)->by($request->ip()));
+
+        // Кнопки в шапке страницы админки переносятся на вторую строку, а не
+        // уезжают за правый край (в заказе их пять-шесть).
+        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(
+            '<style>.fi-header-actions-ctn{flex-shrink:1;min-width:0}.fi-header-actions-ctn .fi-ac{justify-content:flex-end}</style>'
+        ));
     }
 }
