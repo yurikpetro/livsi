@@ -211,6 +211,11 @@ final class Fulfillment
      */
     public static function forCustomer(Order $order): ?array
     {
+        // Деньги вернули — покупатель видит «Заказ отменён» вверху страницы,
+        // ход доставки ему больше не нужен.
+        if ($order->status === Order::STATUS_REFUNDED) {
+            return null;
+        }
         $courier = self::isCourier($order);
 
         return match (self::current($order)) {

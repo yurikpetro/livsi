@@ -268,6 +268,48 @@ class ReceiptsAndRefundsTest extends TestCase
         $this->assertSame(0, $order->marks()->count());
         $this->assertCount(2, $refund->payload['released_marks']);
         $this->assertSame(0, $quota->fresh()->sold);
+        $this->assertNull($order->fulfillment_status);   // не «собран»: отменён, отгрузки не было
+    }
+
+    public function test_buyer_and_admin_see_refunded_order_as_cancelled_not_assembled(): void
+    {
+        $order = $this->order(['status' => Order::STATUS_REFUNDED, 'fulfillment_status' => null]);
+        $order->payments()->update(['confirmation_url' => 'https://yoomoney.ru/checkout/pay']);
+
+        $this->get(route('order.show', ['order' => $order->number, 'token' => $order->access_token]))->assertOk()
+            ->assertSee('Заказ отменён, деньги возвращены')
+            ->assertDontSee('Ждём оплату')->assertDontSee('Продолжить оплату')->assertDontSee('Статус доставки');
+
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        Livewire::test(EditOrder::class, ['record' => $order->getRouteKey()])
+            ->assertSee('Заказ отменён, деньги возвращены. Отгрузки не было.')
+            ->assertDontSee('Статус доставки появится после оплаты');
+        $this->assertSame('Деньги возвращены', $order->statusLabel());
+    }
+
+    public function test_repeated_payment_notification_does_not_resurrect_refunded_order(): void
+    {
+        $order = $this->order(['status' => Order::STATUS_REFUNDED, 'fulfillment_status' => null, 'shipment_state' => 'cancelled']);
+        config(['livsi.yookassa.webhook_ips' => []]);
+        Http::fake(['*/v3/payments/pay-'.$order->id => Http::response(['id' => 'pay-'.$order->id, 'status' => 'succeeded', 'paid' => true,
+            'amount' => ['value' => '1780.00', 'currency' => 'RUB'], 'refunded_amount' => ['value' => '1780.00', 'currency' => 'RUB']])]);
+
+        $this->postJson('/webhooks/yookassa', ['type' => 'notification', 'event' => 'payment.succeeded', 'object' => ['id' => 'pay-'.$order->id]])->assertOk();
+
+        $order->refresh();
+        $this->assertSame([Order::STATUS_REFUNDED, 'cancelled'], [$order->status, $order->shipment_state]);
+    }
+
+    public function test_old_refunds_are_taken_out_of_assembly_by_migration(): void
+    {
+        $assembled = $this->order(['status' => Order::STATUS_REFUNDED, 'fulfillment_status' => Fulfillment::ASSEMBLED]);
+        $shipped = $this->order(['status' => Order::STATUS_REFUNDED, 'fulfillment_status' => Fulfillment::SHIPPED]);
+        $paid = $this->order(['fulfillment_status' => Fulfillment::ASSEMBLED]);
+
+        (require database_path('migrations/2026_11_03_150000_clear_fulfillment_of_refunded_orders.php'))->up();
+
+        $this->assertSame([null, Fulfillment::SHIPPED, Fulfillment::ASSEMBLED],
+            [$assembled->fresh()->fulfillment_status, $shipped->fresh()->fulfillment_status, $paid->fresh()->fulfillment_status]);
     }
 
     public function test_refund_takes_order_out_of_automatic_shipment_queue(): void

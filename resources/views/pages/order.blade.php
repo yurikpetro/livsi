@@ -18,6 +18,11 @@
             'Оплата не прошла или срок ожидания истёк. Товары снова доступны в каталоге.',
             'border-danger',
         ],
+        Order::STATUS_REFUNDED => [
+            'Заказ отменён, деньги возвращены',
+            'Вернули полную сумму на карту или счёт, с которого вы платили. Чек возврата отправлен на ' . $order->customer_email . '. Срок зачисления зависит от банка.',
+            'border-ink',
+        ],
         default => [
             'Ждём оплату',
             'Если платёжная страница закрылась, оплату можно продолжить по кнопке ниже.',
@@ -36,7 +41,7 @@
             <h1 class="text-3xl md:text-4xl">{{ $state[0] }}</h1>
             <p class="mt-3 max-w-xl text-sm leading-relaxed text-muted">{{ $state[1] }}</p>
 
-            @if (! $order->isPaid() && $order->status !== Order::STATUS_CANCELLED && $payment?->confirmation_url)
+            @if ($order->status === Order::STATUS_AWAITING_PAYMENT && $payment?->confirmation_url)
                 <a href="{{ $payment->confirmation_url }}" class="btn btn-dark mt-6">
                     Продолжить оплату <span aria-hidden="true">→</span>
                 </a>

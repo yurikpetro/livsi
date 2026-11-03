@@ -9,8 +9,16 @@
 @endphp
 
 <div style="display: grid; gap: 20px;">
+    @if ($order->status === \App\Models\Order::STATUS_REFUNDED)
+        <p style="margin: 0; padding: 10px 14px; border-radius: 8px; font-weight: 600; color: #ef4444; box-shadow: inset 0 0 0 1px rgba(239, 68, 68, .4);">
+            Заказ отменён, деньги возвращены.{{ $current ? '' : ' Отгрузки не было.' }}
+            <span style="font-weight: 400; opacity: .8;">Покупатель видит на странице заказа: «Заказ отменён, деньги возвращены».</span>
+        </p>
+    @endif
     @if ($current === null)
-        <p style="margin: 0; opacity: .75;">Статус доставки появится после оплаты заказа.</p>
+        @if ($order->status !== \App\Models\Order::STATUS_REFUNDED)
+            <p style="margin: 0; opacity: .75;">Статус доставки появится после оплаты заказа.</p>
+        @endif
     @else
         @if ($current === Fulfillment::RETURNED)
             <p style="margin: 0; padding: 10px 14px; border-radius: 8px; font-weight: 600; color: #ef4444; box-shadow: inset 0 0 0 1px rgba(239, 68, 68, .4);">

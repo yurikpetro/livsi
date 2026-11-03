@@ -182,7 +182,8 @@ class RefundService
             $order->load('items.marks');
 
             // Товар со склада не уезжал — возвращаем его в продажу на сайте.
-            if (in_array(Fulfillment::current($order), [null, Fulfillment::AWAITING, Fulfillment::ASSEMBLED], true)) {
+            $stayed = in_array(Fulfillment::current($order), [null, Fulfillment::AWAITING, Fulfillment::ASSEMBLED], true);
+            if ($stayed) {
                 foreach ($order->items as $item) {
                     $quota = StockQuota::query()->where('product_variant_id', $item->product_variant_id)->lockForUpdate()->first();
                     if (! $quota || $quota->sold < 1) {
@@ -198,7 +199,10 @@ class RefundService
             $released = $order->items->flatMap(fn ($item) => $item->marks->map(fn ($mark): string => $mark->gtin.' '.$mark->serial))->values()->all();
             $order->marks()->delete();
             $refund->update(['done_at' => now(), 'payload' => array_merge($refund->payload ?? [], ['released_marks' => $released])]);
-            $order->forceFill(['status' => Order::STATUS_REFUNDED, 'cancelled_at' => $order->cancelled_at ?? now()])->save();
+            // Не уехавший заказ больше не «собран» и не «ждёт сборки»: он отменён.
+            // Его нет ни в сборке, ни в доставке; история — в журнале заказа.
+            $order->forceFill(array_merge(['status' => Order::STATUS_REFUNDED, 'cancelled_at' => $order->cancelled_at ?? now()],
+                $stayed ? ['fulfillment_status' => null, 'fulfillment_status_at' => now()] : []))->save();
         });
     }
 

@@ -60,7 +60,7 @@ class Order extends Model
             self::STATUS_AWAITING_PAYMENT => 'Ждёт оплаты',
             self::STATUS_PAID => 'Оплачен',
             self::STATUS_CANCELLED => 'Отменён',
-            self::STATUS_REFUNDED => 'Возвращён',
+            self::STATUS_REFUNDED => 'Деньги возвращены',
         ];
     }
 
