@@ -7,6 +7,7 @@ use App\Models\Payment;
 use App\Models\StockQuota;
 use App\Models\StockQuotaMovement;
 use App\Monitoring\PaymentNotifications;
+use App\Support\Fulfillment;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -77,8 +78,10 @@ class PaymentService
             $order->update([
                 'status' => Order::STATUS_PAID,
                 'paid_at' => now(),
-                'shipment_automatic' => true,
-                'shipment_state' => $order->hasShipment() ? $order->shipment_state : ($order->shipment_state ?: 'queued'),
+                // Курьера по Ставрополю вызывает магазин сам — заявку в службу не создаём.
+                'shipment_automatic' => ! Fulfillment::isCourier($order),
+                'shipment_state' => Fulfillment::isCourier($order) ? $order->shipment_state
+                    : ($order->hasShipment() ? $order->shipment_state : ($order->shipment_state ?: 'queued')),
             ]);
 
             Log::info('Заказ оплачен.', ['order' => $order->number]);

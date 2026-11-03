@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Delivery\DeliveryGateway;
 use App\Http\Requests\StoreOrderRequest;
+use App\Models\Setting;
 use App\Payments\PaymentGateway;
 use App\Services\CartService;
 use App\Services\DeliveryQuoteService;
@@ -51,6 +52,9 @@ class CheckoutController extends Controller
             'gateway' => $this->gateway,
             'deliveryCalculationEnabled' => $this->quotes->enabled(),
             'deliveryCalculationTest' => $this->quotes->testing(),
+            'courierEnabled' => DeliveryQuoteService::courierEnabled() && $this->quotes->enabled(),
+            'courierPrice' => (int) Setting::get('stavropol_courier_price', 19900),
+            'courierNote' => trim((string) Setting::get('stavropol_courier_note', '')),
             'remainingToFreeShipping' => $this->promos->remainingToFreeShipping($cart->subtotal()),
             'pointMethods' => array_values(array_filter(
                 DeliverySelection::pickupMethods(),
@@ -133,8 +137,8 @@ class CheckoutController extends Controller
             return redirect()->route('cart.index')->with('status', 'Корзина пуста.');
         }
 
-        $pointId = $request->validated('delivery_point_id');
         $requestedMethod = $request->validated('delivery_method');
+        $pointId = $requestedMethod === DeliverySelection::STAVROPOL_COURIER ? null : $request->validated('delivery_point_id');
         $pointMethod = $requestedMethod === DeliverySelection::PICKUP_POINT
             ? $request->validated('delivery_point_method')
             : $requestedMethod;
@@ -153,14 +157,16 @@ class CheckoutController extends Controller
             }
         }
 
-        if ($requestedMethod === DeliverySelection::STAVROPOL_COURIER) {
-            return back()->withInput()->withErrors(['delivery_method' => 'Курьерская доставка временно недоступна. Выберите пункт выдачи.']);
+        if ($requestedMethod === DeliverySelection::STAVROPOL_COURIER && ! DeliveryQuoteService::courierEnabled()) {
+            return back()->withInput()->withErrors(['delivery_method' => 'Курьерская доставка сейчас недоступна. Выберите пункт выдачи.']);
         }
         if (! $this->quotes->enabled()) {
             return back()->withInput()->withErrors(['delivery_quote' => 'Расчёт доставки временно недоступен. Попробуйте позже.']);
         }
         if (! $request->filled('delivery_quote_token')) {
-            return back()->withInput()->withErrors(['delivery_quote' => 'Выберите пункт выдачи и дождитесь расчёта доставки перед оплатой.']);
+            return back()->withInput()->withErrors(['delivery_quote' => $requestedMethod === DeliverySelection::STAVROPOL_COURIER
+                ? 'Дождитесь расчёта доставки курьером перед оплатой.'
+                : 'Выберите пункт выдачи и дождитесь расчёта доставки перед оплатой.']);
         }
         $quote = $this->quotes->accept($request->validated('delivery_quote_token'), $cart, [
             'delivery_city' => $request->validated('delivery_city'),

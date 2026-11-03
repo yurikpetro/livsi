@@ -194,13 +194,69 @@ test('Delivery request deduplication and rate-limit fallback', async (t) => {
                     await page.waitForFunction(() => document.querySelector('[data-points-dialog]').open);
                     assert.equal(await page.locator('[data-point-id]').inputValue(), chosen);
                     await page.locator('[data-points-close]').click();
-                    assert.equal(await page.locator('[name="delivery_method"][value="stavropol_courier"]').isDisabled(), true);
-                    assert.match(await page.locator('[data-delivery-courier]').textContent(), /Временно недоступен/);
+                    const courierOn = await page.locator('[data-delivery-points]').getAttribute('data-courier-enabled') === '1';
+                    assert.equal(await page.locator('[data-delivery-courier]').isVisible(), courierOn);
+                    assert.equal(await page.locator('[name="delivery_method"][value="stavropol_courier"]').isDisabled(), !courierOn);
                     assert.equal(await page.locator('[data-point-id]').inputValue(), chosen);
                     assert.equal(await page.locator('[name="delivery_manual"]').count(), 0);
                 }, width);
             });
         }
+        await t.test('a refused promo code keeps the chosen point; courier is offered only in Stavropol', async () => {
+            await withCheckout(browser, async (page, baseUrl) => {
+                const quoted = [];
+                await page.route('**/delivery/points?*', (route) => route.fulfill({ json: pointResponse(route) }));
+                await page.route('**/delivery/city/geocode', (route) => route.fulfill({ status: 429, json: {} }));
+                await page.route('**/delivery/quote', (route) => {
+                    const body = route.request().postDataJSON();
+                    quoted.push(`${body.delivery_point_method}:${body.delivery_point_id}`);
+                    return route.fulfill({ json: body.delivery_point_method === 'stavropol_courier'
+                        ? { token: 'courier-quote', price: 19900, price_label: '199 ₽', courier: true, note: 'Привезём сегодня.' }
+                        : { token: 'card-quote', price: 30000, price_label: '300 ₽', days_min: 2, days_max: 3 } });
+                });
+                await page.goto(`${baseUrl}/checkout`);
+                if (await page.locator('[data-cookie-choice="necessary"]').isVisible()) {
+                    await page.locator('[data-cookie-choice="necessary"]').click();
+                }
+                await page.locator('[data-points-search]').focus();
+                await page.keyboard.press('Enter');
+                await page.waitForFunction(() => document.querySelector('[data-points-dialog]').open && document.querySelectorAll('.pickup-item').length === 3);
+                await page.locator('.pickup-item').first().click();
+                const chosen = await page.locator('[data-point-id]').inputValue();
+                const method = await page.locator('[data-point-method]').inputValue();
+                assert.ok(chosen && method);
+
+                await page.locator('#promo_code').fill('NOSUCHCODE');
+                await Promise.all([page.waitForURL(`${baseUrl}/checkout`, { waitUntil: 'load' }), page.locator('[formaction$="/checkout/promo"]').click()]);
+                await page.waitForLoadState('load');
+                assert.ok(await page.locator('[data-checkout-promo] .field-error').count());
+                assert.equal(await page.locator('[data-point-id]').inputValue(), chosen);
+                assert.equal(await page.locator('[data-point-method]').inputValue(), method);
+                assert.equal(await page.locator('[name="delivery_method"][value="pickup_point"]').isChecked(), true);
+                assert.match(await page.locator('[data-pickup-choice]').textContent(), /Проверочный ПВЗ/);
+                if (await page.locator('[data-delivery-quote]').count()) {
+                    await page.waitForFunction(() => document.querySelector('[name="delivery_quote_token"]').value === 'card-quote');
+                    assert.equal(quoted.at(-1), `${method}:${chosen}`);
+                }
+
+                if (await page.locator('[data-delivery-points]').getAttribute('data-courier-enabled') === '1') {
+                    assert.equal(await page.locator('[data-delivery-courier]').isVisible(), true);
+                    await page.locator('[name="delivery_method"][value="stavropol_courier"]').check();
+                    await page.waitForFunction(() => document.querySelector('[name="delivery_quote_token"]').value === 'courier-quote');
+                    assert.equal(quoted.at(-1), 'stavropol_courier:');
+                    assert.equal(await page.locator('[data-checkout-delivery-price]').textContent(), '199 ₽');
+                    assert.equal(await page.locator('[data-delivery-quote-note]').textContent(), 'Привезём сегодня.');
+                    assert.equal(await page.locator('[data-delivery-quote-note]').isVisible(), true);
+                    assert.equal(await page.locator('[name="delivery_address"]').isVisible(), true);
+
+                    await page.locator('[data-city-open]').click();
+                    await page.locator('[data-popular-city="Краснодар"]').click();
+                    assert.equal(await page.locator('[data-delivery-courier]').isVisible(), false);
+                    assert.equal(await page.locator('[name="delivery_method"][value="stavropol_courier"]').isChecked(), false);
+                    assert.equal(await page.locator('[name="delivery_quote_token"]').inputValue(), '');
+                }
+            });
+        });
         await t.test('points render before geocoding, repeated events and reopening do not refetch', async () => {
             await withCheckout(browser, async (page, baseUrl) => {
                 let pointRequests = 0;

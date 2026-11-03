@@ -103,11 +103,48 @@ test('Delivery quote browser lifecycle', async (t) => {
                 assert.equal(await page.locator('[name="delivery_quote_token"]').inputValue(), '');
                 assert.match(await page.locator('[data-checkout-total]').textContent(), /1\s*000,00/);
                 assert.equal(await page.locator('[data-checkout-delivery-price]').textContent(), 'Не рассчитана');
+            });
+        });
+        await t.test('courier is quoted without a pickup point and shows its note', async () => {
+            const bodies = [];
+            await withForm(async (page) => {
+                await page.waitForFunction(() => document.querySelector('[name="delivery_quote_token"]').value === 'server-token');
                 await page.locator('[name="delivery_method"][value="stavropol_courier"]').check();
                 await page.locator('form').dispatchEvent('livsi:delivery-selection');
-                assert.equal(await page.locator('[data-checkout-delivery-price]').textContent(), 'Не рассчитана');
-                assert.match(await page.locator('[data-delivery-quote-status]').textContent(), /временно недоступен/);
-            });
+                await page.waitForFunction(() => document.querySelector('[name="delivery_quote_token"]').value === 'courier-token');
+                assert.equal(bodies.at(-1).delivery_point_method, 'stavropol_courier');
+                assert.equal(bodies.at(-1).delivery_point_id, '');
+                assert.equal(await page.locator('[data-checkout-delivery-price]').textContent(), '199 ₽');
+                assert.match(await page.locator('[data-checkout-delivery-note]').textContent(), /Курьер по Ставрополю/);
+                assert.equal(await page.locator('[data-delivery-quote-status]').textContent(), 'Курьер: 199 ₽. Включено в сумму к оплате.');
+                assert.equal(await page.locator('[data-delivery-quote-note]').textContent(), 'Привезём сегодня или завтра.');
+                assert.equal(await page.locator('[data-delivery-quote-note]').isVisible(), true);
+            }, (route) => {
+                const body = route.request().postDataJSON();
+                bodies.push(body);
+                return route.fulfill({ json: body.delivery_point_method === 'stavropol_courier'
+                    ? { token: 'courier-token', price: 19900, price_label: '199 ₽', courier: true, note: 'Привезём сегодня или завтра.' }
+                    : { token: 'server-token', price: 34567, price_label: '345,67 ₽', days_min: 2, days_max: 4 } });
+            }, markup.replace('<button type="button" data-delivery-recalculate>', '<p data-delivery-quote-note hidden></p><button type="button" data-delivery-recalculate>'));
+        });
+        await t.test('far pickup point gets a hint, a usual one does not', async () => {
+            await withForm(async (page) => {
+                await page.waitForFunction(() => document.querySelector('[name="delivery_quote_token"]').value === 'far-token');
+                assert.equal(await page.locator('[data-delivery-quote-note]').isVisible(), true);
+                assert.match(await page.locator('[data-delivery-quote-note]').textContent(), /дороже и дольше обычного/);
+                await page.evaluate(() => {
+                    document.querySelector('[name="delivery_point_id"]').value = '43';
+                    document.querySelector('form').dispatchEvent(new CustomEvent('livsi:delivery-selection'));
+                });
+                await page.waitForFunction(() => document.querySelector('[name="delivery_quote_token"]').value === 'usual-token');
+                assert.equal(await page.locator('[data-delivery-quote-note]').isVisible(), false);
+            }, (route) => {
+                const far = route.request().postDataJSON().delivery_point_id === '42';
+                return route.fulfill({ json: far
+                    ? { token: 'far-token', price: 91859, price_label: '918,59 ₽', days_min: 9, days_max: 9,
+                        note: 'Яндекс везёт в этот пункт дороже и дольше обычного. В другие пункты Яндекс в этом городе — от 158,53 ₽, 3 дня.' }
+                    : { token: 'usual-token', price: 15853, price_label: '158,53 ₽', days_min: 3, days_max: 3 } });
+            }, markup.replace('<button type="button" data-delivery-recalculate>', '<p data-delivery-quote-note hidden></p><button type="button" data-delivery-recalculate>'));
         });
         await t.test('zero tariff is shown as free delivery and leaves the items total unchanged', async () => {
             await withForm(async (page) => {

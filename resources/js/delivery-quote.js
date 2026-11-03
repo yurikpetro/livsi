@@ -4,6 +4,12 @@ export function initDeliveryQuote() {
     form.dataset.quoteReady = '1';
     const root = form.querySelector('[data-delivery-quote]');
     const status = root.querySelector('[data-delivery-quote-status]');
+    const note = root.querySelector('[data-delivery-quote-note]');
+    const showNote = (text) => {
+        if (!note) return;
+        note.textContent = text || '';
+        note.hidden = !text;
+    };
     const token = form.elements.delivery_quote_token;
     const button = root.querySelector('[data-delivery-recalculate]');
     const total = document.querySelector('[data-checkout-total]');
@@ -34,10 +40,12 @@ export function initDeliveryQuote() {
         pending = false;
         button.hidden = true;
         token.value = '';
+        showNote('');
         total.textContent = money(Number(total.dataset.itemsTotal));
         updateUnquotedSummary('Не рассчитана', 'Выберите пункт выдачи: рассчитаем доставку и добавим её к стоимости товаров.',
             'Доставка бесплатная для вашего заказа. Выберите пункт выдачи, чтобы уточнить срок доставки.');
-        const pickup = ['pickup_point', 'cdek_point', 'yandex_point', 'ozon_point'].includes(form.elements.delivery_method.value);
+        const courier = form.elements.delivery_method.value === 'stavropol_courier';
+        const pickup = courier || ['pickup_point', 'cdek_point', 'yandex_point', 'ozon_point'].includes(form.elements.delivery_method.value);
         if (!pickup) {
             status.textContent = form.elements.delivery_method.value
                 ? 'Этот способ доставки временно недоступен. Выберите пункт выдачи.'
@@ -47,7 +55,11 @@ export function initDeliveryQuote() {
         button.disabled = false;
         const destination = Object.fromEntries(['delivery_city', 'delivery_region', 'delivery_point_method', 'delivery_point_id']
             .map((name) => [name, form.elements[name].value]));
-        if (!destination.delivery_point_id) {
+        if (courier) {
+            destination.delivery_point_method = 'stavropol_courier';
+            destination.delivery_point_id = '';
+        }
+        if (!courier && !destination.delivery_point_id) {
             status.textContent = selectionMessage;
             return;
         }
@@ -68,12 +80,16 @@ export function initDeliveryQuote() {
             if (!response.ok) throw new Error(Object.values(data.errors || {}).flat()[0] || 'Не удалось рассчитать доставку. Повторите расчёт или выберите другой пункт выдачи.');
             token.value = data.token;
             total.textContent = money(Number(total.dataset.itemsTotal) + data.price);
-            updateSummary(data.price === 0 ? 'Бесплатно' : data.price_label, 'В сумму к оплате включены товары и доставка.');
+            updateSummary(data.price === 0 ? 'Бесплатно' : data.price_label, data.courier
+                ? 'Курьер по Ставрополю. В сумму к оплате включены товары и доставка.' : 'В сумму к оплате включены товары и доставка.');
             const dayForms = { one: 'календарный день', few: 'календарных дня', many: 'календарных дней', other: 'календарного дня' };
             const duration = Number(data.days_min) === Number(data.days_max) ? data.days_max : `${data.days_min}–${data.days_max}`;
             const days = data.days_min != null && data.days_max != null
                 ? ` · ${duration} ${dayForms[new Intl.PluralRules('ru').select(Number(data.days_max))]}` : '';
-            status.textContent = `Доставка: ${data.price_label}${days}. Включена в сумму к оплате.`;
+            status.textContent = data.courier
+                ? `Курьер: ${data.price_label}. Включено в сумму к оплате.`
+                : `Доставка: ${data.price_label}${days}. Включена в сумму к оплате.`;
+            showNote(data.note);
             expiry = setTimeout(() => {
                 token.value = '';
                 total.textContent = money(Number(total.dataset.itemsTotal));

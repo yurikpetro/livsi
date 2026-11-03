@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Order;
 use App\Monitoring\ShipmentNotifications;
+use App\Services\DeliverySelection;
 use App\Services\ShipmentAutomation;
 use App\Support\Fulfillment;
 use Illuminate\Console\Attributes\Description;
@@ -24,6 +25,7 @@ class ProcessShipments extends Command
         $due = fn (Builder $query): Builder => $query->where(fn (Builder $check): Builder => $check
             ->whereNull('shipment_checked_at')->orWhere('shipment_checked_at', '<=', now()->subMinutes(5)));
         $orders = Order::query()->where('shipment_automatic', true)
+            ->where(fn (Builder $method): Builder => $method->whereNull('delivery_method')->orWhere('delivery_method', '!=', DeliverySelection::STAVROPOL_COURIER))
             ->where(function (Builder $query) use ($due): void {
                 $query->where(function (Builder $pending) use ($due): void {
                     $pending->where('status', Order::STATUS_PAID)->whereNull('apiship_order_id')->whereNull('shipment_external_id')
