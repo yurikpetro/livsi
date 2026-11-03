@@ -66,7 +66,7 @@ class CustomersController extends Controller
     /** Карточка клиента: заказы с итогом и промокодом, его личные промокоды. */
     public function show(int $id): JsonResponse
     {
-        $customer = Customer::query()->withStats()->findOrFail($id);
+        $customer = Customer::query()->withStats()->find($id) ?? abort(404, 'Клиент не найден.');
         $orders = $customer->orders()->with(['items', 'receipts'])->latest('created_at')->limit(200)->get();
         $codes = $customer->promoCodes()->with('orders:id,number,promo_code_id,status')->latest('id')->get();
 
@@ -133,7 +133,7 @@ class CustomersController extends Controller
 
     public function mailingShow(int $id): JsonResponse
     {
-        $mailing = Mailing::query()->findOrFail($id);
+        $mailing = Mailing::query()->find($id) ?? abort(404, 'Рассылка не найдена.');
 
         return response()->json([
             'mailing' => $this->mailing($mailing) + ['body' => $mailing->body],

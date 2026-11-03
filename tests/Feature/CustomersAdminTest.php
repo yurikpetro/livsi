@@ -25,6 +25,7 @@ use App\Models\PromoCode;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\CartService;
+use App\Services\MailingService;
 use App\Services\OrderService;
 use App\Support\Money;
 use Database\Seeders\CatalogSeeder;
@@ -32,6 +33,7 @@ use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -234,7 +236,7 @@ class CustomersAdminTest extends TestCase
             ->assertJsonPath('orders.0.number', $order->number)
             ->assertJsonPath('orders.0.status.code', 'awaiting_payment')
             ->assertJsonPath('orders.0.promo.code', 'SALE10');
-        $this->api('GET', '/customers/999999')->assertNotFound();
+        $this->api('GET', '/customers/999999')->assertNotFound()->assertJsonPath('message', 'Клиент не найден.');
     }
 
     public function test_livsipro_issues_promo_to_selected_and_shows_promo_base(): void
@@ -285,5 +287,22 @@ class CustomersAdminTest extends TestCase
         $this->api('GET', '/mailings')->assertOk()->assertJsonCount(2, 'mailings')->assertJsonPath('subscribed', 1);
         $this->api('GET', '/mailings/'.$first->id)->assertOk()->assertJsonCount(2, 'recipients')
             ->assertJsonPath('recipients.0.email', 'yes@example.test')->assertJsonPath('recipients.1.status', 'skipped');
+    }
+
+    public function test_mailing_refused_on_production_without_real_mail(): void
+    {
+        $yes = $this->customerWith('yes@example.test');
+        $this->app['env'] = 'production';
+        config(['mail.default' => 'log']);
+
+        try {
+            app(MailingService::class)->create(['subject' => 'Новинки', 'body' => 'У нас новые скрабы, заходите.'], [$yes], 'boss');
+            $this->fail('рассылка не должна создаваться без настоящей почты');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('Почта сайта не настроена', $e->validator->errors()->first());
+        } finally {
+            $this->app['env'] = 'testing';
+        }
+        $this->assertSame(0, Mailing::count());
     }
 }

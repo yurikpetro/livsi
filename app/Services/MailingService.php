@@ -38,6 +38,7 @@ class MailingService
         if (mb_strlen($subject) < 3 || mb_strlen($body) < 10) {
             throw ValidationException::withMessages(['mailing' => 'Напишите тему (от 3 знаков) и текст письма (от 10 знаков).']);
         }
+        $this->ensureMailer();
         $promo = $data['promo'] ?? null;
         $customers = collect($customers)->unique('id');
         $allowed = $customers->filter(fn (Customer $customer): bool => $customer->canReceiveMarketing());
@@ -70,6 +71,7 @@ class MailingService
     /** Пробное письмо себе — как увидит клиент, с примером промокода. */
     public function sendTest(array $data, string $email): void
     {
+        $this->ensureMailer();
         $mailing = new Mailing(['subject' => (string) ($data['subject'] ?? ''), 'body' => (string) ($data['body'] ?? '')]);
         $promo = isset($data['promo']['kind'])
             ? new PromoCode(['code' => 'LIVSI-ПРИМЕР', 'kind' => $data['promo']['kind'], 'value' => (int) ($data['promo']['value'] ?? 0),
@@ -123,5 +125,13 @@ class MailingService
     public function unsubscribeUrl(Customer $customer): string
     {
         return URL::signedRoute('unsubscribe', ['customer' => $customer->id]);
+    }
+
+    /** На боевом сайте с почтой «в журнал» письма никуда не уйдут — не делаем вид, что ушли. */
+    private function ensureMailer(): void
+    {
+        if (app()->isProduction() && in_array(config('mail.default'), ['log', 'array'], true)) {
+            throw ValidationException::withMessages(['mailing' => 'Почта сайта не настроена (письма пишутся в журнал, а не отправляются). Сначала настройте почту — потом рассылка.']);
+        }
     }
 }
