@@ -9,6 +9,7 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -87,6 +88,7 @@ class DeliveryIntegrations extends Page implements HasForms
             $values[$provider] = [
                 'direct' => DeliverySettings::driver($provider) === 'direct',
                 'origin' => DeliverySettings::origin($provider),
+                'hidden' => implode("\n", DeliverySettings::hiddenPoints($provider)),
             ];
         }
         $this->form->fill($values);
@@ -125,6 +127,10 @@ class DeliveryIntegrations extends Page implements HasForms
                 ->searchable()->native(false)
                 ->helperText(fn (): string => $this->dropoffHint($provider))
                 ->columnSpanFull();
+        $fields[] = Textarea::make($provider.'.hidden')->label('Скрытые пункты выдачи')->rows(3)
+            ->placeholder('номер пункта — по одному в строке')
+            ->helperText(fn (): HtmlString => $this->hiddenHint($provider))
+            ->columnSpanFull();
         $fields[] = Actions::make([
             Action::make('check_'.$provider)->label('Проверить связь')->icon(Heroicon::OutlinedSignal)->color('gray')
                 ->action(fn () => $this->check($provider)),
@@ -133,6 +139,18 @@ class DeliveryIntegrations extends Page implements HasForms
         ])->columnSpanFull();
 
         return Section::make(self::TITLES[$provider])->schema($fields)->columns(2)->collapsible();
+    }
+
+    /** Подсказка под списком скрытых: что за пункты и как найти дорогие. */
+    private function hiddenHint(string $provider): HtmlString
+    {
+        $ids = DeliverySettings::hiddenPoints($provider);
+        $known = $ids ? DeliveryPoint::query()->where('provider', $provider)->whereIn('external_id', $ids)->pluck('address', 'external_id') : collect();
+        $lines = array_map(fn (string $id): string => e($id).' — '.e($known[$id] ?? 'адрес неизвестен'), $ids);
+
+        return new HtmlString(($lines ? 'Сейчас скрыты: '.implode('; ', $lines).'.<br>' : '')
+            .'Покупатель их не видит на карте и не может выбрать. Найти пункты с несуразной ценой: '
+            .'<code>php artisan delivery:outliers '.e($provider).' --city=Ставрополь</code>.');
     }
 
     private function stateHtml(string $provider): HtmlString
@@ -267,6 +285,12 @@ class DeliveryIntegrations extends Page implements HasForms
         foreach (DeliveryGateway::PROVIDERS as $provider) {
             $this->data[$provider]['keys'] = $data[$provider]['keys'] ?? [];
             $this->saveKeys($provider);
+
+            // В строке может быть «номер — адрес»: берём только номер.
+            DeliverySettings::setHiddenPoints($provider, array_map(
+                fn (string $line): string => (string) preg_split('/[\s,;—]+/u', trim($line))[0],
+                preg_split('/\R/u', (string) ($data[$provider]['hidden'] ?? '')) ?: [],
+            ));
 
             $origin = trim((string) ($data[$provider]['origin'] ?? ''));
             if ($origin !== DeliverySettings::origin($provider)) {

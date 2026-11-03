@@ -73,11 +73,19 @@ class DeliveryGateway
     /** @return array{points: array<int, array<string, mixed>>, total: int} */
     public function points(string $city, string $provider, int $offset = 0, int $limit = 50, ?string $region = null): array
     {
+        $hidden = DeliverySettings::hiddenPoints($provider);
         if (! $this->isDirect($provider)) {
-            return $this->apiShip->points($city, $provider, $offset, $limit, $region);
+            $result = $this->apiShip->points($city, $provider, $offset, $limit, $region);
+            if ($hidden) {
+                $before = count($result['points']);
+                $result['points'] = array_values(array_filter($result['points'], fn (array $point): bool => ! in_array((string) ($point['id'] ?? ''), $hidden, true)));
+                $result['total'] = max(0, (int) $result['total'] - ($before - count($result['points'])));
+            }
+
+            return $result;
         }
 
-        $query = $this->pointsQuery($provider, $city, $region);
+        $query = $this->pointsQuery($provider, $city, $region)->when($hidden, fn ($q) => $q->whereNotIn('external_id', $hidden));
 
         return [
             'points' => $query->clone()->orderBy('id')->offset($offset)->limit($limit)->get()
@@ -89,6 +97,9 @@ class DeliveryGateway
     /** @return array<string, mixed>|null */
     public function point(string $id, string $city, string $provider, ?string $region = null): ?array
     {
+        if (DeliverySettings::isHidden($provider, $id)) {
+            return null;
+        }
         if (! $this->isDirect($provider)) {
             return ctype_digit($id) ? $this->apiShip->point($id, $city, $provider, $region) : null;
         }

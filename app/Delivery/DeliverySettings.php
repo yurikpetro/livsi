@@ -103,6 +103,35 @@ final class DeliverySettings
         return is_string($value) && $value !== '' ? $value : null;
     }
 
+    /**
+     * Пункты выдачи, которые не показываем покупателю: служба считает в них
+     * несуразную цену или срок (например, два пункта Яндекса в Ставрополе —
+     * 918 ₽ и 9 дней при обычных 158 ₽ и 3 днях). Ночная загрузка пунктов
+     * их не возвращает: список хранится отдельно от самих пунктов.
+     *
+     * @return list<string>
+     */
+    public static function hiddenPoints(string $provider): array
+    {
+        $value = ((array) Setting::get('delivery_hidden_points', []))[$provider] ?? [];
+
+        return array_values(array_unique(array_filter(array_map(
+            fn ($id): string => trim((string) $id), is_array($value) ? $value : []), fn (string $id): bool => $id !== '')));
+    }
+
+    /** @param iterable<string> $ids */
+    public static function setHiddenPoints(string $provider, iterable $ids): void
+    {
+        $all = (array) Setting::get('delivery_hidden_points', []);
+        $all[$provider] = array_values(array_unique(array_filter(array_map(fn ($id): string => mb_substr(trim((string) $id), 0, 64), [...$ids]))));
+        Setting::put('delivery_hidden_points', $all);
+    }
+
+    public static function isHidden(string $provider, string $id): bool
+    {
+        return in_array($id, self::hiddenPoints($provider), true);
+    }
+
     /** Итог последней загрузки пунктов выдачи. @return array<string, mixed>|null */
     public static function lastSync(string $provider): ?array
     {
