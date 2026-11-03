@@ -73,6 +73,7 @@
                                 <strong>{{ \App\Support\Money::rub($record->total) }}</strong>
                                 <x-filament::badge :color="$record->isPaid() ? 'success' : 'gray'">{{ $record->statusLabel() }}</x-filament::badge>
                                 @if ($record->outcome())<p class="orders-kanban-meta">{{ $record->outcome() }}</p>@endif
+                                @if ($record->promo_code)<p class="orders-kanban-meta">Промокод {{ $record->promo_code }}</p>@endif
                             </div>
                             <div class="orders-kanban-meta">
                                 <p>{{ \App\Services\DeliverySelection::label($record->delivery_method) }}</p>

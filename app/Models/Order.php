@@ -29,6 +29,7 @@ class Order extends Model
         'paid_at' => 'datetime',
         'cancelled_at' => 'datetime',
         'returned_to_stock_at' => 'datetime',
+        'promo_free_delivery' => 'boolean',
     ];
 
     public const STATUS_AWAITING_PAYMENT = 'awaiting_payment';
@@ -115,6 +116,16 @@ class Order extends Model
     public function marks(): HasMany
     {
         return $this->hasMany(OrderItemMark::class);
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
+    }
+
+    public function promoCode(): BelongsTo
+    {
+        return $this->belongsTo(PromoCode::class);
     }
 
     public function receipts(): HasMany

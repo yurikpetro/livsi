@@ -317,6 +317,8 @@ class OrdersController extends Controller
                 'at' => $order->fulfillment_status_at?->toIso8601String()],
             'status' => ['code' => $order->status, 'label' => $order->statusLabel()],
             'outcome' => $order->outcome(),
+            'promo' => $order->promo_code ? ['code' => $order->promo_code, 'discount' => (int) $order->promo_discount,
+                'free_delivery' => (bool) $order->promo_free_delivery] : null,
             'refund' => ($refund = $order->receipt(OrderReceipt::KIND_REFUND)) && in_array($refund->status, ['pending', 'succeeded'], true)
                 ? ['amount' => (int) $refund->amount, 'kept_delivery' => (int) ($refund->payload['kept_delivery'] ?? 0), 'state' => $refund->status]
                 : null,

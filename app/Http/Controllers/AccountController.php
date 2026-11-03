@@ -6,6 +6,8 @@ use App\Auth\VkId;
 use App\Auth\YandexId;
 use App\Models\Order;
 use App\Services\CartService;
+use App\Services\CustomerDirectory;
+use App\Services\PromoCodeService;
 use App\Support\Phone;
 use App\Support\Text;
 use Closure;
@@ -55,6 +57,7 @@ class AccountController extends Controller
                 ->with('items')
                 ->latest()
                 ->paginate(10),
+            'promoCodes' => app(PromoCodeService::class)->forCustomer(app(CustomerDirectory::class)->forUser($request->user())),
             // Личная страница: в поиске ей делать нечего.
             'robots' => 'noindex, nofollow',
         ]);

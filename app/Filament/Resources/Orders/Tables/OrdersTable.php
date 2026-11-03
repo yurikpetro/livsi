@@ -43,6 +43,7 @@ class OrdersTable
                 TextColumn::make('total')
                     ->label('Сумма')
                     ->state(fn (Order $record) => Money::rub($record->total))
+                    ->description(fn (Order $record): ?string => $record->promo_code ? 'промокод '.$record->promo_code : null)
                     ->sortable(),
 
                 TextColumn::make('status')

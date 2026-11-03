@@ -19,3 +19,5 @@ Schedule::command('delivery:statuses')->everyFifteenMinutes()->withoutOverlappin
 Schedule::command('delivery:points --requested')->everyMinute()->withoutOverlapping(60)->runInBackground();
 // Второй чек «полный расчёт» с КИЗ полученным заказам; итог чеков и возвратов в обработке.
 Schedule::command('receipts:sync')->everyFiveMinutes()->withoutOverlapping(10);
+// Рассылки клиентам: по 30 писем в минуту.
+Schedule::command('mailings:send')->everyMinute()->withoutOverlapping(10);

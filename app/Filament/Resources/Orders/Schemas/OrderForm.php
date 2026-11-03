@@ -133,6 +133,11 @@ class OrderForm
                                 .($record->discount_total > 0 ? ' · скидка −'.Money::rub($record->discount_total) : '')
                                 .' · итого '.Money::rub($record->total))
                             ->columnSpanFull(),
+
+                        Placeholder::make('promo')->label('Промокод')
+                            ->visible(fn (Order $record): bool => filled($record->promo_code))
+                            ->content(fn (Order $record) => self::promoText($record))
+                            ->columnSpanFull(),
                     ]),
 
                 Section::make('Оплата')
@@ -187,6 +192,18 @@ class OrderForm
                     ])
                     ->columns(3),
             ]);
+    }
+
+    /** Промокод заказа: код, что дал и чей он. */
+    public static function promoText(Order $record): string
+    {
+        $promo = $record->promoCode;
+
+        return $record->promo_code
+            .($record->promo_discount > 0 ? ' — скидка '.Money::rub((int) $record->promo_discount) : '')
+            .($record->promo_free_delivery ? ' — бесплатная доставка' : '')
+            .($promo?->customer ? ' · личный код клиента '.($promo->customer->name ?: $promo->customer->email) : ($promo ? ' · общий код' : ''))
+            .($promo?->issued_by ? ' · выдал '.$promo->issued_by : '');
     }
 
     /** Второй чек (полный расчёт с КИЗ) и возврат денег — одной-двумя строками. */

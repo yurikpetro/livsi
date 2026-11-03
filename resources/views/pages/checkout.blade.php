@@ -7,6 +7,8 @@
     use App\Services\DeliverySelection;
 
     $gift = $cart->giftItem();
+    $goods = max(0, $cart->subtotal() - ($gift ? $gift->variant->price : 0));
+    $toPay = $goods - ($promo['discount'] ?? 0);
 @endphp
 
 @section('content')
@@ -46,17 +48,45 @@
                         </div>
                     @endif
 
+                    @if ($promo && $promo['discount'] > 0)
+                        <div class="flex items-baseline justify-between gap-4 border-b border-line py-3 text-sm">
+                            <span>Промокод {{ $promo['code'] }} <span class="text-muted">· {{ mb_strtolower($promo['title']) }}</span></span>
+                            <span class="font-bold text-green whitespace-nowrap">−{{ Money::rub($promo['discount']) }}</span>
+                        </div>
+                    @endif
+
                     <div class="flex items-baseline justify-between gap-4 border-b border-line py-3 text-sm">
                         <span>Доставка</span>
-                        <span class="text-right font-bold" data-checkout-delivery-price aria-live="polite">{{ $remainingToFreeShipping === 0 ? 'Бесплатно' : 'Не рассчитана' }}</span>
+                        <span class="text-right font-bold" data-checkout-delivery-price aria-live="polite">{{ $remainingToFreeShipping === 0 || ($promo['free_delivery'] ?? false) ? 'Бесплатно' : 'Не рассчитана' }}</span>
                     </div>
 
                     <div class="flex items-baseline justify-between gap-4 py-4">
                         <span class="text-[10px] uppercase tracking-[0.08em] text-muted">К оплате</span>
-                        <span class="text-2xl font-black" data-checkout-total data-items-total="{{ max(0, $cart->subtotal() - ($gift ? $gift->variant->price : 0)) }}">
-                            {{ Money::rub(max(0, $cart->subtotal() - ($gift ? $gift->variant->price : 0))) }}
+                        <span class="text-2xl font-black" data-checkout-total data-items-total="{{ $toPay }}">
+                            {{ Money::rub($toPay) }}
                         </span>
                     </div>
+                </div>
+
+                {{-- Промокод. Кнопки отправляют форму оформления (атрибут form),
+                     чтобы введённые имя, почта и телефон не потерялись. --}}
+                <div class="mt-4" data-checkout-promo>
+                    @if ($promo)
+                        <div class="flex flex-wrap items-center justify-between gap-3 border border-line px-4 py-3 text-sm">
+                            <span>Промокод <strong>{{ $promo['code'] }}</strong> применён: {{ mb_strtolower($promo['title']) }}</span>
+                            <button type="submit" form="checkout-form" formaction="{{ route('checkout.promo.remove') }}" formnovalidate
+                                    class="text-[11px] font-bold uppercase tracking-[0.08em] hover:text-green">Убрать</button>
+                        </div>
+                    @else
+                        <label class="field-label" for="promo_code">Промокод</label>
+                        <div class="mt-1 flex gap-2">
+                            <input id="promo_code" name="promo_code" form="checkout-form" value="{{ old('promo_code') }}" maxlength="40"
+                                   autocomplete="off" class="field-control" placeholder="Если есть">
+                            <button type="submit" form="checkout-form" formaction="{{ route('checkout.promo') }}" formnovalidate class="btn btn-outline">Применить</button>
+                        </div>
+                    @endif
+                    @error('promo_code')<span class="field-error" role="alert">{{ $message }}</span>@enderror
+                    @if (session('promo_lost'))<span class="field-error" role="alert">Промокод снят: {{ session('promo_lost') }}</span>@endif
                 </div>
 
                 <p class="mt-2 text-xs leading-relaxed text-muted" data-checkout-delivery-note>
@@ -80,7 +110,7 @@
                     </div>
                 @endunless
 
-                <form method="POST" action="{{ route('checkout.store') }}" class="lead-form"
+                <form method="POST" action="{{ route('checkout.store') }}" id="checkout-form" class="lead-form"
                       @if ($deliveryCalculationEnabled) data-delivery-quote-url="{{ route('delivery.quote') }}" @endif>
                     @csrf
 

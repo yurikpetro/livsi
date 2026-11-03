@@ -105,14 +105,20 @@
                         <dt>Товары</dt>
                         <dd>{{ Money::rub($order->items_total) }}</dd>
                     </div>
-                    @if ($order->discount_total > 0)
+                    @if ($order->discount_total - $order->promo_discount > 0)
                         <div>
                             <dt>Скидка за подарок</dt>
-                            <dd>−{{ Money::rub($order->discount_total) }}</dd>
+                            <dd>−{{ Money::rub($order->discount_total - $order->promo_discount) }}</dd>
+                        </div>
+                    @endif
+                    @if ($order->promo_code && $order->promo_discount > 0)
+                        <div>
+                            <dt>Промокод {{ $order->promo_code }}</dt>
+                            <dd>−{{ Money::rub($order->promo_discount) }}</dd>
                         </div>
                     @endif
                     <div>
-                        <dt>Доставка</dt><dd>{{ $order->delivery_quote ? ($order->delivery_price > 0 ? Money::rub($order->delivery_price) : 'Бесплатно') : 'Согласуем отдельно' }}</dd>
+                        <dt>Доставка</dt><dd>{{ $order->delivery_quote ? ($order->delivery_price > 0 ? Money::rub($order->delivery_price) : ($order->promo_free_delivery ? 'Бесплатно по промокоду '.$order->promo_code : 'Бесплатно')) : 'Согласуем отдельно' }}</dd>
                     </div>
                     <div>
                         <dt>Итого оплачено</dt>

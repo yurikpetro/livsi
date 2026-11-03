@@ -129,11 +129,22 @@ class DeliveryQuoteService
             'test' => $this->testing(),
             'provider' => $provider, 'tariff_id' => $tariff['tariffId'], 'tariff_name' => (string) ($tariff['tariffName'] ?? ''),
             'carrier_cost' => $cost,
-            'price' => $this->promos->remainingToFreeShipping($cart->subtotal()) === 0 ? 0 : $cost,
+            'price' => $this->customerPrice($cart, $cost),
             'days_min' => $tariff['calendarDaysMin'] ?? null, 'days_max' => $tariff['calendarDaysMax'] ?? null,
             'parcel' => $parcel, 'destination' => $destination, 'point' => $point,
             'fingerprint' => $fingerprint, 'expires_at' => now()->addMinutes(10)->timestamp,
         ];
+    }
+
+    /**
+     * Цена доставки для покупателя: 0 при сумме выше порога бесплатной доставки
+     * или с промокодом на бесплатную доставку (он лежит в сессии оформления).
+     */
+    private function customerPrice(Cart $cart, int $cost): int
+    {
+        $promoFree = (bool) (session('checkout_promo.free_delivery') ?? false);
+
+        return $promoFree || $this->promos->remainingToFreeShipping($cart->subtotal()) === 0 ? 0 : $cost;
     }
 
     /** @param array<string, mixed> $quote */
@@ -178,6 +189,7 @@ class DeliveryQuoteService
                 $item->variant->dimensions_verified,
             ])->values()->all(),
             $this->promos->remainingToFreeShipping($cart->subtotal()), $this->promos->isGiftUnlocked($cart->subtotal()),
+            session('checkout_promo.code'),
             Setting::get('delivery_padding_mm'), Setting::get('delivery_packaging_weight_g'),
             Setting::get('delivery_origin_address'), Setting::get('delivery_pickup_type'), Setting::get('delivery_origin_points'),
             Setting::get('delivery_calculation_test', false), $this->testing(), config('livsi.apiship.ozon_connection_id'),
@@ -220,7 +232,7 @@ class DeliveryQuoteService
             'test' => $this->testing(), 'direct' => true,
             'provider' => $provider, 'tariff_id' => (string) $tariff['tariff_id'], 'tariff_name' => (string) ($tariff['tariff_name'] ?? ''),
             'carrier_cost' => $tariff['cost'],
-            'price' => $this->promos->remainingToFreeShipping($cart->subtotal()) === 0 ? 0 : $tariff['cost'],
+            'price' => $this->customerPrice($cart, $tariff['cost']),
             'days_min' => $tariff['days_min'] ?? null, 'days_max' => $tariff['days_max'] ?? null,
             'extra' => $tariff['extra'] ?? [],
             'parcel' => $parcel, 'destination' => $destination, 'point' => $point,
