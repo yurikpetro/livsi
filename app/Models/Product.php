@@ -100,6 +100,18 @@ class Product extends Model
         return $this->variants->firstWhere('is_default', true) ?? $this->variants->first();
     }
 
+    /** Витрина предпочитает доступный активный вариант, затем активный без остатка. */
+    public function storefrontVariant(): ?ProductVariant
+    {
+        $active = $this->variants->where('is_active', true);
+        $available = $active->filter(fn (ProductVariant $variant): bool => $variant->available() > 0);
+
+        return $available->firstWhere('is_default', true)
+            ?? $available->first()
+            ?? $active->firstWhere('is_default', true)
+            ?? $active->first();
+    }
+
     /** @return Collection<int, Product> */
     public function recommendedProducts(int $limit = 3): Collection
     {
@@ -137,7 +149,7 @@ class Product extends Model
     /** Есть ли хоть один вариант, доступный к продаже из квоты сайта. */
     public function isAvailable(): bool
     {
-        return $this->variants->contains(fn (ProductVariant $v) => $v->available() > 0);
+        return $this->variants->contains(fn (ProductVariant $variant): bool => $variant->is_active && $variant->available() > 0);
     }
 
     public function primaryImage(): ?ProductImage

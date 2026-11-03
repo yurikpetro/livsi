@@ -108,7 +108,7 @@ class CheckoutDeliveryTest extends TestCase
         $this->withUnencryptedCookie(CartService::COOKIE, $this->token)
             ->get(route('checkout.index'))
             ->assertOk()
-            ->assertSee('Доставка рассчитается после выбора пункта выдачи')
+            ->assertSee('Доставка бесплатная для вашего заказа.')
             ->assertSee('data-free-shipping="1"', false)
             ->assertDontSee('стоимость и пункт выдачи менеджер согласует отдельно');
     }

@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\ApiShipClient;
+use App\Delivery\DeliveryGateway;
 use App\Services\CartService;
 use App\Services\OzonDeliveryService;
 use Illuminate\Http\JsonResponse;
@@ -11,7 +11,7 @@ use Throwable;
 
 class OzonClientCheckController extends Controller
 {
-    public function __invoke(Request $request, CartService $carts, ApiShipClient $apiShip, OzonDeliveryService $ozon): JsonResponse
+    public function __invoke(Request $request, CartService $carts, DeliveryGateway $apiShip, OzonDeliveryService $ozon): JsonResponse
     {
         $data = $request->validate(['phone' => ['required', 'string', 'max:30']]);
         if (! $apiShip->isProviderActive('ozondel')) {

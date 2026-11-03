@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Delivery\DeliveryGateway;
 use App\Models\Cart;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Crypt;
@@ -10,7 +11,11 @@ use Throwable;
 
 class DeliveryQuoteService
 {
-    public function __construct(private readonly ApiShipClient $apiShip, private readonly PromoService $promos) {}
+    public function __construct(
+        private readonly ApiShipClient $apiShip,
+        private readonly PromoService $promos,
+        private readonly DeliveryGateway $gateway,
+    ) {}
 
     public function enabled(): bool
     {
@@ -72,9 +77,12 @@ class DeliveryQuoteService
                 ? 'Расчёт доставки Ozon временно недоступен. Выберите пункт выдачи другой службы.'
                 : 'Расчёт для этой службы недоступен. Выберите пункт выдачи другой службы.');
         }
-        $point = $this->apiShip->point($destination['delivery_point_id'], $destination['delivery_city'], $provider, $destination['delivery_region'] ?? null);
+        $point = $this->gateway->point($destination['delivery_point_id'], $destination['delivery_city'], $provider, $destination['delivery_region'] ?? null);
         if (! $point) {
             $this->fail('Этот пункт выдачи недоступен. Выберите другой.');
+        }
+        if ($this->gateway->isDirect($provider)) {
+            return $this->calculateDirect($cart, $destination, $provider, $point, $fingerprint);
         }
         $address = Setting::get('delivery_origin_address');
         $pickup = $provider === 'ozondel' ? 2 : (int) Setting::get('delivery_pickup_type');
@@ -147,7 +155,8 @@ class DeliveryQuoteService
                 || $quote['expires_at'] <= now()->timestamp
                 || $quote['destination'] !== $destination
                 || $quote['fingerprint'] !== $this->fingerprint($cart)
-                || ! $this->apiShip->isProviderActive($quote['provider'])
+                || ($quote['direct'] ?? false) !== $this->gateway->isDirect($quote['provider'])
+                || ! $this->gateway->isProviderActive($quote['provider'])
                 || ! $this->enabled()) {
                 $this->fail('Расчёт доставки устарел. Рассчитайте стоимость ещё раз.');
             }
@@ -172,7 +181,51 @@ class DeliveryQuoteService
             Setting::get('delivery_padding_mm'), Setting::get('delivery_packaging_weight_g'),
             Setting::get('delivery_origin_address'), Setting::get('delivery_pickup_type'), Setting::get('delivery_origin_points'),
             Setting::get('delivery_calculation_test', false), $this->testing(), config('livsi.apiship.ozon_connection_id'),
+            config('livsi.delivery.drivers'), Setting::get('delivery_drivers', []), Setting::get('delivery_direct_origin', []),
         ], JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * Расчёт напрямую у службы.
+     *
+     * Служба сама знает свои тарифы до пункта; берём самый дешёвый, как и
+     * при ApiShip. Ответ того же вида, что у расчёта через ApiShip, плюс
+     * пометка direct — по ней оформление и отправление идут напрямую.
+     *
+     * @param  array<string, mixed>  $destination
+     * @param  array<string, mixed>  $point
+     * @return array<string, mixed>
+     */
+    private function calculateDirect(Cart $cart, array $destination, string $provider, array $point, string $fingerprint): array
+    {
+        $parcel = $this->parcel($cart);
+        $items = [];
+        foreach ($cart->items as $item) {
+            if ($item->is_gift && ! $this->promos->isGiftUnlocked($cart->subtotal())) {
+                continue;
+            }
+            $items[] = ['sku' => $item->variant->sku, 'quantity' => (int) $item->qty, 'price' => (int) $item->variant->price];
+        }
+        $tariffs = array_values(array_filter(
+            $this->gateway->carrier($provider)->tariffs($parcel, $point, ['assessed' => $cart->subtotal(), 'items' => $items]),
+            fn (array $tariff): bool => is_int($tariff['cost'] ?? null) && $tariff['cost'] >= 0 && filled($tariff['tariff_id'] ?? null),
+        ));
+        if (! $tariffs) {
+            $this->fail('Для этого пункта нет доступного тарифа. Выберите другой пункт выдачи.');
+        }
+        usort($tariffs, fn (array $a, array $b): int => $a['cost'] <=> $b['cost']);
+        $tariff = $tariffs[0];
+
+        return [
+            'test' => $this->testing(), 'direct' => true,
+            'provider' => $provider, 'tariff_id' => (string) $tariff['tariff_id'], 'tariff_name' => (string) ($tariff['tariff_name'] ?? ''),
+            'carrier_cost' => $tariff['cost'],
+            'price' => $this->promos->remainingToFreeShipping($cart->subtotal()) === 0 ? 0 : $tariff['cost'],
+            'days_min' => $tariff['days_min'] ?? null, 'days_max' => $tariff['days_max'] ?? null,
+            'extra' => $tariff['extra'] ?? [],
+            'parcel' => $parcel, 'destination' => $destination, 'point' => $point,
+            'fingerprint' => $fingerprint, 'expires_at' => now()->addMinutes(10)->timestamp,
+        ];
     }
 
     /** @param array<string, mixed> $tariff */

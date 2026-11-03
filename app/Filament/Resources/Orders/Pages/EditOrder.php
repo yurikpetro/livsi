@@ -3,6 +3,8 @@
 namespace App\Filament\Resources\Orders\Pages;
 
 use App\Filament\Resources\Orders\OrderResource;
+use App\Filament\Support\FulfillmentAction;
+use App\Filament\Support\ShipmentAction;
 use App\Models\OrderIssue;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -20,6 +22,9 @@ class EditOrder extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            FulfillmentAction::change(),
+            ShipmentAction::make(),
+            ShipmentAction::check(),
             Action::make('print')
                 ->label('Распечатать заказ')
                 ->icon(Heroicon::OutlinedPrinter)

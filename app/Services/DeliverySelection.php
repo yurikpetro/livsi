@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Delivery\DeliverySettings;
+
 class DeliverySelection
 {
     public const PICKUP_POINT = 'pickup_point';
@@ -35,7 +37,8 @@ class DeliverySelection
         return match ($method) {
             self::CDEK_POINT => 'cdek',
             self::YANDEX_POINT => 'yataxi',
-            self::OZON_POINT => in_array('ozondel', config('livsi.apiship.active_providers', []), true) ? 'ozondel' : 'ozonlog',
+            self::OZON_POINT => (DeliverySettings::driver('ozondel') === 'direct'
+                || in_array('ozondel', config('livsi.apiship.active_providers', []), true)) ? 'ozondel' : 'ozonlog',
             default => null,
         };
     }

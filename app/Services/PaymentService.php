@@ -26,6 +26,7 @@ class PaymentService
     public function __construct(
         private readonly OrderMailer $mailer,
         private readonly PaymentNotifications $notifications,
+        private readonly ShipmentAutomation $shipments,
     ) {}
 
     public function sync(Payment $payment): Order
@@ -73,6 +74,8 @@ class PaymentService
             $order->update([
                 'status' => Order::STATUS_PAID,
                 'paid_at' => now(),
+                'shipment_automatic' => true,
+                'shipment_state' => $order->hasShipment() ? $order->shipment_state : ($order->shipment_state ?: 'queued'),
             ]);
 
             Log::info('Заказ оплачен.', ['order' => $order->number]);
@@ -91,6 +94,7 @@ class PaymentService
             DB::afterCommit(function () use ($order, $payment) {
                 $this->notifications->queue($payment);
                 $this->mailer->paid($order);
+                $this->shipments->queue($order);
             });
         }
 

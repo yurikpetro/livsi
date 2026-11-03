@@ -39,20 +39,24 @@ class SellerProfileForm
 
                         TextInput::make('inn')
                             ->label('ИНН')
-                            ->numeric()
+                            ->inputMode('numeric')
+                            ->regex('/\A(?:[0-9]{10}|[0-9]{12})\z/')
                             ->minLength(10)
                             ->maxLength(12)
                             ->helperText('10 цифр у организации, 12 у ИП.'),
 
                         TextInput::make('kpp')
                             ->label('КПП')
-                            ->numeric()
+                            ->inputMode('numeric')
+                            ->regex('/\A[0-9]{9}\z/')
+                            ->minLength(9)
                             ->maxLength(9)
                             ->helperText('У ИП отсутствует.'),
 
                         TextInput::make('ogrn')
                             ->label('ОГРН / ОГРНИП')
-                            ->numeric()
+                            ->inputMode('numeric')
+                            ->regex('/\A(?:[0-9]{13}|[0-9]{15})\z/')
                             ->minLength(13)
                             ->maxLength(15),
 
@@ -68,17 +72,20 @@ class SellerProfileForm
                         TextInput::make('bank_name')->label('Банк')->maxLength(255)->columnSpan(2),
                         TextInput::make('bank_bic')
                             ->label('БИК')
-                            ->numeric()
+                            ->inputMode('numeric')
+                            ->regex('/\A[0-9]{9}\z/')
                             ->minLength(9)
                             ->maxLength(9),
                         TextInput::make('bank_account')
                             ->label('Расчётный счёт')
-                            ->numeric()
+                            ->inputMode('numeric')
+                            ->regex('/\A[0-9]{20}\z/')
                             ->minLength(20)
                             ->maxLength(20),
                         TextInput::make('bank_corr_account')
                             ->label('Корреспондентский счёт')
-                            ->numeric()
+                            ->inputMode('numeric')
+                            ->regex('/\A[0-9]{20}\z/')
                             ->minLength(20)
                             ->maxLength(20),
                     ])

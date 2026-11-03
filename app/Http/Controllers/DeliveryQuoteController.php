@@ -21,7 +21,7 @@ class DeliveryQuoteController extends Controller
             'delivery_city' => ['required', 'string', 'min:2', 'max:120'],
             'delivery_region' => ['nullable', 'string', 'max:120'],
             'delivery_point_method' => ['required', Rule::in(DeliverySelection::pickupMethods())],
-            'delivery_point_id' => ['required', 'regex:/^[0-9]+$/', 'max:20'],
+            'delivery_point_id' => ['required', 'regex:/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/'],
         ]);
         $data['delivery_region'] = $data['delivery_region'] ?? null;
         $cart = $carts->currentOrNull();
@@ -33,7 +33,7 @@ class DeliveryQuoteController extends Controller
         } catch (ValidationException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
-            Log::warning('Не удалось рассчитать доставку ApiShip.', ['error_type' => $exception::class]);
+            Log::warning('Не удалось рассчитать доставку.', ['error_type' => $exception::class, 'error' => mb_substr($exception->getMessage(), 0, 300)]);
             throw ValidationException::withMessages(['delivery_quote' => 'Не удалось рассчитать доставку. Повторите расчёт или выберите другой пункт выдачи.']);
         }
 

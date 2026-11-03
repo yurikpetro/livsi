@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use GuzzleHttp\Promise\PromiseInterface;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -10,6 +11,8 @@ use Tests\TestCase;
 
 class ApiShipPointsTest extends TestCase
 {
+    use RefreshDatabase;
+
     public static function outgoingAddresses(): array
     {
         return [

@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\ApiShipClient;
+use App\Delivery\DeliveryGateway;
 use App\Services\DeliverySelection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,7 +14,7 @@ class DeliveryPointsController extends Controller
 {
     private const PER_PAGE = 1000;
 
-    public function __invoke(Request $request, ApiShipClient $apiShip): JsonResponse
+    public function __invoke(Request $request, DeliveryGateway $apiShip): JsonResponse
     {
         $data = $request->validate([
             'method' => ['required', 'string', 'in:cdek_point,yandex_point,ozon_point'],
@@ -43,8 +43,9 @@ class DeliveryPointsController extends Controller
                 'has_more' => $offset + self::PER_PAGE < $result['total'],
             ]);
         } catch (Throwable $exception) {
-            Log::warning('Не удалось получить ПВЗ ApiShip.', [
+            Log::warning('Не удалось получить ПВЗ.', [
                 'provider' => $providerKey,
+                'direct' => $apiShip->isDirect($providerKey),
                 'error_type' => $exception::class,
             ]);
 

@@ -3,7 +3,7 @@
 @php
     use App\Support\Money;
 
-    $variant   = $product->defaultVariant();
+    $variant   = $product->storefrontVariant();
     $image     = $product->primaryImage();
     $available = $product->isAvailable();
     $cartItem  = $variant ? app(\App\Services\CartService::class)->currentOrNull()?->items->first(
@@ -70,9 +70,8 @@
                 <span class="product-card-price">{{ Money::rub($product->priceFrom()) }}</span>
 
                 @if ($available && $variant)
-                    {{-- У товара с несколькими вариантами кладём в корзину вариант
-                         по умолчанию: выбор объёма и аромата — в быстром просмотре
-                         и на карточке товара. --}}
+                    {{-- Предвыбираем доступный вариант; объём и аромат
+                         можно изменить в быстром просмотре и карточке товара. --}}
                     <div data-cart-card data-variant-id="{{ $variant->id }}" data-quantity="{{ $cartItem?->qty ?? 0 }}" class="product-cart-control">
                         {{-- Обычный POST остаётся доступен без JavaScript. --}}
                         <form method="POST" action="{{ route('cart.add') }}">

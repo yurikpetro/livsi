@@ -2,9 +2,9 @@
     use App\Services\CartService;
     use App\Support\Money;
 
-    $variant = $product?->variants->firstWhere('id', $variantId) ?? $product?->defaultVariant();
+    $variant = $product?->variants->where('is_active', true)->firstWhere('id', $variantId) ?? $product?->storefrontVariant();
     $photos = $product?->images->unique('path')->values() ?? collect();
-    $canAdd = $variantId && $variant?->is_active && $variant->available() > 0;
+    $canAdd = $variantId && $variantId === $variant?->id && $variant->available() > 0;
     $quantity = $variant ? (app(CartService::class)->currentOrNull()?->items->first(
         fn ($item) => $item->product_variant_id === $variant->id && ! $item->is_gift
     )?->qty ?? 0) : 0;

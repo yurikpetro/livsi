@@ -100,12 +100,12 @@ class CatalogTest extends TestCase
         $this->get('/product/net-takogo-tovara')->assertNotFound();
     }
 
-    /** Рейтинг нельзя показывать без указания площадки-источника (§8.1). */
-    public function test_rating_is_always_shown_with_its_source(): void
+    public function test_product_page_hides_the_external_rating(): void
     {
         $this->get('/product/multipenka-dlya-ruk-i-stop')
             ->assertOk()
-            ->assertSee('отзывов на Ozon');
+            ->assertDontSee('отзывов на Ozon')
+            ->assertDontSee('aggregateRating');
     }
 
     public function test_out_of_stock_product_is_visible_but_not_buyable(): void

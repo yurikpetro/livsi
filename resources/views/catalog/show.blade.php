@@ -3,7 +3,7 @@
 @php
     use App\Support\Money;
 
-    $variant = $product->defaultVariant();
+    $variant = $product->storefrontVariant();
     $images  = $product->images->isNotEmpty() ? $product->images->unique('path')->values() : collect();
     $cover   = $product->primaryImage();
 
@@ -112,13 +112,13 @@
                         <div class="eyebrow">Вариант</div>
                         <div class="mt-3 flex flex-wrap gap-2">
                             @foreach ($product->variants as $v)
-                                @php $out = $v->available() < 1; @endphp
+                                @php $out = ! $v->is_active || $v->available() < 1; @endphp
                                 <label @class([
                                     'chip cursor-pointer has-[:checked]:bg-neon',
                                     'opacity-40 line-through cursor-not-allowed' => $out,
                                 ])>
                                     <input type="radio" name="variant_id" value="{{ $v->id }}"
-                                           class="sr-only" @checked($v->is_default && ! $out) @disabled($out)>
+                                           class="sr-only" @checked($variant?->id === $v->id && ! $out) @disabled($out)>
                                     {{ $v->storefrontLabel() }}
                                 </label>
                             @endforeach

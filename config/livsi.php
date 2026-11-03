@@ -101,6 +101,73 @@ return [
         'maps_api_key' => env('YANDEX_MAPS_API_KEY'),
         'suggest_api_key' => env('YANDEX_SUGGEST_API_KEY'),
         'geocoder_api_key' => env('YANDEX_GEOCODER_API_KEY'),
+
+        /*
+        | Через кого идёт служба: apiship (как было) или direct (напрямую).
+        | Переключаются по одной; откат — вернуть apiship и обновить кэш
+        | настроек (php artisan config:cache).
+        */
+        // С какого адреса сервера ходить к службам (если их у сервера два).
+        'source_ip' => env('DELIVERY_SOURCE_IP', env('APISHIP_SOURCE_IP')),
+
+        'drivers' => [
+            'cdek' => env('DELIVERY_CDEK', 'apiship'),
+            'yataxi' => env('DELIVERY_YANDEX', 'apiship'),
+            'ozondel' => env('DELIVERY_OZON', 'apiship'),
+        ],
+    ],
+
+    /*
+    | СДЭК напрямую: ключи из личного кабинета СДЭК → Интеграция → Ключи API.
+    | CDEK_TEST=true — учебная среда СДЭК с её открытыми тестовыми ключами.
+    */
+    'cdek' => [
+        'client_id' => env('CDEK_CLIENT_ID'),
+        'client_secret' => env('CDEK_CLIENT_SECRET'),
+        'test' => (bool) env('CDEK_TEST', false),
+        'api_url' => env('CDEK_API_URL'),
+        // Какие тарифы СДЭК можно предлагать: до ПВЗ — 136, 234, 483;
+        // до постамата — 368, 378, 486. Берётся самый дешёвый подходящий.
+        'tariffs' => env('CDEK_TARIFFS', '136,368,234,378,483,486'),
+    ],
+
+    /*
+    | Яндекс Доставка напрямую: OAuth-токен из кабинета Яндекс Доставки →
+    | Интеграция → API. YANDEX_DELIVERY_TEST=true — тестовая среда Яндекса.
+    */
+    'yandex_delivery' => [
+        'token' => env('YANDEX_DELIVERY_TOKEN'),
+        'test' => (bool) env('YANDEX_DELIVERY_TEST', false),
+        'test_token' => env('YANDEX_DELIVERY_TEST_TOKEN'),
+        'api_url' => env('YANDEX_DELIVERY_API_URL'),
+    ],
+
+    /*
+    | Ozon Доставка для бизнеса (Delivery API): client_id и client_secret
+    | частного приложения из кабинета Ozon Доставки. Ключи можно задать и в
+    | админке («Интеграции доставки») — заданное там важнее.
+    */
+    'ozon' => [
+        'client_id' => env('OZON_APP_CLIENT_ID') ?: env('OZON_CLIENT_ID'),
+        'client_secret' => env('OZON_APP_CLIENT_SECRET') ?: env('OZON_API_KEY'),
+        'api_url' => env('OZON_DELIVERY_API_URL', 'https://api-delivery.ozon.ru'),
+    ],
+
+    /*
+    | Связь с livsipro.ru: вкладка «Сайт», где собирают заказы.
+    | Токен — длинная случайная строка, одна и та же здесь и на livsipro.
+    | Адреса — откуда livsipro ходит (через запятую); пусто — с любого.
+    */
+    'livsipro' => [
+        'token' => env('LIVSIPRO_API_TOKEN'),
+        'ips' => array_values(array_filter(array_map('trim', explode(',', (string) env('LIVSIPRO_API_IPS', ''))))),
+        'require_marks' => (bool) env('LIVSIPRO_REQUIRE_MARKS', true),
+        'sender_name' => env('LIVSIPRO_SENDER_NAME'),
+        'sender_phone' => env('LIVSIPRO_SENDER_PHONE'),
+    ],
+
+    'shipments' => [
+        'connection' => env('SHIPMENTS_QUEUE_CONNECTION', 'database'),
     ],
 
     'apiship' => [
@@ -171,6 +238,7 @@ return [
             'stock' => env('TELEGRAM_TOPIC_STOCK', 15),
             'users' => env('TELEGRAM_TOPIC_USERS', 17),
             'issues' => env('TELEGRAM_TOPIC_ISSUES', 19),
+            'shipments' => env('TELEGRAM_TOPIC_SHIPMENTS', 113),
         ],
 
         'payments_connection' => env('TELEGRAM_PAYMENTS_CONNECTION', 'database'),

@@ -33,6 +33,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('ozon-clients', fn (Request $request): Limit => Limit::perMinute(10)->by($request->ip()));
         RateLimiter::for('delivery-quotes', fn (Request $request): Limit => Limit::perMinute(15)->by($request->ip()));
         RateLimiter::for('delivery-points', fn (Request $request): Limit => Limit::perMinute(30)->by($request->ip()));
+        RateLimiter::for('livsipro', fn (Request $request): Limit => Limit::perMinute(240)->by($request->ip()));
         RateLimiter::for('delivery-geocode', fn (Request $request): Limit => Limit::perMinute(10)->by($request->ip()));
     }
 }

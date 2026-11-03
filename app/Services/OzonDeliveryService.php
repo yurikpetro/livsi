@@ -2,12 +2,14 @@
 
 namespace App\Services;
 
+use App\Delivery\Carriers\OzonCarrier;
+use App\Delivery\DeliveryGateway;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 
 class OzonDeliveryService
 {
-    public function __construct(private readonly ApiShipClient $apiShip) {}
+    public function __construct(private readonly ApiShipClient $apiShip, private readonly DeliveryGateway $gateway) {}
 
     public function normalizePhone(string $phone): string
     {
@@ -31,6 +33,10 @@ class OzonDeliveryService
             $sessionId, $phone, (string) config('livsi.apiship.ozon_connection_id'),
         ]), (string) config('app.key'));
 
-        return Cache::remember($key, now()->addMinutes(5), fn (): bool => $this->apiShip->canDeliverToOzonClient($phone));
+        $direct = $this->gateway->isDirect('ozondel');
+
+        return Cache::remember($key.($direct ? ':direct' : ''), now()->addMinutes(5), fn (): bool => $direct
+            ? app(OzonCarrier::class)->canDeliverTo($phone)
+            : $this->apiShip->canDeliverToOzonClient($phone));
     }
 }

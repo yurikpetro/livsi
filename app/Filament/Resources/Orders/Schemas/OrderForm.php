@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Orders\Schemas;
 use App\Models\Order;
 use App\Models\OrderIssue;
 use App\Services\DeliverySelection;
+use App\Support\Fulfillment;
 use App\Support\Money;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -45,6 +46,18 @@ class OrderForm
                     ])
                     ->columns(2),
 
+                // Статус доставки: ставится кнопкой «Статус доставки» вверху страницы.
+                Section::make('Статус доставки')
+                    ->schema([
+                        Placeholder::make('fulfillment_overview')
+                            ->hiddenLabel()
+                            ->content(fn (Order $record) => new HtmlString(view('filament.orders.fulfillment', [
+                                'order' => $record,
+                                'events' => Fulfillment::events($record),
+                            ])->render()))
+                            ->columnSpanFull(),
+                    ]),
+
                 Section::make('Покупатель')
                     ->schema([
                         Placeholder::make('customer_name')->label('Имя')
@@ -71,9 +84,11 @@ class OrderForm
                             ->content(fn (Order $record) => $record->delivery_address ?: '—'),
                         Placeholder::make('delivery_point_hint')->label('Пожелание по ПВЗ')
                             ->content(fn (Order $record) => $record->delivery_point_hint ?: '—'),
-                        Placeholder::make('delivery_point_address')->label('Предпочтительный ПВЗ ApiShip')
+                        Placeholder::make('delivery_point_address')->label('Пункт выдачи')
                             ->content(fn (Order $record) => $record->delivery_point_address
-                                ? $record->delivery_point_address.' (ApiShip ID '.$record->delivery_point_id.')'
+                                ? $record->delivery_point_address.(($record->delivery_quote['direct'] ?? false)
+                                    ? ' (номер у службы '.$record->delivery_point_id.')'
+                                    : ' (ApiShip ID '.$record->delivery_point_id.')')
                                 : '—'),
                         Placeholder::make('delivery_price_status')->label('Стоимость')
                             ->content(fn (Order $record) => $record->delivery_quote
@@ -84,6 +99,18 @@ class OrderForm
                             ->columnSpanFull(),
                     ])
                     ->columns(2),
+
+                Section::make('Отправление')
+                    ->schema([
+                        Placeholder::make('shipment_state')->label('Состояние')
+                            ->content(fn (Order $record): string => $record->shipmentLabel()),
+                        Placeholder::make('apiship_order_id')->label('Номер отправления')
+                            ->content(fn (Order $record): string => $record->shipmentReference() ?: '—'),
+                        Placeholder::make('shipment_tracking_number')->label('Номер перевозчика')
+                            ->content(fn (Order $record): string => $record->shipment_tracking_number ?: '—'),
+                        Placeholder::make('shipment_error')->label('Результат проверки')
+                            ->content(fn (Order $record): string => $record->shipment_error ?: '—'),
+                    ])->columns(2),
 
                 Section::make('Состав')
                     ->schema([

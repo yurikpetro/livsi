@@ -4,13 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class OrderItem extends Model
 {
     protected $guarded = [];
 
     protected $casts = [
-        'is_gift'  => 'boolean',
+        'is_gift' => 'boolean',
         'vat_rate' => 'float',
     ];
 
@@ -24,9 +25,15 @@ class OrderItem extends Model
         return $this->belongsTo(ProductVariant::class, 'product_variant_id');
     }
 
+    /** Коды «Честного знака», отсканированные при сборке. */
+    public function marks(): HasMany
+    {
+        return $this->hasMany(OrderItemMark::class);
+    }
+
     /** «Мультипенка, 540 мл» — для писем и чека. */
     public function label(): string
     {
-        return trim($this->title . ($this->option_label ? ', ' . $this->option_label : ''));
+        return trim($this->title.($this->option_label ? ', '.$this->option_label : ''));
     }
 }

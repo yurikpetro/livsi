@@ -12,6 +12,7 @@ use DOMDocument;
 use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\Paginator;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -24,6 +25,7 @@ class CatalogFacetsTest extends TestCase
         parent::setUp();
 
         $this->seed(CatalogSeeder::class);
+        Paginator::useTailwind();
     }
 
     /** Внутри одной оси значения объединяются по ИЛИ. */

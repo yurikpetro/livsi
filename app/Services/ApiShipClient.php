@@ -2,11 +2,41 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 class ApiShipClient
 {
+    /** @param array<string, mixed> $parameters */
+    public function createShipment(array $parameters): Response
+    {
+        $this->guard($parameters['order']['providerKey']);
+
+        return $this->shipmentRequest()->post('/orders', $parameters);
+    }
+
+    public function shipmentStatus(string $clientNumber): Response
+    {
+        if (! $this->isConfigured()) {
+            throw new RuntimeException('ApiShip не подключён.');
+        }
+
+        return $this->shipmentRequest()->get('/orders/status', ['clientNumber' => $clientNumber]);
+    }
+
+    private function shipmentRequest(): PendingRequest
+    {
+        return Http::baseUrl(rtrim((string) config('livsi.apiship.api_url'), '/'))
+            ->acceptJson()
+            ->withHeaders(['Authorization' => (string) config('livsi.apiship.token')])
+            ->withOptions(filled(config('livsi.apiship.source_ip')) ? [
+                'curl' => [CURLOPT_INTERFACE => (string) config('livsi.apiship.source_ip')],
+            ] : [])
+            ->connectTimeout(3)->timeout(20);
+    }
+
     public function canDeliverToOzonClient(string $phone): bool
     {
         $this->guard('ozondel');

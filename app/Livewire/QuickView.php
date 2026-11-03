@@ -30,11 +30,8 @@ class QuickView extends Component
 
         $this->productId = $product->id;
 
-        // Предвыбираем доступный вариант: по умолчанию, а если его нет
-        // в наличии — первый доступный.
-        $this->variantId = ($product->defaultVariant()?->is_active && $product->defaultVariant()->available() > 0
-            ? $product->defaultVariant()
-            : $product->variants->first(fn ($v) => $v->is_active && $v->available() > 0))?->id;
+        $variant = $product->storefrontVariant();
+        $this->variantId = $variant && $variant->available() > 0 ? $variant->id : null;
 
         $this->open = true;
     }

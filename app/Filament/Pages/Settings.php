@@ -8,6 +8,7 @@ use App\Payments\Vat;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\KeyValue;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -24,6 +25,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\HtmlString;
 
 /**
  * Настройки сайта.
@@ -64,6 +66,8 @@ class Settings extends Page implements HasForms
     public const KEYS = [
         'delivery_calculation_enabled' => false,
         'delivery_calculation_test' => false,
+        'delivery_warehouse_name' => '',
+        'delivery_sender_phone' => '',
         'delivery_origin_address' => '',
         'delivery_pickup_type' => null,
         'delivery_origin_points' => [],
@@ -101,18 +105,25 @@ class Settings extends Page implements HasForms
         return $schema
             ->components([
                 Section::make('Расчёт доставки')
-                    ->description('СДЭК и Яндекс: товары стоят вертикально в один ряд, ширина суммируется, длина и высота берутся максимальные. Прибавляются запас с каждой стороны и масса упаковки. Укажите проверенные параметры; итоговая коробка должна соответствовать расчёту. Ozon пока рассчитывается вручную.')
+                    ->description('СДЭК, Яндекс и Ozon: товары стоят вертикально в один ряд, ширина суммируется, длина и высота берутся максимальные. Прибавляются запас с каждой стороны и масса упаковки. Укажите проверенные параметры; итоговая коробка должна соответствовать расчёту.')
                     ->schema([
                         Toggle::make('delivery_calculation_enabled')->label('Автоматический расчёт')->live(),
                         Toggle::make('delivery_calculation_test')->label('Тестировать с временными габаритами')
                             ->helperText('Разрешает использовать неподтверждённые размеры только при тестовом ключе оплаты. Реальные замеры подтвердите в карточках вариантов, затем выключите этот режим.'),
-                        TextInput::make('delivery_origin_address')->label('Полный адрес отгрузки')->maxLength(500)
+                        TextInput::make('delivery_warehouse_name')->label('Название склада отгрузки')->maxLength(120)
+                            ->helperText('Например, название вашего склада в ApiShip. Адрес и телефон ниже используются для всех отправлений.'),
+                        TextInput::make('delivery_sender_phone')->label('Телефон склада')->tel()->telRegex('/^[+\d\s().-]+$/u')->maxLength(30)
+                            ->helperText('Подставляется при создании отправления. Если пусто — используется телефон из реквизитов продавца.'),
+                        TextInput::make('delivery_origin_address')->label('Полный адрес склада отгрузки')->maxLength(500)
+                            ->helperText('Город, улица и дом. Используется для расчёта доставки и подставляется в отправления автоматически.')
                             ->required(fn (Get $get): bool => (bool) $get('delivery_calculation_enabled')),
                         Select::make('delivery_pickup_type')->label('Передача перевозчику')
                             ->options([1 => 'Забор курьером со склада', 2 => 'Сдаём в пункт приёма'])
                             ->required(fn (Get $get): bool => (bool) $get('delivery_calculation_enabled')),
                         KeyValue::make('delivery_origin_points')->label('ID пунктов приёма ApiShip по службам')
                             ->helperText('При самостоятельной сдаче: ключ cdek или yataxi, значение — ID пункта приёма ApiShip.'),
+                        Placeholder::make('delivery_direct_note')->label('СДЭК, Яндекс и Ozon напрямую')
+                            ->content(fn () => new HtmlString('Режим, ключи и пункты сдачи посылок — на странице <a class="underline font-semibold" href="'.e(DeliveryIntegrations::getUrl()).'">«Интеграции доставки»</a>.')),
                         TextInput::make('delivery_padding_mm')->label('Запас упаковки с каждой стороны, мм')->integer()->minValue(0)->maxValue(1000)
                             ->required(fn (Get $get): bool => (bool) $get('delivery_calculation_enabled')),
                         TextInput::make('delivery_packaging_weight_g')->label('Масса коробки и защиты, г')->integer()->minValue(0)->maxValue(100000)

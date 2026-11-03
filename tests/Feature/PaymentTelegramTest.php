@@ -11,6 +11,7 @@ use App\Models\StockQuotaMovement;
 use App\Monitoring\PaymentReport;
 use App\Monitoring\TelegramFailure;
 use App\Services\PaymentService;
+use App\Services\ShipmentAutomation;
 use Database\Seeders\CatalogSeeder;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -34,6 +35,7 @@ class PaymentTelegramTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->mock(ShipmentAutomation::class)->shouldReceive('queue')->andReturn(true);
         $this->logPath = storage_path('logs/payment-telegram-test.log');
         @unlink($this->logPath);
         config([

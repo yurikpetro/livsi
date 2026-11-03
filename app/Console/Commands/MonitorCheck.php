@@ -18,7 +18,7 @@ use Throwable;
  */
 class MonitorCheck extends Command
 {
-    protected $signature = 'monitor:check {--no-send : только проверить настройки, ничего не отправляя} {--topic=errors : errors, payments, leads, stock, users или issues}';
+    protected $signature = 'monitor:check {--no-send : только проверить настройки, ничего не отправляя} {--topic=errors : errors, payments, leads, stock, users, issues или shipments}';
 
     protected $description = 'Проверить бота, чат и указанный топик уведомлений';
 
@@ -34,6 +34,7 @@ class MonitorCheck extends Command
             'stock' => 'Остатки',
             'users' => 'Регистрации',
             'issues' => 'Возвраты и доставка',
+            'shipments' => 'Отправления',
         ];
         if (! isset($topics[$topicName])) {
             $this->error('Неизвестный топик: '.implode(', ', array_keys($topics)).'.');

@@ -40,6 +40,9 @@
                                     <span class="text-sm text-muted">
                                         {{ $order->created_at->translatedFormat('j F Y') }}
                                         · {{ $order->statusLabel() }}
+                                        @if ($ffTitle = \App\Support\Fulfillment::forCustomer($order)['title'] ?? null)
+                                            · {{ $ffTitle }}
+                                        @endif
                                     </span>
                                 </div>
 

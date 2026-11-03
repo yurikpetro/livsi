@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Delivery\DeliveryGateway;
 use App\Http\Requests\StoreOrderRequest;
 use App\Payments\PaymentGateway;
-use App\Services\ApiShipClient;
 use App\Services\CartService;
 use App\Services\DeliveryQuoteService;
 use App\Services\DeliverySelection;
@@ -29,7 +29,7 @@ class CheckoutController extends Controller
         private readonly PaymentGateway $gateway,
         private readonly PaymentService $payments,
         private readonly OrderMailer $mailer,
-        private readonly ApiShipClient $apiShip,
+        private readonly DeliveryGateway $apiShip,
         private readonly PromoService $promos,
         private readonly DeliveryQuoteService $quotes,
         private readonly OzonDeliveryService $ozon,

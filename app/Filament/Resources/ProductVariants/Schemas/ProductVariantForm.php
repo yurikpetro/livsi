@@ -94,7 +94,8 @@ class ProductVariantForm
                         ->label('Вариант по умолчанию')
                         ->helperText('Предвыбран в карточке и в быстром просмотре.'),
 
-                    Toggle::make('is_active')->label('Активен')->default(true),
+                    Toggle::make('is_active')->label('Активен')->default(true)
+                        ->helperText('Выключенный вариант не продаётся на сайте, даже если в квоте есть остаток.'),
 
                     TextInput::make('sort')->label('Порядок')->numeric()->default(0),
                 ])
