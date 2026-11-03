@@ -153,6 +153,21 @@ class OrderFulfillmentTest extends TestCase
             ->assertSee('OZ123456789');
     }
 
+    /** Служба сообщила «передан», а «Собран» не нажимали — у «Собран» время передачи, а не прочерк. */
+    public function test_skipped_assembled_step_gets_time_of_next_step(): void
+    {
+        $order = $this->order(['fulfillment_status' => Fulfillment::SHIPPED, 'fulfillment_status_at' => now()]);
+        $shipped = OrderFulfillmentEvent::create(['order_id' => $order->id, 'status' => Fulfillment::SHIPPED,
+            'source' => OrderFulfillmentEvent::SOURCE_YANDEX, 'comment' => 'Яндекс: принят']);
+
+        $steps = collect(Fulfillment::steps($order->fresh()))->keyBy('status');
+
+        $this->assertTrue($steps[Fulfillment::ASSEMBLED]['reached']);
+        $this->assertSame($shipped->created_at->timestamp, $steps[Fulfillment::ASSEMBLED]['time']->timestamp);
+        $this->assertSame($order->paid_at->timestamp, $steps[Fulfillment::AWAITING]['time']->timestamp);
+        $this->assertNull($steps[Fulfillment::AT_PICKUP]['time']);
+    }
+
     public function test_customer_does_not_see_tracking_before_shipping(): void
     {
         $order = $this->order(['fulfillment_status' => Fulfillment::ASSEMBLED, 'shipment_tracking_number' => 'OZ123456789']);
