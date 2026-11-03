@@ -474,7 +474,7 @@ class OzonCarrier extends HttpCarrier
         $approveError = null;
         foreach ($postings as $posting) {
             try {
-                $this->approve($posting);
+                $this->approveFresh($posting);
             } catch (Throwable $exception) {
                 $approveError = $exception->getMessage();
             }
@@ -492,6 +492,27 @@ class OzonCarrier extends HttpCarrier
     private function approve(string $posting): void
     {
         $this->ok($this->post('/v1/posting/approve', ['posting_number' => $posting], 20), 'подтверждение отгрузки');
+    }
+
+    /**
+     * Подтверждение сразу после создания. Ozon заводит отправление не
+     * мгновенно: в первые секунды на подтверждение он отвечает 404
+     * «Posting не найден». Ждём и повторяем, остальные отказы — сразу наверх.
+     */
+    private function approveFresh(string $posting): void
+    {
+        for ($try = 1; ; $try++) {
+            try {
+                $this->approve($posting);
+
+                return;
+            } catch (RuntimeException $exception) {
+                if ($try >= 4 || ! str_contains($exception->getMessage(), 'HTTP 404')) {
+                    throw $exception;
+                }
+                Sleep::for(2)->seconds();
+            }
+        }
     }
 
     /**

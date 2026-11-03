@@ -744,6 +744,51 @@ class DirectDeliveryTest extends TestCase
             && str_contains($request->header('Accept')[0] ?? '', 'application/pdf'));
     }
 
+    public function test_ozon_fresh_posting_not_found_is_approved_after_a_short_wait(): void
+    {
+        Carbon::setTestNow('2026-11-02 21:00:00');
+        $this->connectOzon();
+        Sleep::fake();
+        $order = $this->order('ozondel', ['delivery_point_id' => '1001']);
+        $answers = [404, 404, 200];
+        Http::fake($this->ozonToken() + [
+            '*/v1/delivery-point/check-availability' => Http::response(['results' => [['request_id' => 1, 'cutoff_at' => '2026-11-03T12:00:00Z']]]),
+            '*/v1/order/create' => Http::response(['order_number' => '777', 'postings' => [['request_id' => 1, 'posting_number' => '777-0001-1']]]),
+            '*/v1/posting/approve' => function () use (&$answers) {
+                $code = array_shift($answers) ?? 200;
+
+                return $code === 200 ? Http::response([]) : Http::response(['message' => 'Posting с номером 777-0001-1 не найден'], 404);
+            },
+        ]);
+
+        $result = app(OzonCarrier::class)->createShipment($order, []);
+
+        $this->assertSame('forming', $result['status_code']);
+        $this->assertArrayNotHasKey('approve_error', $result['data']);
+        Sleep::assertSleptTimes(2);
+    }
+
+    public function test_ozon_status_is_updated_right_after_the_label(): void
+    {
+        $this->connectOzon();
+        Sleep::fake();
+        $order = $this->ozonOrder();
+        $order->forceFill(['shipment_status_code' => 'created', 'shipment_status_name' => 'Создано в Ozon, но не подтверждено: HTTP 404'])->save();
+        $statuses = ['created', 'ready_for_shipping'];
+        Http::fake($this->ozonToken() + [
+            '*/v1/posting/info' => function () use (&$statuses) {
+                return Http::response(['postings' => [['posting_number' => '777-0001-1', 'status' => count($statuses) > 1 ? array_shift($statuses) : $statuses[0]]]]);
+            },
+            '*/v1/posting/approve' => Http::response([]),
+            '*/v1/posting/label' => Http::response("%PDF-1.4\nozon label", 200, ['Content-Type' => 'application/pdf']),
+        ]);
+
+        app(DirectShipmentService::class)->label($order);
+
+        $this->assertSame(['ready_for_shipping', 'Готово к отгрузке — можно сдавать в пункт'],
+            [$order->fresh()->shipment_status_code, $order->fresh()->shipment_status_name]);
+    }
+
     public function test_ozon_label_with_low_balance_tells_to_top_up(): void
     {
         $this->connectOzon();

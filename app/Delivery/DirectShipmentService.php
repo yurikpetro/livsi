@@ -152,6 +152,13 @@ class DirectShipmentService
         if (! str_starts_with($pdf, '%PDF')) {
             $this->fail('Служба ещё не подготовила этикетку. Повторите через минуту.');
         }
+        // Ради этикетки служба могла подтвердить отправление — обновим статус
+        // в заказе сразу, а не через 15 минут по расписанию.
+        try {
+            $this->sync($order->fresh());
+        } catch (Throwable $exception) {
+            Log::info('Статус после этикетки не обновился.', ['order' => $order->number, 'error' => mb_substr($exception->getMessage(), 0, 200)]);
+        }
 
         return $pdf;
     }
