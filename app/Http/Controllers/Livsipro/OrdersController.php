@@ -232,6 +232,22 @@ class OrdersController extends Controller
         return response()->json(['order' => $this->full($order)]);
     }
 
+    /** Курьер по Ставрополю отдал заказ покупателю. Службы тут нет — отметку ставит сборщик. */
+    public function delivered(Request $request, string $number): JsonResponse
+    {
+        $by = $request->validate(['by' => ['required', 'string', 'min:2', 'max:120']])['by'];
+        $order = $this->order($number);
+        if (! Fulfillment::isCourier($order)) {
+            $this->fail('«Доставлен» ставит служба доставки сама — отмечать вручную нужно только курьера по Ставрополю.');
+        }
+        if (Fulfillment::current($order) !== Fulfillment::SHIPPED) {
+            $this->fail('Сначала отметьте, что заказ передан курьеру.');
+        }
+        $order = $this->fulfillment->set($order, Fulfillment::DELIVERED, 'Курьер доставил, отметил: '.$by, OrderFulfillmentEvent::SOURCE_LIVSIPRO);
+
+        return response()->json(['order' => $this->full($order)]);
+    }
+
     /** «Вернуть в сборку»: «Собран» нажали по ошибке — пока отправление не создано. */
     public function reassemble(Request $request, string $number): JsonResponse
     {
@@ -358,8 +374,13 @@ class OrdersController extends Controller
                 },
             ],
             // Какие кнопки сейчас уместны — чтобы livsipro не гадал по статусам.
+            // Курьеру нужны адрес и телефон покупателя — только для курьерских заказов.
+            'courier' => Fulfillment::isCourier($order) ? ['address' => $order->delivery_address, 'phone' => $order->customer_phone,
+                'name' => $order->customer_name] : null,
             'actions' => [
                 'marks' => $order->status === Order::STATUS_PAID && self::marksEditable($order),
+                'courier_shipped' => Fulfillment::isCourier($order) && $order->status === Order::STATUS_PAID && $status === Fulfillment::ASSEMBLED,
+                'courier_delivered' => Fulfillment::isCourier($order) && $order->status === Order::STATUS_PAID && $status === Fulfillment::SHIPPED,
                 'restock' => $order->canReturnToStock(),
                 // Этикетку livsipro печатает только у прямого отправления службы;
                 // у отправлений через ApiShip она — в кабинете ApiShip.

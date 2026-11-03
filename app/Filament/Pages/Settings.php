@@ -73,6 +73,9 @@ class Settings extends Page implements HasForms
         'delivery_origin_points' => [],
         'delivery_padding_mm' => null,
         'delivery_packaging_weight_g' => null,
+        'stavropol_courier_enabled' => false,
+        'stavropol_courier_price' => 19900,
+        'stavropol_courier_note' => 'Привезём сегодня или завтра. Курьер позвонит перед выездом.',
         'free_shipping_threshold' => 100000,
         'gift_threshold' => 500000,
         'topbar_text' => '',
@@ -129,6 +132,16 @@ class Settings extends Page implements HasForms
                             ->required(fn (Get $get): bool => (bool) $get('delivery_calculation_enabled')),
                         TextInput::make('delivery_packaging_weight_g')->label('Масса коробки и защиты, г')->integer()->minValue(0)->maxValue(100000)
                             ->required(fn (Get $get): bool => (bool) $get('delivery_calculation_enabled')),
+                    ])->columns(2),
+                Section::make('Курьер по Ставрополю')
+                    ->description('Покупатель из Ставрополя может выбрать курьера вместо пункта выдачи. Курьера вызываете вы (например, через Яндекс Go); в livsipro у такого заказа адрес и телефон, кнопки «Передан курьеру» и «Доставлен». Бесплатно — по тем же правилам, что и доставка в пункт: от порога или с промокодом.')
+                    ->schema([
+                        Toggle::make('stavropol_courier_enabled')->label('Курьер по Ставрополю доступен')->live(),
+                        MoneyField::make('stavropol_courier_price', 'Стоимость для покупателя')
+                            ->required(fn (Get $get): bool => (bool) $get('stavropol_courier_enabled'))
+                            ->helperText('В рублях.'),
+                        Textarea::make('stavropol_courier_note')->label('Что увидит покупатель под ценой')->rows(2)->maxLength(300)
+                            ->columnSpanFull(),
                     ])->columns(2),
                 Section::make('Пороги и промо')
                     ->description('Числа, которые видит покупатель в корзине: прогресс до бесплатной доставки и до подарка. Сами правила — со сроками действия и списком подарков на выбор — в разделе «Промо-правила».')

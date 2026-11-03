@@ -174,10 +174,13 @@
                                     <span class="delivery-choice-action" data-pickup-action>Выбрать пункт →</span>
                                 </span>
                             </label>
-                            <label class="delivery-choice" data-delivery-courier>
+                            <label class="delivery-choice" data-delivery-courier @unless ($courierEnabled) hidden @endunless>
                                 <input type="radio" name="delivery_method" value="{{ DeliverySelection::STAVROPOL_COURIER }}" required
-                                       disabled>
-                                <span><strong>Курьер по Ставрополю</strong><small>Временно недоступен</small></span>
+                                       @checked(old('delivery_method') === DeliverySelection::STAVROPOL_COURIER) @unless ($courierEnabled) disabled @endunless>
+                                <span class="delivery-choice-copy">
+                                    <strong>Курьер по Ставрополю</strong>
+                                    <small>{{ $remainingToFreeShipping === 0 || ($promo['free_delivery'] ?? false) ? 'Бесплатно' : Money::rub($courierPrice) }}@if ($courierNote) · {{ $courierNote }}@endif</small>
+                                </span>
                             </label>
                         </div>
                         @error('delivery_method')<span class="field-error">{{ $message }}</span>@enderror
@@ -195,6 +198,7 @@
                     <div class="contents" data-delivery-points
                          @if ($ozonClientCheckEnabled) data-ozon-check-url="{{ route('delivery.ozon.check-client') }}" @endif
                          data-courier-city="{{ config('livsi.delivery.origin_city') }}"
+                         data-courier-enabled="{{ $courierEnabled ? '1' : '0' }}"
                          data-url="{{ route('delivery.points') }}"
                          data-geocode-url="{{ route('delivery.city.geocode') }}"
                          data-free-shipping="{{ $remainingToFreeShipping === 0 ? '1' : '0' }}"
@@ -248,6 +252,7 @@
                                 <p class="mb-2 text-xs text-muted">Пробный расчёт: используются временные размеры товаров и упаковки.</p>
                             @endif
                             <p class="text-sm" data-delivery-quote-status role="status">{{ $remainingToFreeShipping === 0 ? 'Доставка бесплатная. Выберите пункт выдачи, чтобы уточнить срок доставки.' : 'Выберите пункт выдачи для расчёта доставки.' }}</p>
+                            <p class="delivery-quote-note mt-2 text-sm" data-delivery-quote-note hidden></p>
                             <button type="button" class="btn btn-outline mt-2" data-delivery-recalculate>Рассчитать доставку</button>
                             <input type="hidden" name="delivery_quote_token" value="">
                             @error('delivery_quote')<span class="field-error" role="alert">{{ $message }}</span>@enderror

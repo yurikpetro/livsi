@@ -2,9 +2,13 @@
 
 namespace App\Services;
 
+use App\Console\Commands\DeliveryOutliers;
 use App\Delivery\DeliveryGateway;
+use App\Delivery\PointNames;
 use App\Models\Cart;
 use App\Models\Setting;
+use App\Support\Money;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -71,19 +75,36 @@ class DeliveryQuoteService
             $this->fail('Расчёт доставки временно недоступен. Попробуйте позже.');
         }
         $fingerprint = $this->fingerprint($cart);
+        if ($destination['delivery_point_method'] === DeliverySelection::STAVROPOL_COURIER) {
+            return $this->courier($cart, $destination, $fingerprint);
+        }
         $provider = DeliverySelection::providerKey($destination['delivery_point_method']);
         if (! in_array($provider, ['cdek', 'yataxi', 'ozondel'], true)) {
             $this->fail($provider === 'ozonlog'
                 ? 'Расчёт доставки Ozon временно недоступен. Выберите пункт выдачи другой службы.'
                 : 'Расчёт для этой службы недоступен. Выберите пункт выдачи другой службы.');
         }
-        $point = $this->gateway->point($destination['delivery_point_id'], $destination['delivery_city'], $provider, $destination['delivery_region'] ?? null);
+        $point = $this->gateway->point((string) $destination['delivery_point_id'], $destination['delivery_city'], $provider, $destination['delivery_region'] ?? null);
         if (! $point) {
             $this->fail('Этот пункт выдачи недоступен. Выберите другой.');
         }
-        if ($this->gateway->isDirect($provider)) {
-            return $this->calculateDirect($cart, $destination, $provider, $point, $fingerprint);
-        }
+        $quote = $this->quotePoint($cart, $destination, $provider, $point, $fingerprint);
+        $quote['note'] = $this->farNote($cart, $destination, $provider, $point, $quote);
+
+        return $quote;
+    }
+
+    /** @param array<string, mixed> $destination @param array<string, mixed> $point @return array<string, mixed> */
+    private function quotePoint(Cart $cart, array $destination, string $provider, array $point, string $fingerprint): array
+    {
+        return $this->gateway->isDirect($provider)
+            ? $this->calculateDirect($cart, $destination, $provider, $point, $fingerprint)
+            : $this->calculateApiShip($cart, $destination, $provider, $point, $fingerprint);
+    }
+
+    /** @param array<string, mixed> $destination @param array<string, mixed> $point @return array<string, mixed> */
+    private function calculateApiShip(Cart $cart, array $destination, string $provider, array $point, string $fingerprint): array
+    {
         $address = Setting::get('delivery_origin_address');
         $pickup = $provider === 'ozondel' ? 2 : (int) Setting::get('delivery_pickup_type');
         if (! $address || ! in_array($pickup, [1, 2], true)) {
@@ -136,6 +157,152 @@ class DeliveryQuoteService
         ];
     }
 
+    // ------------------------------------------------------------ курьер
+
+    public static function courierEnabled(): bool
+    {
+        return (bool) Setting::get('stavropol_courier_enabled', false);
+    }
+
+    public static function courierCity(): string
+    {
+        return (string) config('livsi.delivery.origin_city', 'Ставрополь');
+    }
+
+    /** Курьер возит по городу склада — сравниваем город покупателя с ним. */
+    public static function courierServes(?string $city): bool
+    {
+        return self::courierEnabled() && filled($city) && PointNames::cityKey((string) $city) === PointNames::cityKey(self::courierCity());
+    }
+
+    /**
+     * Курьер по Ставрополю: цена из настроек, бесплатно по тем же правилам,
+     * что и доставка в пункт (порог, промокод). Курьера вызывает магазин.
+     *
+     * @param  array<string, mixed>  $destination
+     * @return array<string, mixed>
+     */
+    private function courier(Cart $cart, array $destination, string $fingerprint): array
+    {
+        if (! self::courierEnabled()) {
+            $this->fail('Курьерская доставка сейчас недоступна. Выберите пункт выдачи.');
+        }
+        if (! self::courierServes($destination['delivery_city'] ?? null)) {
+            $this->fail('Курьер возит только по городу '.self::courierCity().'. Выберите пункт выдачи.');
+        }
+        $cost = max(0, (int) Setting::get('stavropol_courier_price', 19900));
+
+        return [
+            'test' => false, 'direct' => false, 'courier' => true,
+            'provider' => 'courier', 'tariff_id' => 'courier', 'tariff_name' => 'Курьер по '.self::courierCity(),
+            'carrier_cost' => $cost,
+            'price' => $this->customerPrice($cart, $cost),
+            'days_min' => null, 'days_max' => null,
+            'note' => trim((string) Setting::get('stavropol_courier_note', '')) ?: null,
+            'parcel' => null, 'destination' => $destination, 'point' => null,
+            'fingerprint' => $fingerprint, 'expires_at' => now()->addMinutes(10)->timestamp,
+        ];
+    }
+
+    // --------------------------------------------- дорогой или долгий пункт
+
+    /** Дешевле этого пункт не может оказаться «несуразно дорогим» — не проверяем. */
+    private const NOTE_FROM = 20000;
+
+    /**
+     * Подсказка, если в выбранный пункт служба везёт заметно дороже или дольше,
+     * чем в другие пункты того же города (так у Яндекса в Ставрополе: 918 ₽ и
+     * 9 дней в два пункта при 158 ₽ и 3 днях в остальные).
+     *
+     * @param  array<string, mixed>  $destination
+     * @param  array<string, mixed>  $point
+     * @param  array<string, mixed>  $quote
+     */
+    private function farNote(Cart $cart, array $destination, string $provider, array $point, array $quote): ?string
+    {
+        $cost = (int) $quote['carrier_cost'];
+        $days = $quote['days_max'] ?? $quote['days_min'] ?? null;
+        if ($cost < self::NOTE_FROM && (int) $days < 4) {
+            return null;
+        }
+        try {
+            $usual = $this->usual($cart, $destination, $provider, $point, (array) $quote['parcel']);
+        } catch (Throwable) {
+            return null;
+        }
+        if (! $usual) {
+            return null;
+        }
+        $dearer = $cost >= self::NOTE_FROM && DeliveryOutliers::isOutlier($cost, $usual['cost']);
+        $longer = $days && $usual['days'] && (int) $days >= (int) $usual['days'] + 3;
+        $free = (int) $quote['price'] === 0;
+        $service = ['cdek' => 'СДЭК', 'yataxi' => 'Яндекс', 'ozondel' => 'Ozon'][$provider] ?? 'Служба';
+        $usualDays = $usual['days'] ? ', '.$usual['days'].' '.self::daysWord((int) $usual['days']) : '';
+
+        return match (true) {
+            $dearer && ! $free => $service.' везёт в этот пункт дороже'.($longer ? ' и дольше' : '').' обычного. В другие пункты '
+                .$service.' в этом городе — от '.Money::rub($usual['cost']).$usualDays.'.',
+            $longer => $service.' везёт в этот пункт дольше обычного: '.$days.' '.self::daysWord((int) $days).'. В другие пункты '
+                .$service.' в этом городе — от '.$usual['days'].' '.self::daysWord((int) $usual['days']).'.',
+            default => null,
+        };
+    }
+
+    private static function daysWord(int $n): string
+    {
+        $mod = $n % 100;
+
+        return match (true) {
+            $mod >= 11 && $mod <= 14 => 'дней',
+            $n % 10 === 1 => 'день',
+            in_array($n % 10, [2, 3, 4], true) => 'дня',
+            default => 'дней',
+        };
+    }
+
+    /**
+     * Обычная цена и срок службы по городу: самый дешёвый из двух других пунктов
+     * этого города для той же посылки. Запоминается на 6 часов, чтобы не
+     * спрашивать службу при каждом расчёте.
+     *
+     * @param  array<string, mixed>  $destination
+     * @param  array<string, mixed>  $point
+     * @param  array<string, int>  $parcel
+     * @return array{cost: int, days: ?int}|null
+     */
+    private function usual(Cart $cart, array $destination, string $provider, array $point, array $parcel): ?array
+    {
+        $city = (string) ($point['city'] ?? $destination['delivery_city']);
+        $key = 'delivery-usual:'.hash('sha256', json_encode([$provider, PointNames::cityKey($city), $parcel,
+            $this->gateway->isDirect($provider), Setting::get('delivery_direct_origin', []), Setting::get('delivery_origin_address')], JSON_THROW_ON_ERROR));
+        $cached = Cache::get($key);
+        if (is_array($cached)) {
+            return $cached['cost'] ?? null ? $cached : null;
+        }
+
+        $others = array_values(array_filter($this->gateway->points($city, $provider, 0, 200)['points'] ?? [],
+            fn (array $other): bool => (string) $other['id'] !== (string) $point['id']));
+        $picked = match (count($others)) {
+            0 => [],
+            1 => [$others[0]],
+            default => [$others[0], $others[intdiv(count($others), 2)]],
+        };
+        $best = null;
+        foreach ($picked as $other) {
+            try {
+                $quote = $this->quotePoint($cart, ['delivery_point_id' => (string) $other['id']] + $destination, $provider, $other, '');
+            } catch (Throwable) {
+                continue;
+            }
+            if ($best === null || $quote['carrier_cost'] < $best['cost']) {
+                $best = ['cost' => (int) $quote['carrier_cost'], 'days' => $quote['days_max'] ?? $quote['days_min'] ?? null];
+            }
+        }
+        Cache::put($key, $best ?? ['cost' => null], now()->addHours(6));
+
+        return $best;
+    }
+
     /**
      * Цена доставки для покупателя: 0 при сумме выше порога бесплатной доставки
      * или с промокодом на бесплатную доставку (он лежит в сессии оформления).
@@ -166,9 +333,11 @@ class DeliveryQuoteService
                 || $quote['expires_at'] <= now()->timestamp
                 || $quote['destination'] !== $destination
                 || $quote['fingerprint'] !== $this->fingerprint($cart)
-                || ($quote['direct'] ?? false) !== $this->gateway->isDirect($quote['provider'])
-                || ! $this->gateway->isProviderActive($quote['provider'])
-                || ! $this->enabled()) {
+                || ! $this->enabled()
+                || (($quote['courier'] ?? false)
+                    ? ! self::courierServes($destination['delivery_city'] ?? null)
+                    : (($quote['direct'] ?? false) !== $this->gateway->isDirect($quote['provider'])
+                        || ! $this->gateway->isProviderActive($quote['provider'])))) {
                 $this->fail('Расчёт доставки устарел. Рассчитайте стоимость ещё раз.');
             }
 
@@ -193,6 +362,7 @@ class DeliveryQuoteService
             Setting::get('delivery_padding_mm'), Setting::get('delivery_packaging_weight_g'),
             Setting::get('delivery_origin_address'), Setting::get('delivery_pickup_type'), Setting::get('delivery_origin_points'),
             Setting::get('delivery_calculation_test', false), $this->testing(), config('livsi.apiship.ozon_connection_id'),
+            Setting::get('stavropol_courier_enabled', false), Setting::get('stavropol_courier_price'),
             config('livsi.delivery.drivers'), Setting::get('delivery_drivers', []), Setting::get('delivery_direct_origin', []),
         ], JSON_THROW_ON_ERROR));
     }

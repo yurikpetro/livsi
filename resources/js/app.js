@@ -556,6 +556,11 @@ function initDeliveryPoints() {
     let pointsRetryAt = 0;
     let deliveryInteracted = false;
     const currentMethod = () => radios.find((radio) => radio.checked)?.value;
+    const courierChoice = document.querySelector('[data-delivery-courier]');
+    // «г. Ставрополь», «Ставрополь », «ставрополь» — один город; окончательно город проверяет сайт.
+    const cityName = (value) => String(value || '').toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/^(г\.?|город)\s+/, '').trim();
+    const courierAvailable = () => root.dataset.courierEnabled === '1' && city.value.trim().length >= 2
+        && cityName(city.value) === cityName(root.dataset.courierCity);
     const locationKey = () => JSON.stringify([city.value.trim().toLocaleLowerCase('ru'), region.value.trim().toLocaleLowerCase('ru')]);
     const retrySeconds = () => Math.max(0, Math.ceil((pointsRetryAt - Date.now()) / 1000));
     let ozonAllowed = !root.dataset.ozonCheckUrl;
@@ -587,9 +592,10 @@ function initDeliveryPoints() {
         const hasCity = city.value.trim().length >= 2;
         deliveryMethods.hidden = !hasCity;
         radios.forEach((radio) => {
-            radio.disabled = !hasCity || radio.value === 'stavropol_courier';
+            radio.disabled = !hasCity || (radio.value === 'stavropol_courier' && !courierAvailable());
             if (radio.disabled) radio.checked = false;
         });
+        if (courierChoice) courierChoice.hidden = !courierAvailable();
         controller?.abort();
         controller = null;
         loading = false;
@@ -971,7 +977,21 @@ function initDeliveryPoints() {
             region.value = remembered.region || '';
         }
     } catch { /* Хранилище браузера может быть отключено. */ }
+    // Страница пришла заново (промокод, ошибка в форме) — выбранный пункт не теряем.
+    const restore = { id: pointId.value, method: pointMethod.value, hint: hint.value };
     reset();
+    if (currentMethod() === 'pickup_point' && restore.id && labels[restore.method] && restore.hint) {
+        pointId.value = restore.id;
+        pointMethod.value = restore.method;
+        selectedAddress = restore.hint;
+        hint.value = restore.hint;
+        selected.textContent = `${labels[restore.method]} · ${restore.hint}`;
+        selected.hidden = false;
+        pickupDescription.hidden = true;
+        pickupAction.textContent = 'Изменить пункт →';
+        ozonNotice.hidden = restore.method !== 'ozon_point';
+        root.dispatchEvent(new CustomEvent('livsi:delivery-selection', { bubbles: true }));
+    }
     initOzonClientCheck(root, (allowed) => {
         ozonAllowed = allowed;
         const checkbox = carrierFilters.find((input) => input.value === 'ozon_point');

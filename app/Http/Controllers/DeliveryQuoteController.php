@@ -20,9 +20,10 @@ class DeliveryQuoteController extends Controller
         $data = $request->validate([
             'delivery_city' => ['required', 'string', 'min:2', 'max:120'],
             'delivery_region' => ['nullable', 'string', 'max:120'],
-            'delivery_point_method' => ['required', Rule::in(DeliverySelection::pickupMethods())],
-            'delivery_point_id' => ['required', 'regex:/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/'],
+            'delivery_point_method' => ['required', Rule::in([...DeliverySelection::pickupMethods(), DeliverySelection::STAVROPOL_COURIER])],
+            'delivery_point_id' => ['nullable', 'required_unless:delivery_point_method,'.DeliverySelection::STAVROPOL_COURIER, 'regex:/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/'],
         ]);
+        $data['delivery_point_id'] = $data['delivery_point_method'] === DeliverySelection::STAVROPOL_COURIER ? null : $data['delivery_point_id'];
         $data['delivery_region'] = $data['delivery_region'] ?? null;
         $cart = $carts->currentOrNull();
         if (! $cart || $cart->isEmpty()) {
@@ -42,6 +43,7 @@ class DeliveryQuoteController extends Controller
             'test' => $quote['test'],
             'price' => $quote['price'], 'price_label' => $quote['price'] === 0 ? 'Бесплатно' : Money::rub($quote['price']),
             'tariff_name' => $quote['tariff_name'], 'days_min' => $quote['days_min'], 'days_max' => $quote['days_max'],
+            'note' => $quote['note'] ?? null, 'courier' => (bool) ($quote['courier'] ?? false),
         ])->header('Cache-Control', 'no-store');
     }
 }

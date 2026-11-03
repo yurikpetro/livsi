@@ -122,6 +122,17 @@
     cursor: pointer;
 }
 
+.delivery-choice[hidden] { display: none; }
+
+/* Подсказка под расчётом: пункт дороже или дольше обычного, приписка курьера. */
+.delivery-quote-note {
+    padding: 10px 12px;
+    border-left: 3px solid var(--color-ink);
+    background: var(--color-shell, #f2f1ec);
+    line-height: 1.45;
+}
+.delivery-quote-note[hidden] { display: none; }
+
 .delivery-choice:has(input:disabled) {
     opacity: .5;
     cursor: not-allowed;
