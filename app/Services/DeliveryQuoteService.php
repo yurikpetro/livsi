@@ -261,9 +261,12 @@ class DeliveryQuoteService
     }
 
     /**
-     * Обычная цена и срок службы по городу: самый дешёвый из двух других пунктов
-     * этого города для той же посылки. Запоминается на 6 часов, чтобы не
-     * спрашивать службу при каждом расчёте.
+     * Обычная цена и срок службы: самый дешёвый из трёх других пунктов города,
+     * который выбрал покупатель, для той же посылки. Город берём покупателя, а
+     * не пункта: на карте у него пункты всей области, и пункт на окраине может
+     * числиться за посёлком, где других пунктов нет (так было со Старомарьевским
+     * шоссе в Ставрополе). Ответ запоминается на 6 часов; если служба не ответила,
+     * повторим через 10 минут.
      *
      * @param  array<string, mixed>  $destination
      * @param  array<string, mixed>  $point
@@ -272,7 +275,7 @@ class DeliveryQuoteService
      */
     private function usual(Cart $cart, array $destination, string $provider, array $point, array $parcel): ?array
     {
-        $city = (string) ($point['city'] ?? $destination['delivery_city']);
+        $city = trim((string) ($destination['delivery_city'] ?? '')) ?: (string) ($point['city'] ?? '');
         $key = 'delivery-usual:'.hash('sha256', json_encode([$provider, PointNames::cityKey($city), $parcel,
             $this->gateway->isDirect($provider), Setting::get('delivery_direct_origin', []), Setting::get('delivery_origin_address')], JSON_THROW_ON_ERROR));
         $cached = Cache::get($key);
@@ -280,15 +283,15 @@ class DeliveryQuoteService
             return $cached['cost'] ?? null ? $cached : null;
         }
 
-        $others = array_values(array_filter($this->gateway->points($city, $provider, 0, 200)['points'] ?? [],
-            fn (array $other): bool => (string) $other['id'] !== (string) $point['id']));
-        $picked = match (count($others)) {
-            0 => [],
-            1 => [$others[0]],
-            default => [$others[0], $others[intdiv(count($others), 2)]],
-        };
+        $others = $this->otherPoints($city, $provider, $point);
+        if (! $others && filled($point['city'] ?? null)) {
+            $others = $this->otherPoints((string) $point['city'], $provider, $point);
+        }
+        $picked = array_values(array_unique(array_filter([0, intdiv(count($others), 2), count($others) - 1],
+            fn (int $index): bool => $index >= 0 && $index < count($others))));
         $best = null;
-        foreach ($picked as $other) {
+        foreach ($picked as $index) {
+            $other = $others[$index];
             try {
                 $quote = $this->quotePoint($cart, ['delivery_point_id' => (string) $other['id']] + $destination, $provider, $other, '');
             } catch (Throwable) {
@@ -298,9 +301,19 @@ class DeliveryQuoteService
                 $best = ['cost' => (int) $quote['carrier_cost'], 'days' => $quote['days_max'] ?? $quote['days_min'] ?? null];
             }
         }
-        Cache::put($key, $best ?? ['cost' => null], now()->addHours(6));
+        Cache::put($key, $best ?? ['cost' => null], $best ? now()->addHours(6) : now()->addMinutes(10));
 
         return $best;
+    }
+
+    /**
+     * @param  array<string, mixed>  $point
+     * @return list<array<string, mixed>>
+     */
+    private function otherPoints(string $city, string $provider, array $point): array
+    {
+        return array_values(array_filter($this->gateway->points($city, $provider, 0, 200)['points'] ?? [],
+            fn (array $other): bool => (string) $other['id'] !== (string) $point['id']));
     }
 
     /**

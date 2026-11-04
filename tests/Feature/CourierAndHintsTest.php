@@ -72,11 +72,12 @@ class CourierAndHintsTest extends TestCase
      * в остальные — за 158,53 ₽ и 3 дня (как было на самом деле).
      *
      * @param  array<string, array{0: float, 1: int}>  $prices
+     * @param  array<string, string>  $cities  пункты, которые числятся не за Ставрополем
      */
-    private function fakeCarrier(array $prices = ['42' => [918.59, 9], '43' => [158.53, 3], '44' => [158.53, 3]]): void
+    private function fakeCarrier(array $prices = ['42' => [918.59, 9], '43' => [158.53, 3], '44' => [158.53, 3]], array $cities = []): void
     {
         $rows = array_map(fn (string $id): array => ['id' => $id, 'providerKey' => 'yataxi', 'countryCode' => 'RU',
-            'city' => 'Ставрополь', 'region' => 'Ставропольский край', 'address' => 'Ставрополь, пункт '.$id,
+            'city' => $cities[$id] ?? 'Ставрополь', 'region' => 'Ставропольский край', 'address' => 'Ставрополь, пункт '.$id,
             'availableOperation' => 2, 'enabled' => true], array_map('strval', array_keys($prices)));
         Http::swap(new Factory);
         Http::preventStrayRequests();
@@ -245,6 +246,25 @@ class CourierAndHintsTest extends TestCase
             'note', 'Яндекс везёт в этот пункт дороже и дольше обычного. В другие пункты Яндекс в этом городе — от '.Money::rub(15853).', 3 дня.');
 
         $this->pointQuote('43')->assertOk()->assertJsonPath('note', null);
+    }
+
+    /** На карте пункты всей области: дальний пункт может числиться за посёлком, где других пунктов нет. */
+    public function test_far_point_listed_under_a_suburb_is_compared_with_the_buyers_city(): void
+    {
+        $this->fakeCarrier(cities: ['42' => 'Михайловск']);
+
+        $this->pointQuote('42')->assertOk()->assertJsonPath('price', 91859)->assertJsonPath(
+            'note', 'Яндекс везёт в этот пункт дороже и дольше обычного. В другие пункты Яндекс в этом городе — от '.Money::rub(15853).', 3 дня.');
+    }
+
+    public function test_failed_usual_price_is_not_remembered_for_long(): void
+    {
+        $this->fakeCarrier(['42' => [918.59, 9]]);
+        $this->pointQuote('42')->assertOk()->assertJsonPath('note', null);
+
+        $this->fakeCarrier();
+        $this->travel(11)->minutes();
+        $this->pointQuote('42')->assertOk()->assertJsonPath('note', fn (?string $note): bool => str_contains((string) $note, 'дороже'));
     }
 
     public function test_free_delivery_to_a_far_point_mentions_only_the_days(): void
