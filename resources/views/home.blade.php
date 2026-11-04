@@ -2,20 +2,19 @@
 
 @section('content')
     @php
-        $slides = [
-            'fresh' => ['Свежесть,', 'которая', 'включает.', 'Ощущение чистоты и лёгкости, с которого приятно начинать день — или начинать заново.', 'Свежий · чистый · бодрящий', '#d0e64f', 'свежий'],
-            'sweet' => ['Сладкий', 'характер', 'ухода.', 'Мягкие текстуры и сочное настроение для моментов, когда хочется позволить себе больше.', 'Сладкий · фруктовый · игривый', '#f6accd', 'сладкий'],
-            'warm' => ['Тепло,', 'которое', 'остаётся.', 'Солнечный ритуал ухода, который возвращает коже мягкость, а тебе — ощущение лета.', 'Тёплый · солнечный · насыщенный', '#ffe405', 'тёплый'],
-            'base' => ['База,', 'которая', 'нужна.', 'Понятный ежедневный уход без лишнего шума — спокойный, универсальный и всегда уместный.', 'Спокойный · чистый · универсальный', '#f5e2b7', 'базовый'],
-            'pro' => ['Точность,', 'которая', 'работает.', 'Профессиональные формулы и последовательные протоколы для мастеров и требовательного ухода.', 'Точность · протокол · результат', '#a8d8ef', 'профессиональный'],
-        ];
+        // Баннеры правятся в админке («Баннеры на главной»).
+        $slides = \App\Models\HeroSlide::query()->shown()->get();
     @endphp
+    @if ($slides->isNotEmpty())
     <section class="hero relative overflow-hidden bg-shell" data-hero id="lines" aria-label="Линейки LIVSI">
-        @foreach ($slides as $code => [$first, $second, $third, $description, $aroma, $color, $subtitle])
+        @foreach ($slides as $slide)
+            @php
+                [$code, $first, $second, $third] = [$slide->code, $slide->title_first, $slide->title_second, $slide->title_accent];
+                [$description, $aroma, $color] = [$slide->description, $slide->aroma, $slide->accent_color];
+            @endphp
             <div data-hero-slide="{{ $code }}" @if (! $loop->first) hidden @endif style="--slide-accent: {{ $color }}">
-                <div class="hero-photo">
-                    <x-img :path="'img/catalog/livsi-' . $code . '.png'" :alt="'Линейка LIVSI ' . strtoupper($code)" sizes="100vw"
-                           :loading="$loop->first ? 'eager' : 'lazy'" :fetchpriority="$loop->first ? 'high' : 'auto'" />
+                <div class="hero-photo" style="--focus: {{ $slide->desktopFocus() }}; --focus-m: {{ $slide->mobileFocus() }}">
+                    <x-hero-img :slide="$slide" :loading="$loop->first ? 'eager' : 'lazy'" :fetchpriority="$loop->first ? 'high' : 'auto'" />
                 </div>
                 <div class="hero-shade absolute inset-0"></div>
                 <div class="hero-copy site-container relative flex flex-col justify-center text-paper" id="hero-{{ $code }}">
@@ -38,13 +37,14 @@
             </div>
         @endforeach
         <nav class="site-container hero-lines" aria-label="Выбор линии LIVSI">
-            @foreach ($slides as $code => $slide)
-                <button type="button" data-hero-select="{{ $code }}" aria-controls="hero-{{ $code }}" aria-pressed="{{ $loop->first ? 'true' : 'false' }}" style="--slide-accent: {{ $slide[5] }}">
-                    <span><small>{{ str_pad($loop->iteration, 2, '0', STR_PAD_LEFT) }}</small><strong>{{ strtoupper($code) }}</strong></span><em>{{ $slide[6] }}</em>
+            @foreach ($slides as $slide)
+                <button type="button" data-hero-select="{{ $slide->code }}" aria-controls="hero-{{ $slide->code }}" aria-pressed="{{ $loop->first ? 'true' : 'false' }}" style="--slide-accent: {{ $slide->accent_color }}">
+                    <span><small>{{ str_pad($loop->iteration, 2, '0', STR_PAD_LEFT) }}</small><strong>{{ mb_strtoupper($slide->code) }}</strong></span><em>{{ $slide->tab_label }}</em>
                 </button>
             @endforeach
         </nav>
     </section>
+    @endif
 
     <section class="site-container mt-24" data-reveal data-product-shelf>
         <div class="eyebrow">Выбирай по ощущениям</div>
