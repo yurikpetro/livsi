@@ -1,9 +1,12 @@
 @php
     use App\Services\CartService;
+    use App\Support\Media;
     use App\Support\Money;
 
     $variant = $product?->variants->where('is_active', true)->firstWhere('id', $variantId) ?? $product?->storefrontVariant();
     $photos = $product?->images->unique('path')->values() ?? collect();
+    // На телефоне рамка фото берёт пропорции самого снимка — без обрезки.
+    $photoRatio = $photos->first() ? Media::ratio($photos->first()->path) : null;
     $canAdd = $variantId && $variantId === $variant?->id && $variant->available() > 0;
     $quantity = $variant ? (app(CartService::class)->currentOrNull()?->items->first(
         fn ($item) => $item->product_variant_id === $variant->id && ! $item->is_gift
@@ -30,7 +33,7 @@
                      class="product-modal" wire:key="quick-view-product-{{ $product->id }}">
                     <button type="button" wire:click="close" class="product-modal-close" aria-label="Закрыть быстрый просмотр">×</button>
 
-                    <div class="product-modal-photo" x-data="{ photo: 0 }">
+                    <div class="product-modal-photo" x-data="{ photo: 0 }" @if ($photoRatio) style="--photo-ratio: {{ $photoRatio }}" @endif>
                         @foreach ($photos as $photo)
                             <div x-show="photo === {{ $loop->index }}" @if (! $loop->first) x-cloak @endif>
                                 <x-img :path="$photo->path" :alt="$photo->alt" sizes="(min-width: 701px) 580px, 100vw" />

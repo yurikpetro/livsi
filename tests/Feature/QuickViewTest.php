@@ -43,6 +43,24 @@ class QuickViewTest extends TestCase
             ->assertDontSee('Полная карточка и отзывы');
     }
 
+    /** На телефоне рамка фото берёт пропорции снимка — фото не обрезается. */
+    public function test_photo_frame_takes_the_photo_proportions(): void
+    {
+        $product = Product::where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
+        $path = 'img/test-quick-view-ratio.png';
+        imagepng(imagecreatetruecolor(400, 500), public_path($path));
+        $product->images()->delete();
+        $product->images()->create(['path' => $path, 'alt' => 'Фото', 'sort' => 0]);
+
+        try {
+            Livewire::test(QuickView::class)
+                ->dispatch('quick-view', productId: $product->id)
+                ->assertSeeHtml('style="--photo-ratio: 400 / 500"');
+        } finally {
+            @unlink(public_path($path));
+        }
+    }
+
     public function test_default_variant_is_preselected(): void
     {
         $product = Product::with('variants')->where('slug', 'multipenka-dlya-ruk-i-stop')->firstOrFail();
