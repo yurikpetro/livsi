@@ -30,13 +30,13 @@ class TochkaClient
     /** @param array<string, mixed> $data @return array<string, mixed> */
     public function createPayment(array $data): array
     {
-        return $this->data($this->client()->post('acquiring/v1.0/payments_with_receipt', ['Data' => $data]), 'создание платежа');
+        return $this->data($this->attempt(fn () => $this->client()->post('acquiring/v1.0/payments_with_receipt', ['Data' => $data])), 'создание платежа');
     }
 
     /** Операция по платёжной ссылке: статус, способ оплаты, возвраты. @return array<string, mixed> */
     public function payment(string $operationId): array
     {
-        $data = $this->data($this->reading()->get('acquiring/v1.0/payments/'.rawurlencode($operationId)), 'статус платежа');
+        $data = $this->data($this->attempt(fn () => $this->reading()->get('acquiring/v1.0/payments/'.rawurlencode($operationId))), 'статус платежа');
         $operation = $data['Operation'][0] ?? null;
         if (! is_array($operation)) {
             throw new RuntimeException('Точка не вернула платёж '.$operationId.'.');
@@ -48,17 +48,17 @@ class TochkaClient
     /** Возврат денег (полный или частичный). Сумма в копейках. @return array<string, mixed> */
     public function refund(string $operationId, int $amount): array
     {
-        return $this->data($this->client()->post('acquiring/v1.0/payments/'.rawurlencode($operationId).'/refund', [
+        return $this->data($this->attempt(fn () => $this->client()->post('acquiring/v1.0/payments/'.rawurlencode($operationId).'/refund', [
             'Data' => ['amount' => round($amount / 100, 2)],
-        ]), 'возврат');
+        ])), 'возврат');
     }
 
     /** Торговые точки: статус подключения эквайринга. @return list<array<string, mixed>> */
     public function retailers(?string $customerCode = null): array
     {
-        $data = $this->data($this->reading()->get('acquiring/v1.0/retailers', [
+        $data = $this->data($this->attempt(fn () => $this->reading()->get('acquiring/v1.0/retailers', [
             'customerCode' => $customerCode ?? PaymentSettings::customerCode(),
-        ]), 'торговые точки');
+        ])), 'торговые точки');
 
         return array_values((array) ($data['Retailer'] ?? []));
     }
@@ -66,9 +66,29 @@ class TochkaClient
     /** Компании, к которым у ключа есть доступ (customerCode). @return list<array<string, mixed>> */
     public function customers(): array
     {
-        $data = $this->data($this->reading()->get('open-banking/v1.0/customers'), 'список компаний');
+        $data = $this->data($this->attempt(fn () => $this->reading()->get('open-banking/v1.0/customers')), 'список компаний');
 
         return array_values((array) ($data['Customer'] ?? []));
+    }
+
+    /**
+     * Код компании: заданный или найденный по ключу (первая компания-бизнес).
+     * Найденный сразу сохраняется — владельцу не нужно искать его отдельно.
+     */
+    public function ensureCustomerCode(): string
+    {
+        $code = PaymentSettings::customerCode();
+        if ($code !== null) {
+            return $code;
+        }
+        $business = array_values(array_filter($this->customers(), fn (array $row): bool => ($row['customerType'] ?? '') === 'Business'));
+        $code = preg_replace('/\D/', '', (string) ($business[0]['customerCode'] ?? ''));
+        if ($code === '') {
+            throw new RuntimeException('Ключ Точки не видит ни одной компании — проверьте, что у ключа есть доступ «Просмотр реквизитов».');
+        }
+        PaymentSettings::setOptions(['tochka_customer_code' => $code]);
+
+        return $code;
     }
 
     /**
@@ -81,10 +101,10 @@ class TochkaClient
     {
         $body = ['webhooksList' => ['acquiringInternetPayment'], 'url' => $url];
         $path = 'webhook/v1.0/'.rawurlencode($clientId);
-        $response = $this->client()->put($path, $body);
+        $response = $this->attempt(fn () => $this->client()->put($path, $body));
         // Подписка уже есть — меняем её адрес и события (у Точки это другой метод).
         if ($response->clientError() && ! in_array($response->status(), [401, 403], true)) {
-            $response = $this->client()->post($path, $body);
+            $response = $this->attempt(fn () => $this->client()->post($path, $body));
         }
 
         return $this->data($response, 'подписка на уведомления');
@@ -93,7 +113,29 @@ class TochkaClient
     /** @return array<string, mixed> */
     public function webhooks(string $clientId): array
     {
-        return $this->data($this->reading()->get('webhook/v1.0/'.rawurlencode($clientId)), 'подписки на уведомления');
+        return $this->data($this->attempt(fn () => $this->reading()->get('webhook/v1.0/'.rawurlencode($clientId))), 'подписки на уведомления');
+    }
+
+    /**
+     * Запрос с понятным объяснением, если сервер не доверяет сертификату банка
+     * (enter.tochka.com — на сертификате Минцифры, см. TrustedCa).
+     *
+     * @param  callable(): Response  $request
+     */
+    private function attempt(callable $request): Response
+    {
+        try {
+            return $request();
+        } catch (ConnectionException $exception) {
+            if (! str_contains($exception->getMessage(), 'certificate')) {
+                throw $exception;
+            }
+            Log::warning('Нет доверия сертификату Точки.', ['installed' => TrustedCa::installed(), 'error' => mb_substr($exception->getMessage(), 0, 300)]);
+
+            throw new ConnectionException(TrustedCa::installed()
+                ? 'Сервер не принял сертификат Точки, хотя сертификат Минцифры установлен: '.mb_substr($exception->getMessage(), 0, 200)
+                : 'Сервер не доверяет сертификату Точки: нужен сертификат Минцифры, его ставит установщик обновления 14.1.', 0, $exception);
+        }
     }
 
     /** Data из ответа или исключение с объяснением Точки. @return array<string, mixed> */
@@ -130,6 +172,8 @@ class TochkaClient
             ->withToken($jwt)
             ->acceptJson()
             ->asJson()
+            // enter.tochka.com — на сертификате Минцифры (см. TrustedCa).
+            ->withOptions(['verify' => TrustedCa::verify()])
             ->connectTimeout(10)
             ->timeout(30);
     }

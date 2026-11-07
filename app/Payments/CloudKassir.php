@@ -199,6 +199,7 @@ class CloudKassir
             ->withBasicAuth($id, $secret)
             ->acceptJson()
             ->asJson()
+            ->withOptions(['verify' => TrustedCa::combined()])
             ->connectTimeout(10)
             ->timeout(30);
     }

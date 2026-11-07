@@ -17,6 +17,8 @@ use App\Models\User;
 use App\Monitoring\ErrorReport;
 use App\Payments\PaymentGateway;
 use App\Payments\PaymentSettings;
+use App\Payments\TochkaClient;
+use App\Payments\TrustedCa;
 use App\Services\PaymentService;
 use App\Services\ReceiptService;
 use App\Services\RefundService;
@@ -24,6 +26,7 @@ use App\Support\Fulfillment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -512,6 +515,63 @@ class TochkaPaymentsTest extends TestCase
     }
 
     // ------------------------------------------------------------ админка
+
+    public function test_check_finds_the_company_code_by_itself(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        PaymentSettings::setOptions(['tochka_customer_code' => '']);
+        Http::fake([
+            self::TOCHKA.'open-banking/v1.0/customers' => Http::response(['Data' => ['Customer' => [
+                ['customerCode' => '300999888', 'customerType' => 'Personal', 'isResident' => true, 'fullName' => 'Физлицо'],
+                ['customerCode' => '300555777', 'customerType' => 'Business', 'isResident' => true, 'fullName' => 'ИП Волкодав'],
+            ]]]),
+            self::TOCHKA.'acquiring/v1.0/retailers*' => Http::response(['Data' => ['Retailer' => [['status' => 'REG', 'isActive' => true, 'mcc' => '5977',
+                'rate' => 1.5, 'name' => 'LIVSI', 'merchantId' => '200000000001234', 'paymentModes' => ['sbp', 'card'], 'cashbox' => 'CloudKassir']]]]),
+        ]);
+
+        Livewire::test(PaymentIntegrations::class)
+            ->call('checkTochka')
+            ->assertNotified('Точка: эквайринг подключён')
+            ->assertSet('data.tochka_customer_code', '300555777');
+
+        $this->assertSame('300555777', PaymentSettings::customerCode());
+        Http::assertSent(fn (Request $request) => str_contains($request->url(), 'retailers') && $request['customerCode'] === '300555777');
+    }
+
+    public function test_untrusted_bank_certificate_is_explained(): void
+    {
+        Http::fake([self::TOCHKA.'*' => fn () => throw new ConnectionException(
+            'cURL error 60: SSL certificate problem: self-signed certificate in certificate chain (see https://curl.haxx.se/libcurl/c/libcurl-errors.html)')]);
+
+        try {
+            app(TochkaClient::class)->customers();
+            $this->fail('Ошибка сертификата должна дойти до владельца');
+        } catch (ConnectionException $exception) {
+            $this->assertStringContainsString('сертификат Минцифры', $exception->getMessage());
+        }
+    }
+
+    public function test_tochka_trusts_the_ministry_root_only_when_it_is_installed(): void
+    {
+        $root = storage_path('app/'.TrustedCa::ROOT);
+        File::delete($root);
+        $this->assertTrue(TrustedCa::verify());
+        $this->assertTrue(TrustedCa::combined());
+
+        File::ensureDirectoryExists(dirname($root));
+        File::put($root, "-----BEGIN CERTIFICATE-----\nMINISTRY-ROOT\n-----END CERTIFICATE-----\n");
+        try {
+            $bundle = TrustedCa::verify();
+            $this->assertIsString($bundle);
+            $content = File::get($bundle);
+            $this->assertStringEndsWith("MINISTRY-ROOT\n-----END CERTIFICATE-----\n", $content);
+            $this->assertGreaterThan(10000, strlen($content), 'в наборе и системные корни — обычные сертификаты не ломаются');
+            $this->assertSame($bundle, TrustedCa::combined());
+        } finally {
+            File::delete($root);
+            File::delete(storage_path('app/certs/ca-bundle-tochka.pem'));
+        }
+    }
 
     public function test_switching_to_tochka_needs_keys(): void
     {
