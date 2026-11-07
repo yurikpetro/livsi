@@ -25,7 +25,7 @@ class ReceiptsSync extends Command
         {--retry= : номер заказа, по которому повторить второй чек}
         {--show= : номер заказа — показать, что уйдёт во втором чеке, ничего не отправляя}';
 
-    protected $description = 'Вторые чеки (полный расчёт с КИЗ) и статусы возвратов ЮKassa';
+    protected $description = 'Вторые чеки (полный расчёт с КИЗ), чеки возврата и статусы возвратов';
 
     public function handle(ReceiptService $receipts, RefundService $refunds): int
     {
@@ -58,14 +58,14 @@ class ReceiptsSync extends Command
             }
         }
 
-        // Итог узнаём со следующего запуска: только что отправленным ЮKassa нужно время.
+        // Итог узнаём со следующего запуска: только что отправленным кассе нужно время.
         $pending = OrderReceipt::query()->where('status', OrderReceipt::PENDING)->whereNotNull('external_id')
             ->whereNotIn('id', $just)->with('order')->oldest('id')->limit(100)->get();
         foreach ($pending as $record) {
             try {
                 $record->kind === OrderReceipt::KIND_REFUND ? $refunds->refresh($record) : $receipts->refresh($record);
             } catch (Throwable $exception) {
-                Log::warning('Не удалось узнать итог у ЮKassa.', ['order' => $record->order?->number, 'kind' => $record->kind,
+                Log::warning('Не удалось узнать итог у кассы.', ['order' => $record->order?->number, 'kind' => $record->kind,
                     'error' => mb_substr($exception->getMessage(), 0, 300)]);
             }
         }
@@ -77,7 +77,7 @@ class ReceiptsSync extends Command
         return self::SUCCESS;
     }
 
-    /** Состав второго чека — как его увидит ЮKassa, только без отправки. */
+    /** Состав второго чека — как его увидит касса, только без отправки. */
     private function show(ReceiptService $receipts, string $number): int
     {
         $order = Order::query()->where('number', $number)->with('items.marks', 'items.variant')->first();
@@ -100,10 +100,10 @@ class ReceiptsSync extends Command
                 ? mb_strimwidth(str_replace("\x1D", '<GS>', $item['mark_code_info']['gs_1m']), 0, 40, '…')
                 : '—',
         ], $items));
-        $this->line('Итого в чеке: '.number_format($total / 100, 2, '.', ' ').' ₽ · оплата ЮKassa: '
+        $this->line('Итого в чеке: '.number_format($total / 100, 2, '.', ' ').' ₽ · оплата'.($payment ? ' ('.($payment->gateway === 'tochka' ? 'Точка' : 'ЮKassa').')' : '').': '
             .($payment ? number_format($payment->amount / 100, 2, '.', ' ').' ₽ ('.$payment->external_id.')' : 'нет'));
         if (! $payment || $total !== (int) $payment->amount) {
-            $this->warn('Сумма не совпадает с оплатой — такой чек ЮKassa не примет.');
+            $this->warn('Сумма не совпадает с оплатой — такой чек касса не примет.');
 
             return self::FAILURE;
         }

@@ -93,6 +93,20 @@ return [
         )),
     ],
 
+    /*
+    | Интернет-эквайринг Точка Банка и касса CloudKassir.
+    |
+    | Ключи вводятся в админке («Интеграции оплаты») и хранятся зашифрованными;
+    | здесь только адреса API — на случай, если банк их сменит.
+    */
+    'tochka' => [
+        'api_url' => env('TOCHKA_API_URL', 'https://enter.tochka.com/uapi'),
+    ],
+
+    'cloudkassir' => [
+        'api_url' => env('CLOUDKASSIR_API_URL', 'https://api.cloudpayments.ru'),
+    ],
+
     'order_reserve_minutes' => (int) env('ORDER_RESERVE_MINUTES', 1440),
 
     'delivery' => [

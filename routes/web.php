@@ -19,6 +19,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OzonClientCheckController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PaymentWebhookController;
+use App\Http\Controllers\TochkaWebhookController;
 use App\Http\Controllers\PrintOrderController;
 use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\UnsubscribeController;
@@ -109,6 +110,15 @@ Route::post('/webhooks/yookassa', PaymentWebhookController::class)
         CaptureUtm::class,
     ])
     ->name('webhooks.yookassa');
+
+// Уведомления Точки: тело — JWT, статус всё равно перепроверяется по API.
+Route::post('/webhooks/tochka', TochkaWebhookController::class)
+    ->withoutMiddleware([
+        PreventRequestForgery::class,
+        CaptureUtm::class,
+    ])
+    ->middleware('throttle:120,1')
+    ->name('webhooks.tochka');
 
 // Избранное. Гостю доступно так же, как корзина: сердечко — не то место,
 // где уместно требовать вход.

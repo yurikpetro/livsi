@@ -109,6 +109,7 @@ class ErrorReport
             config('database.connections.'.config('database.default').'.password'),
             config('mail.mailers.smtp.password'),
             config('app.key'),
+            ...\App\Payments\PaymentSettings::allSecrets(),
         ];
 
         foreach ($secrets as $secret) {

@@ -7,7 +7,8 @@ use App\Models\OrderItem;
 use App\Support\Phone;
 
 /**
- * Чек по 54-ФЗ для ЮKassa.
+ * Чек по 54-ФЗ. Строки — в формате ЮKassa; для Точки и CloudKassir их
+ * переводят TochkaGateway::items() и CloudKassir::body() — суммы те же.
  *
  * Две вещи, из-за которых это отдельный класс, а не пара строк в шлюзе:
  *
