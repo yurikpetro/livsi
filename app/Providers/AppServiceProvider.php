@@ -4,8 +4,8 @@ namespace App\Providers;
 
 use App\Models\Order;
 use App\Models\User;
+use App\Payments\GatewayManager;
 use App\Payments\PaymentGateway;
-use App\Payments\YooKassaGateway;
 use App\Services\CartService;
 use App\Services\CustomerDirectory;
 use Filament\Support\Facades\FilamentView;
@@ -28,7 +28,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(CartService::class);
 
         // Провайдера меняют — витрина и заказы не должны о нём знать.
-        $this->app->bind(PaymentGateway::class, YooKassaGateway::class);
+        // Кто принимает новые платежи, выбирается в «Интеграциях оплаты».
+        $this->app->bind(PaymentGateway::class, GatewayManager::class);
     }
 
     /**

@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Кассовая или денежная операция по заказу после оплаты.
  *
- * closing — второй чек «полный расчёт» с КИЗ; refund — возврат денег.
+ * closing — второй чек «полный расчёт» с КИЗ; refund — возврат денег;
+ * refund_receipt — чек возврата, который сайт пробивает сам (оплата Точки).
  * Статусы — как у ЮKassa: pending, succeeded, canceled; new — ещё не отправлено.
  */
 class OrderReceipt extends Model
@@ -16,6 +17,8 @@ class OrderReceipt extends Model
     public const KIND_CLOSING = 'closing';
 
     public const KIND_REFUND = 'refund';
+
+    public const KIND_REFUND_RECEIPT = 'refund_receipt';
 
     public const NEW = 'new';
 
@@ -48,7 +51,7 @@ class OrderReceipt extends Model
     {
         return match ($this->status) {
             self::NEW => 'готовится',
-            self::PENDING => 'ЮKassa обрабатывает',
+            self::PENDING => 'обрабатывается',
             self::SUCCEEDED => 'готово',
             self::CANCELED => 'не прошло',
             default => (string) $this->status,

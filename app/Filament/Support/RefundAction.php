@@ -46,7 +46,7 @@ class RefundAction
                 }
                 $refund->status === OrderReceipt::SUCCEEDED
                     ? Notification::make()->title('Деньги возвращены, заказ отменён')->success()->send()
-                    : Notification::make()->title('Возврат оформлен — ЮKassa обрабатывает')->body('Статус обновится сам в течение нескольких минут.')->warning()->send();
+                    : Notification::make()->title('Возврат оформлен — банк обрабатывает')->body('Статус обновится сам в течение нескольких минут.')->warning()->send();
                 $record->refresh();
             });
     }

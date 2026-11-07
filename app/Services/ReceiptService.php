@@ -6,6 +6,8 @@ use App\Models\Order;
 use App\Models\OrderReceipt;
 use App\Models\Payment;
 use App\Models\Setting;
+use App\Payments\CloudKassir;
+use App\Payments\PaymentSettings;
 use App\Payments\ReceiptBuilder;
 use App\Payments\YooKassaGateway;
 use App\Support\Fulfillment;
@@ -21,22 +23,31 @@ use RuntimeException;
  *
  * Первый чек «предоплата 100%» уходит вместе с оплатой. Когда покупатель
  * забрал заказ (статус «Получен» — от службы или вручную), сюда приходит
- * расписание и отправляет в ЮKassa закрывающий чек по тому же платежу:
- * те же суммы, у каждой штуки — её КИЗ. Чек уходит через ОФД в налоговую и
- * в Честный знак, и коды выводятся из оборота.
+ * расписание и отправляет закрывающий чек по тому же платежу: те же суммы,
+ * у каждой штуки — её КИЗ. Чек уходит через ОФД в налоговую и в Честный
+ * знак, и коды выводятся из оборота.
+ *
+ * Куда отправлять, решает платёж: оплату ЮKassa закрывает чек ЮKassa,
+ * оплату Точки — чек CloudKassir (касса, подключённая к эквайрингу Точки).
  *
  * Повтор безопасен: на заказ одна запись closing и постоянный ключ повтора —
- * обрыв связи не создаст второй чек. Отказ ЮKassa сам не повторяется: его
+ * обрыв связи не создаст второй чек. Отказ кассы сам не повторяется: его
  * видно в заказе и в мониторинге, повтор — receipts:sync --retry=НОМЕР.
  */
 class ReceiptService
 {
-    public function __construct(private readonly YooKassaGateway $kassa) {}
+    /** Провайдеры, чьи оплаты сайт умеет закрывать вторым чеком и возвращать. */
+    public const GATEWAYS = [PaymentSettings::YOOKASSA, PaymentSettings::TOCHKA];
 
-    /** Оплата заказа в ЮKassa, по которой пробивались чеки. */
+    public function __construct(
+        private readonly YooKassaGateway $kassa,
+        private readonly CloudKassir $cloud,
+    ) {}
+
+    /** Оплата заказа (ЮKassa или Точка), по которой пробивались чеки. */
     public function payment(Order $order): ?Payment
     {
-        return $order->payments()->where('gateway', 'yookassa')->where('status', Payment::STATUS_SUCCEEDED)
+        return $order->payments()->whereIn('gateway', self::GATEWAYS)->where('status', Payment::STATUS_SUCCEEDED)
             ->whereNotNull('external_id')->latest('id')->first();
     }
 
@@ -76,7 +87,10 @@ class ReceiptService
                 ->whereIn('status', [OrderReceipt::PENDING, OrderReceipt::SUCCEEDED, OrderReceipt::CANCELED]))
             ->whereDoesntHave('receipts', fn ($q) => $q->where('kind', OrderReceipt::KIND_REFUND)
                 ->whereIn('status', [OrderReceipt::PENDING, OrderReceipt::SUCCEEDED]))
-            ->whereHas('payments', fn ($q) => $q->where('gateway', 'yookassa')->where('status', Payment::STATUS_SUCCEEDED))
+            // Оплаты Точки ждут, пока заданы ключи CloudKassir: без них чек
+            // не отправить, а отказ пришлось бы потом повторять по каждому заказу.
+            ->whereHas('payments', fn ($q) => $q->whereIn('gateway', $this->cloud->isConfigured() ? self::GATEWAYS : [PaymentSettings::YOOKASSA])
+                ->where('status', Payment::STATUS_SUCCEEDED))
             ->oldest('fulfillment_status_at')
             ->limit($limit)
             ->get();
@@ -87,7 +101,7 @@ class ReceiptService
     {
         $payment = $this->payment($order);
         if (! $payment) {
-            throw new RuntimeException('По заказу '.$order->number.' нет оплаты ЮKassa — второй чек не нужен или пробивается вручную.');
+            throw new RuntimeException('По заказу '.$order->number.' нет оплаты через сайт — второй чек не нужен или пробивается вручную.');
         }
 
         $record = DB::transaction(function () use ($order): OrderReceipt {
@@ -111,7 +125,10 @@ class ReceiptService
                 number_format($total / 100, 2, ',', ' '), number_format($payment->amount / 100, 2, ',', ' ')), $order);
         }
         if (count($items) > 80) {
-            return $this->rejected($record, 'В чеке больше 80 строк — ЮKassa столько не принимает. Пробейте чек вручную.', $order);
+            return $this->rejected($record, 'В чеке больше 80 строк — касса столько не принимает. Пробейте чек вручную.', $order);
+        }
+        if ($payment->gateway === PaymentSettings::TOCHKA) {
+            return $this->sendToCloudKassir($record, $order, CloudKassir::INCOME, $items, 'AdvancePayment', $total);
         }
 
         $body = [
@@ -140,7 +157,73 @@ class ReceiptService
         return $this->applyAnswer($record, $answer);
     }
 
-    /** Повтор отказанного чека — с новым ключом (старый ЮKassa запомнила как отказ). */
+    /**
+     * Чек возврата через CloudKassir — для возврата по оплате Точки, если
+     * чеки возврата пробивает сайт («Интеграции оплаты»). Отдельная запись:
+     * деньги уже вернулись, а чек живёт своей жизнью и может не пройти.
+     *
+     * @param  list<array<string, mixed>>  $items  строки в формате ReceiptBuilder
+     */
+    public function sendRefundReceipt(Order $order, array $items, int $amount): OrderReceipt
+    {
+        $previous = $order->receipt(OrderReceipt::KIND_REFUND_RECEIPT);
+        if ($previous && in_array($previous->status, [OrderReceipt::PENDING, OrderReceipt::SUCCEEDED], true)) {
+            return $previous;
+        }
+        $attempt = (int) ($previous?->response['attempt'] ?? 0) + ($previous?->status === OrderReceipt::NEW ? 0 : 1);
+        $record = OrderReceipt::query()->updateOrCreate(
+            ['order_id' => $order->id, 'kind' => OrderReceipt::KIND_REFUND_RECEIPT],
+            ['status' => OrderReceipt::NEW, 'external_id' => null, 'error' => null, 'response' => ['attempt' => $attempt], 'done_at' => null,
+                'idempotence_key' => self::key('refund-receipt/'.$order->id.'/'.$attempt), 'amount' => $amount],
+        );
+        if (! $this->cloud->isConfigured()) {
+            return $this->rejected($record, 'Не заданы ключи CloudKassir — чек возврата пробейте в кабинете CloudKassir.', $order);
+        }
+
+        return $this->sendToCloudKassir($record, $order, CloudKassir::INCOME_RETURN, $items, 'Electronic', $amount);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     */
+    private function sendToCloudKassir(OrderReceipt $record, Order $order, string $type, array $items, string $settlement, int $total): OrderReceipt
+    {
+        try {
+            $body = $this->cloud->body($order, $type, $items, $settlement);
+        } catch (RuntimeException $exception) {
+            return $this->rejected($record, $exception->getMessage(), $order);
+        }
+        if (CloudKassir::total($body) !== $total) {
+            return $this->rejected($record, 'Сумма чека не сходится с оплатой — пробейте чек вручную в кабинете CloudKassir.', $order);
+        }
+        $record->update(['payload' => $body + ['provider' => 'cloudkassir'], 'amount' => $total]);
+        if ($type === CloudKassir::INCOME) {
+            $this->warnMissingMarks($order);
+        }
+
+        try {
+            $model = $this->cloud->send($body, $record->idempotence_key);
+        } catch (ConnectionException $exception) {
+            // Сеть: запись остаётся «new», повтор пойдёт с тем же X-Request-ID.
+            $record->update(['error' => mb_substr('Нет связи с CloudKassir: '.$exception->getMessage(), 0, 500)]);
+
+            return $record;
+        } catch (RuntimeException $exception) {
+            return $this->rejected($record, $exception->getMessage(), $order);
+        }
+
+        $record->update([
+            'external_id' => (string) $model['Id'],
+            'status' => OrderReceipt::PENDING,
+            'response' => $model + ['attempt' => $record->response['attempt'] ?? 1],
+            'sent_at' => $record->sent_at ?? now(),
+            'error' => filled($model['Warning'] ?? null) ? mb_substr('CloudKassir предупреждает: '.$model['Warning'], 0, 500) : null,
+        ]);
+
+        return $record;
+    }
+
+    /** Повтор отказанного чека — с новым ключом (старый касса запомнила как отказ). */
     public function retry(Order $order): OrderReceipt
     {
         $record = $order->receipt(OrderReceipt::KIND_CLOSING);
@@ -156,14 +239,40 @@ class ReceiptService
         return $this->sendClosing($order);
     }
 
-    /** Узнать у ЮKassa, чем закончился чек в обработке. */
+    /** Узнать у кассы, чем закончился чек в обработке. */
     public function refresh(OrderReceipt $record): OrderReceipt
     {
-        if ($record->kind !== OrderReceipt::KIND_CLOSING || ! $record->external_id || $record->status !== OrderReceipt::PENDING) {
+        if (! in_array($record->kind, [OrderReceipt::KIND_CLOSING, OrderReceipt::KIND_REFUND_RECEIPT], true)
+            || ! $record->external_id || $record->status !== OrderReceipt::PENDING) {
             return $record;
+        }
+        if (($record->payload['provider'] ?? null) === 'cloudkassir') {
+            return $this->applyCloudKassir($record, $this->cloud->status($record->external_id));
         }
 
         return $this->applyAnswer($record, $this->kassa->receipt($record->external_id));
+    }
+
+    private function applyCloudKassir(OrderReceipt $record, string $state): OrderReceipt
+    {
+        $status = match ($state) {
+            'Processed' => OrderReceipt::SUCCEEDED,
+            'Error' => OrderReceipt::CANCELED,
+            // Чек ещё не дошёл до очереди — подождём; час спустя его уже не будет.
+            'NotFound' => $record->sent_at && $record->sent_at->lt(now()->subHour()) ? OrderReceipt::CANCELED : OrderReceipt::PENDING,
+            default => OrderReceipt::PENDING,
+        };
+        $record->update([
+            'status' => $status,
+            'response' => array_merge((array) $record->response, ['state' => $state]),
+            'done_at' => $status === OrderReceipt::SUCCEEDED ? now() : null,
+            'error' => $status === OrderReceipt::CANCELED ? 'CloudKassir не пробил чек — проверьте в кабинете CloudKassir' : $record->error,
+        ]);
+        if ($status === OrderReceipt::CANCELED) {
+            Log::error('Чек не пробит в CloudKassir.', ['order' => $record->order?->number, 'kind' => $record->kind, 'receipt' => $record->external_id]);
+        }
+
+        return $record;
     }
 
     /** @param array<string, mixed> $answer */

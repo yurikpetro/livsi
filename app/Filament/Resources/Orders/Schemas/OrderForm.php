@@ -148,7 +148,7 @@ class OrderForm
                                 $record->payments->isEmpty()
                                     ? 'Попыток оплаты не было'
                                     : $record->payments
-                                        ->map(fn ($p) => e($p->statusLabel())
+                                        ->map(fn ($p) => e(($p->gateway === 'tochka' ? 'Точка' : 'ЮKassa').' · '.$p->statusLabel())
                                             .' · '.e(Money::rub($p->amount))
                                             .' · '.e($p->external_id ?? 'без номера')
                                             .' · '.$p->created_at->format('d.m.Y H:i'))
@@ -210,7 +210,8 @@ class OrderForm
     private static function receiptsText(Order $record): string
     {
         $lines = [];
-        foreach ([OrderReceipt::KIND_CLOSING => 'Чек «полный расчёт» с КИЗ', OrderReceipt::KIND_REFUND => 'Возврат денег'] as $kind => $title) {
+        foreach ([OrderReceipt::KIND_CLOSING => 'Чек «полный расчёт» с КИЗ', OrderReceipt::KIND_REFUND => 'Возврат денег',
+            OrderReceipt::KIND_REFUND_RECEIPT => 'Чек возврата'] as $kind => $title) {
             $receipt = $record->receipt($kind);
             if (! $receipt) {
                 continue;

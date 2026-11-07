@@ -8,7 +8,10 @@ use App\Models\OrderFulfillmentEvent;
 use App\Models\OrderReceipt;
 use App\Models\StockQuota;
 use App\Models\StockQuotaMovement;
+use App\Models\Payment;
+use App\Payments\PaymentSettings;
 use App\Payments\ReceiptBuilder;
+use App\Payments\TochkaClient;
 use App\Payments\YooKassaGateway;
 use App\Support\Fulfillment;
 use Illuminate\Http\Client\ConnectionException;
@@ -16,16 +19,21 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
+use Throwable;
 
 /**
  * «Отменить заказ и вернуть деньги» — только из админки.
  *
  * 1. Пока посылка не передана, заявка у службы снимается. Не снялась —
  *    деньги не трогаем: иначе служба повезёт неоплаченный заказ.
- * 2. Возврат всей суммы через ЮKassa. Если второй чек уже был (покупатель
- *    получал заказ), к возврату прикладывается чек с теми же КИЗ — коды
- *    вернутся в оборот. Если не было — ЮKassa сама пробьёт возврат предоплаты.
- * 3. Когда ЮKassa подтвердила: заказ «Возвращён», не отгруженный товар —
+ * 2. Возврат всей суммы через того, кто принимал оплату.
+ *    ЮKassa: если второй чек уже был (покупатель получал заказ), к возврату
+ *    прикладывается чек с теми же КИЗ — коды вернутся в оборот. Если не было —
+ *    ЮKassa сама пробьёт возврат предоплаты.
+ *    Точка: деньги возвращает банк; чек возврата пробивает сайт через
+ *    CloudKassir, если это включено в «Интеграциях оплаты» (иначе — связка
+ *    Точка — CloudKassir или владелец вручную).
+ * 3. Когда возврат подтверждён: заказ «Возвращён», не отгруженный товар —
  *    обратно в квоту сайта, КИЗ освобождаются (их можно сканировать в другой
  *    заказ; список остаётся в записи возврата).
  */
@@ -35,6 +43,7 @@ class RefundService
         private readonly YooKassaGateway $kassa,
         private readonly DirectShipmentService $shipments,
         private readonly ReceiptService $receipts,
+        private readonly TochkaClient $tochka,
     ) {}
 
     /** Что сказать администратору перед возвратом. */
@@ -78,11 +87,11 @@ class RefundService
         }
         $payment = $this->receipts->payment($order);
         if (! $payment) {
-            $this->fail('По заказу нет оплаты через ЮKassa — вернуть деньги отсюда нельзя.');
+            $this->fail('По заказу нет оплаты через сайт — вернуть деньги отсюда нельзя.');
         }
         $closing = $order->receipt(OrderReceipt::KIND_CLOSING);
         if ($closing && in_array($closing->status, [OrderReceipt::NEW, OrderReceipt::PENDING], true) && $closing->sent_at) {
-            $this->fail('Второй чек ещё обрабатывается в ЮKassa — повторите через несколько минут.');
+            $this->fail('Второй чек ещё обрабатывается в кассе — повторите через несколько минут.');
         }
 
         // Пока посылка не передана — снять заявку у службы. Не вышло — стоп.
@@ -113,11 +122,15 @@ class RefundService
             $this->fail('Покупатель не платил за доставку — удерживать нечего. Верните всю сумму.');
         }
         $amount = (int) $payment->amount - $keep;
+        $tochka = $payment->gateway === PaymentSettings::TOCHKA;
         // Чек возврата. Полный возврат до второго чека ЮKassa пробьёт сама. После
         // второго чека — свой, с КИЗ; при удержании доставки — свой без строки доставки.
+        // По оплате Точки чек нужен, только если его пробивает сайт.
+        $siteReceipt = $tochka && PaymentSettings::siteRefundReceipts();
         $items = match (true) {
+            $tochka && ! $siteReceipt => null,
             $closing?->status === OrderReceipt::SUCCEEDED => $builder->closingItems(),
-            $keep > 0 => $builder->build()['items'],
+            $keep > 0 || $siteReceipt => $builder->build()['items'],
             default => null,
         };
         if ($items !== null && $keep > 0) {
@@ -125,6 +138,9 @@ class RefundService
         }
         if ($items !== null && ReceiptBuilder::sum($items) !== $amount) {
             $this->fail('Сумма чека возврата не сходится с суммой возврата. Верните всю сумму или пробейте чек вручную.');
+        }
+        if ($tochka) {
+            return $this->refundTochka($order, $payment, $previous, $amount, $keep, $items, $reason, $by, $unqueued, $previousState);
         }
         $receipt = $items !== null ? ['customer' => $builder->customer(), 'items' => $items] : null;
         // Прошлая попытка оборвалась на связи (итог неизвестен) — повторяем с тем же
@@ -160,6 +176,97 @@ class RefundService
         ]);
 
         return $this->apply($refund, $answer);
+    }
+
+    /**
+     * Возврат по оплате Точки.
+     *
+     * Ключа повтора у Точки нет, поэтому перед возвратом спрашиваем у банка,
+     * не было ли уже возврата по этому платежу (прошлая попытка оборвалась на
+     * связи или деньги вернули в кабинете банка). Был — второй не делаем.
+     *
+     * @param  list<array<string, mixed>>|null  $items  строки чека возврата, если его пробивает сайт
+     */
+    private function refundTochka(Order $order, Payment $payment, ?OrderReceipt $previous, int $amount, int $keep, ?array $items,
+        string $reason, string $by, bool $unqueued, ?string $previousState): OrderReceipt
+    {
+        $restore = function () use ($order, $unqueued, $previousState): void {
+            if ($unqueued) {
+                // Деньги не вернулись — заказ снова ждёт отправления, как до нажатия.
+                $order->forceFill(['shipment_state' => $previousState, 'shipment_status_name' => null])->save();
+            }
+        };
+        $attempt = (int) ($previous?->payload['attempt'] ?? 0) + ($previous?->status === OrderReceipt::NEW ? 0 : 1);
+        $refund = OrderReceipt::query()->updateOrCreate(
+            ['order_id' => $order->id, 'kind' => OrderReceipt::KIND_REFUND],
+            ['status' => OrderReceipt::NEW, 'external_id' => null, 'error' => null, 'response' => null, 'done_at' => null,
+                'idempotence_key' => ReceiptService::key('refund/'.$order->id.'/'.$attempt), 'amount' => $amount, 'created_by' => mb_substr($by, 0, 120),
+                'payload' => ['reason' => mb_substr($reason, 0, 500), 'attempt' => $attempt, 'with_receipt' => $items !== null,
+                    'kept_delivery' => $keep, 'provider' => PaymentSettings::TOCHKA]],
+        );
+
+        try {
+            $operation = $this->tochka->payment((string) $payment->external_id);
+        } catch (Throwable $exception) {
+            $restore();
+            $refund->update(['error' => mb_substr('Не удалось проверить платёж у Точки: '.$exception->getMessage(), 0, 500)]);
+            $this->fail('Точка не ответила на проверку платежа — деньги не возвращены. Повторите через минуту.');
+        }
+        $done = array_values(array_filter((array) ($operation['Order'] ?? []), fn ($row): bool => is_array($row) && ($row['type'] ?? '') === 'refund'));
+        $status = strtoupper((string) ($operation['status'] ?? ''));
+
+        if ($done !== [] || in_array($status, ['ON-REFUND', 'REFUNDED', 'REFUNDED_PARTIALLY'], true)) {
+            // Возврат уже есть у банка — второй не делаем, фиксируем тот, что был.
+            $returned = (int) round(array_sum(array_map(fn (array $row): float => (float) ($row['amount'] ?? 0), $done)) * 100);
+            $answer = ['isRefund' => true, 'orderId' => $done[0]['orderId'] ?? null, 'amount' => $returned ?: $amount / 100, 'found' => true, 'status' => $status];
+            $amount = $returned ?: $amount;
+        } elseif ($status !== 'APPROVED') {
+            $restore();
+            $refund->update(['status' => OrderReceipt::CANCELED, 'error' => 'Платёж у Точки в статусе '.$status.' — возврат невозможен.']);
+            $this->fail('Платёж у Точки в статусе '.$status.' — вернуть деньги по нему нельзя.');
+        } else {
+            try {
+                $answer = $this->tochka->refund((string) $payment->external_id, $amount);
+            } catch (ConnectionException $exception) {
+                $refund->update(['error' => 'Нет связи с Точкой — итог неизвестен. Нажмите возврат ещё раз: сайт сначала спросит банк, второго возврата не будет.']);
+                $this->fail('Нет связи с Точкой. Нажмите «Вернуть деньги» ещё раз через минуту — сайт сначала спросит у банка, прошёл ли возврат, второго не будет.');
+            } catch (RuntimeException $exception) {
+                $restore();
+                $refund->update(['status' => OrderReceipt::CANCELED, 'error' => mb_substr($exception->getMessage(), 0, 500)]);
+                $this->fail('Точка не приняла возврат: '.mb_substr($exception->getMessage(), 0, 200));
+            }
+            if (($answer['isRefund'] ?? false) !== true) {
+                $restore();
+                $refund->update(['status' => OrderReceipt::CANCELED, 'response' => $answer, 'error' => 'Точка ответила, что возврат не проведён.']);
+                $this->fail('Точка ответила, что возврат не проведён. Проверьте платёж в интернет-банке.');
+            }
+        }
+
+        OrderFulfillmentEvent::create([
+            'order_id' => $order->id, 'user_id' => auth()->id(),
+            'status' => Fulfillment::current($order) ?? Fulfillment::AWAITING,
+            'source' => OrderFulfillmentEvent::SOURCE_MANUAL,
+            'comment' => mb_substr('Отмена заказа, возврат '.number_format($amount / 100, 2, ',', ' ').' ₽ через Точку'
+                .($keep ? ' (без доставки '.number_format($keep / 100, 2, ',', ' ').' ₽)' : '').': '.$reason.' · '.$by, 0, 500),
+        ]);
+        $refund->update([
+            'status' => OrderReceipt::SUCCEEDED, 'external_id' => $answer['orderId'] ?? null, 'response' => $answer,
+            'amount' => $amount, 'sent_at' => now(), 'error' => null,
+        ]);
+        $this->finish($refund);
+
+        // Чек возврата — после денег: деньги уже у покупателя, а чек при отказе
+        // кассы повторяется отдельно (его видно в заказе). Уже пробитый
+        // (прошлая попытка) второй раз не уйдёт.
+        if ($items !== null) {
+            try {
+                $this->receipts->sendRefundReceipt($order, $items, $amount);
+            } catch (Throwable $exception) {
+                Log::error('Чек возврата не отправлен.', ['order' => $order->number, 'error' => mb_substr($exception->getMessage(), 0, 300)]);
+            }
+        }
+
+        return $refund->fresh();
     }
 
     /** Узнать у ЮKassa, чем закончился возврат в обработке. */
