@@ -110,13 +110,19 @@ class CloudKassir
         return $model + ['Warning' => $json['Warning'] ?? null];
     }
 
-    /** Queued — в очереди, Processed — пробит, Error — не пробит, NotFound — нет такого. */
-    public function status(string $id): string
+    /**
+     * Итог чека: state — Queued (в очереди), Processed (пробит), Error (не пробит),
+     * NotFound (нет такого); message — причина ошибки от кассы.
+     *
+     * @return array{state: string, message: ?string}
+     */
+    public function status(string $id): array
     {
         $json = $this->json($this->client()->retry(2, 500, fn ($exception) => $exception instanceof ConnectionException, throw: false)
             ->post('kkt/receipt/status/get', ['Id' => $id]), 'статус чека');
+        $message = trim((string) ($json['Message'] ?? ''));
 
-        return (string) ($json['Model'] ?? '');
+        return ['state' => (string) ($json['Model'] ?? ''), 'message' => $message !== '' ? $message : null];
     }
 
     /** Проверка ключей: ничего не пробивает. */

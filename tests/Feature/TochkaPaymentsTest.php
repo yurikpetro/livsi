@@ -345,6 +345,26 @@ class TochkaPaymentsTest extends TestCase
         $this->assertSame(OrderReceipt::SUCCEEDED, app(ReceiptService::class)->refresh($record->fresh())->status);
     }
 
+    public function test_cloudkassir_reason_and_long_queue_are_shown_in_the_order(): void
+    {
+        $order = $this->delivered($this->order());
+        $record = OrderReceipt::create(['order_id' => $order->id, 'kind' => OrderReceipt::KIND_CLOSING, 'status' => OrderReceipt::PENDING,
+            'external_id' => 'ck-wait-1', 'idempotence_key' => (string) Str::uuid(), 'amount' => 208000,
+            'payload' => ['provider' => 'cloudkassir'], 'sent_at' => now()->subMinutes(31)]);
+
+        Http::fake([self::KASSA.'kkt/receipt/status/get' => Http::sequence()
+            ->push(['Success' => true, 'Model' => 'Queued', 'Message' => null])
+            ->push(['Success' => true, 'Model' => 'Error', 'Message' => 'Требуется ККТ с ФФД 1.2 и режимом маркированные товары'])]);
+
+        $this->artisan('receipts:sync')->expectsOutputToContain($order->number.': второй чек — обрабатывается (CloudKassir держит чек в очереди')->assertSuccessful();
+        $this->assertSame(OrderReceipt::PENDING, $record->fresh()->status);
+
+        app(ReceiptService::class)->refresh($record->fresh());
+        $record->refresh();
+        $this->assertSame(OrderReceipt::CANCELED, $record->status);
+        $this->assertSame('CloudKassir не пробил чек: Требуется ККТ с ФФД 1.2 и режимом маркированные товары', $record->error);
+    }
+
     public function test_receipt_rejected_by_cloudkassir_is_visible_and_not_repeated(): void
     {
         $order = $this->delivered($this->order());

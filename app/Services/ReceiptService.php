@@ -247,13 +247,15 @@ class ReceiptService
             return $record;
         }
         if (($record->payload['provider'] ?? null) === 'cloudkassir') {
-            return $this->applyCloudKassir($record, $this->cloud->status($record->external_id));
+            $answer = $this->cloud->status($record->external_id);
+
+            return $this->applyCloudKassir($record, $answer['state'], $answer['message']);
         }
 
         return $this->applyAnswer($record, $this->kassa->receipt($record->external_id));
     }
 
-    private function applyCloudKassir(OrderReceipt $record, string $state): OrderReceipt
+    private function applyCloudKassir(OrderReceipt $record, string $state, ?string $message = null): OrderReceipt
     {
         $status = match ($state) {
             'Processed' => OrderReceipt::SUCCEEDED,
@@ -262,11 +264,21 @@ class ReceiptService
             'NotFound' => $record->sent_at && $record->sent_at->lt(now()->subHour()) ? OrderReceipt::CANCELED : OrderReceipt::PENDING,
             default => OrderReceipt::PENDING,
         };
+        // Обычно касса пробивает за секунды. Полчаса в очереди — что-то не так
+        // у кассы: видно в заказе, чтобы не гадать, почему чека нет.
+        $stuck = $status === OrderReceipt::PENDING && $record->sent_at && $record->sent_at->lt(now()->subMinutes(30));
+        $error = match (true) {
+            $status === OrderReceipt::CANCELED => mb_substr('CloudKassir не пробил чек: '.($message ?? ($state === 'NotFound' ? 'чек не найден' : 'причина в кабинете CloudKassir')), 0, 500),
+            $stuck => 'CloudKassir держит чек в очереди с '.$record->sent_at->timezone('Europe/Moscow')->format('d.m H:i')
+                .' — напишите в поддержку CloudKassir (номер заказа '.($record->order?->number ?? '').')',
+            $status === OrderReceipt::SUCCEEDED => null,
+            default => $record->error,
+        };
         $record->update([
             'status' => $status,
-            'response' => array_merge((array) $record->response, ['state' => $state]),
+            'response' => array_merge((array) $record->response, ['state' => $state, 'message' => $message]),
             'done_at' => $status === OrderReceipt::SUCCEEDED ? now() : null,
-            'error' => $status === OrderReceipt::CANCELED ? 'CloudKassir не пробил чек — проверьте в кабинете CloudKassir' : $record->error,
+            'error' => $error,
         ]);
         if ($status === OrderReceipt::CANCELED) {
             Log::error('Чек не пробит в CloudKassir.', ['order' => $record->order?->number, 'kind' => $record->kind, 'receipt' => $record->external_id]);
