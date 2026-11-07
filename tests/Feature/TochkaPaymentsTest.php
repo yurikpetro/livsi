@@ -534,6 +534,35 @@ class TochkaPaymentsTest extends TestCase
         $this->assertSame(OrderReceipt::CANCELED, $order->receipt(OrderReceipt::KIND_REFUND)->status);
     }
 
+    public function test_livsipro_card_shows_payment_receipts_and_delivery_without_contacts(): void
+    {
+        config(['livsi.livsipro.token' => str_repeat('t', 48), 'livsi.livsipro.ips' => []]);
+        $order = $this->delivered($this->order(['delivery_quote' => ['direct' => true, 'provider' => 'cdek', 'tariff_id' => '136',
+            'tariff_name' => 'Посылка склад-склад', 'carrier_cost' => 30000, 'days_min' => 2, 'days_max' => 4,
+            'parcel' => ['weight' => 700, 'length' => 12, 'width' => 12, 'height' => 20]]]));
+        $order->payments()->first()->update(['payment_method' => 'sbp', 'paid_at' => now()->subDay()]);
+        OrderReceipt::create(['order_id' => $order->id, 'kind' => OrderReceipt::KIND_CLOSING, 'status' => OrderReceipt::CANCELED,
+            'idempotence_key' => (string) Str::uuid(), 'amount' => 208000, 'payload' => ['provider' => 'cloudkassir'], 'sent_at' => now(),
+            'error' => 'CloudKassir не пробил чек: Требуется ККТ с ФФД 1.2 и режимом маркированные товары']);
+
+        $json = $this->withHeader('Authorization', 'Bearer '.str_repeat('t', 48))->getJson('/api/livsipro/orders/'.$order->number)
+            ->assertOk()->json('order');
+
+        $this->assertSame(['provider' => 'Точка Банк', 'status' => 'Оплачен', 'paid' => true, 'method' => 'СБП', 'amount' => 208000],
+            array_intersect_key($json['payment'], array_flip(['provider', 'status', 'paid', 'method', 'amount'])));
+        $this->assertSame('Предоплата 100 % — пробит при оплате', $json['receipts']['first']);
+        $this->assertSame(['canceled', 'не прошло'], [$json['receipts']['closing']['state'], $json['receipts']['closing']['label']]);
+        $this->assertStringContainsString('маркированные товары', $json['receipts']['closing']['error']);
+        $this->assertSame(['Посылка склад-склад', 2, 4, 700, [12, 12, 20], 'MSK305'], [$json['delivery_info']['tariff'],
+            $json['delivery_info']['days_min'], $json['delivery_info']['days_max'], $json['delivery_info']['weight'],
+            $json['delivery_info']['size'], $json['delivery_info']['point_id']]);
+        $this->assertSame(['items' => 178000, 'discount' => 0, 'delivery' => 30000, 'total' => 208000], $json['money']);
+        $this->assertSame([89000, 178000], [$json['items'][0]['price'], $json['items'][0]['total']]);
+        $text = json_encode($json, JSON_UNESCAPED_UNICODE);
+        $this->assertStringNotContainsString('anna@example.com', $text);
+        $this->assertStringNotContainsString('9001112233', $text);
+    }
+
     // ------------------------------------------------------------ админка
 
     public function test_check_finds_the_company_code_by_itself(): void
