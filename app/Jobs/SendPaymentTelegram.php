@@ -41,10 +41,17 @@ class SendPaymentTelegram implements ShouldBeUnique, ShouldQueue
                 throw new RuntimeException('Не задан TELEGRAM_TOPIC_PAYMENTS: отправка в общую ленту запрещена.');
             }
 
-            $telegram->send($report->toHtml($payment), 'payments');
+            $telegram->send($report->toHtml($payment), 'payments', SendBusinessTelegram::WAIT);
             $payment->update(['telegram_notified_at' => now()]);
         } catch (Throwable $e) {
             TelegramFailure::record($e, ['topic' => 'payments', 'payment_id' => $this->paymentId, 'attempt' => $this->attempts()]);
+
+            // Запрос ушёл, ответ не дождались — сообщение, скорее всего, в группе: второго не шлём.
+            if (Telegram::maybeDelivered($e)) {
+                Payment::whereKey($this->paymentId)->whereNull('telegram_notified_at')->update(['telegram_notified_at' => now()]);
+
+                return;
+            }
 
             // Не бросаем исключение в общий обработчик: он сам пишет в Telegram.
             if ($this->job && $this->attempts() < $this->tries) {

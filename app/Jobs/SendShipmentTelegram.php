@@ -48,7 +48,15 @@ class SendShipmentTelegram implements ShouldBeUnique, ShouldQueue
             if (! $telegram->topic('shipments')) {
                 throw new RuntimeException('Не задан TELEGRAM_TOPIC_SHIPMENTS: отправка в общую ленту запрещена.');
             }
-            $telegram->send($notifications->toHtml($order), 'shipments');
+            try {
+                $telegram->send($notifications->toHtml($order), 'shipments', SendBusinessTelegram::WAIT);
+            } catch (Throwable $exception) {
+                // Запрос ушёл, ответ не дождались — сообщение, скорее всего, в группе: второго не шлём.
+                if (! Telegram::maybeDelivered($exception)) {
+                    throw $exception;
+                }
+                TelegramFailure::record($exception, ['topic' => 'shipments', 'order_id' => $this->orderId, 'attempt' => $this->attempts()]);
+            }
             $order->forceFill(['shipment_notified_key' => $order->shipment_event_key, 'shipment_notified_at' => now()])->save();
         } catch (Throwable $exception) {
             TelegramFailure::record($exception, ['topic' => 'shipments', 'order_id' => $this->orderId, 'attempt' => $this->attempts()]);

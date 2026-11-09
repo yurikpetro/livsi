@@ -18,6 +18,9 @@ class SendBusinessTelegram implements ShouldQueue
 
     public int $timeout = 30;
 
+    /** Сколько ждать ответа Телеграма: задание фоновое, торопиться некуда. */
+    public const WAIT = 20.0;
+
     public function __construct(public string $kind, public int $recordId, public string $topic, public ?string $detail = null) {}
 
     public function handle(Telegram $telegram, BusinessReport $report): void
@@ -32,11 +35,12 @@ class SendBusinessTelegram implements ShouldQueue
                 return;
             }
 
-            $telegram->send($message, $this->topic);
+            $telegram->send($message, $this->topic, self::WAIT);
         } catch (Throwable $e) {
             TelegramFailure::record($e, ['topic' => $this->topic, 'kind' => $this->kind, 'record_id' => $this->recordId, 'attempt' => $this->attempts()]);
 
-            if ($this->job && $this->attempts() < $this->tries) {
+            // Запрос ушёл, ответ не дождались — сообщение, скорее всего, в группе. Не дублируем.
+            if ($this->job && $this->attempts() < $this->tries && ! Telegram::maybeDelivered($e)) {
                 try {
                     $this->release($this->attempts() * 60);
                 } catch (Throwable $releaseError) {
