@@ -6,6 +6,7 @@ use App\Delivery\DirectShipmentService;
 use App\Models\Order;
 use App\Models\OrderFulfillmentEvent;
 use App\Models\OrderReceipt;
+use App\Models\OrderReturn;
 use App\Models\StockQuota;
 use App\Models\StockQuotaMovement;
 use App\Models\Payment;
@@ -13,6 +14,7 @@ use App\Payments\PaymentSettings;
 use App\Payments\ReceiptBuilder;
 use App\Payments\TochkaClient;
 use App\Payments\YooKassaGateway;
+use App\Support\Money;
 use App\Support\Fulfillment;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
@@ -179,6 +181,59 @@ class RefundService
     }
 
     /**
+     * Деньги за возврат покупателя после получения: за вернувшиеся позиции,
+     * с удержанием обратной доставки, если её оплачивает покупатель.
+     *
+     * Только по оплате Точки — она возвращает любую сумму, а чек возврата
+     * пробивает связка Точка — CloudKassir. ЮKassa требует чек ровно на сумму
+     * возврата, а удержание в чек не укладывается: такие заказы возвращают
+     * кнопкой «Отменить заказ и вернуть деньги», заявка закроется сама.
+     */
+    public function refundReturn(OrderReturn $return, int $amount, string $by): OrderReceipt
+    {
+        $order = Order::query()->findOrFail($return->order_id);
+        if (! in_array($return->status, [OrderReturn::APPROVED, OrderReturn::RECEIVED], true)) {
+            $this->fail('Деньги возвращают по подтверждённому возврату, когда товар пришёл.');
+        }
+        if ($order->status !== Order::STATUS_PAID) {
+            $this->fail('Вернуть деньги можно только по оплаченному заказу.');
+        }
+        $previous = $order->receipt(OrderReceipt::KIND_REFUND);
+        if ($previous && in_array($previous->status, [OrderReceipt::PENDING, OrderReceipt::SUCCEEDED], true)) {
+            $this->fail('Возврат денег по заказу уже оформлен.');
+        }
+        $payment = $this->receipts->payment($order);
+        if (! $payment) {
+            $this->fail('По заказу нет оплаты через сайт — вернуть деньги отсюда нельзя.');
+        }
+        if ($payment->gateway !== PaymentSettings::TOCHKA) {
+            $this->fail('Заказ оплачен через ЮKassa: верните деньги кнопкой «Отменить заказ и вернуть деньги» (вся сумма или без доставки) — заявка на возврат закроется сама.');
+        }
+        $paid = (int) $payment->amount;
+        if ($amount < 1 || $amount > $paid) {
+            $this->fail('Сумма возврата — от 0,01 ₽ до '.Money::rub($paid).'.');
+        }
+        $closing = $order->receipt(OrderReceipt::KIND_CLOSING);
+        if ($closing && in_array($closing->status, [OrderReceipt::NEW, OrderReceipt::PENDING], true) && $closing->sent_at) {
+            $this->fail('Второй чек ещё обрабатывается в кассе — повторите через несколько минут.');
+        }
+
+        $items = null;
+        if (PaymentSettings::siteRefundReceipts()) {
+            $qty = collect($return->items)->mapWithKeys(fn (array $row): array => [(int) $row['item_id'] => (int) $row['qty']])->all();
+            $items = (new ReceiptBuilder($order))->returnItems($qty, $return->deliveryRefund() > 0, $closing?->status === OrderReceipt::SUCCEEDED);
+            if (ReceiptBuilder::sum($items) !== $amount) {
+                $this->fail('Чек возврата сайт пробивает на полную стоимость вернувшегося — '.Money::rub(ReceiptBuilder::sum($items))
+                    .'. С удержанием за доставку пробейте чек вручную или верните без удержания.');
+            }
+        }
+
+        return $this->refundTochka($order, $payment, $previous, $amount, 0, $items,
+            $return->reasonLabel().($return->deduction() ? ', удержано за доставку '.Money::rub($return->deduction()) : ''),
+            $by, false, $order->shipment_state, $return);
+    }
+
+    /**
      * Возврат по оплате Точки.
      *
      * Ключа повтора у Точки нет, поэтому перед возвратом спрашиваем у банка,
@@ -188,7 +243,7 @@ class RefundService
      * @param  list<array<string, mixed>>|null  $items  строки чека возврата, если его пробивает сайт
      */
     private function refundTochka(Order $order, Payment $payment, ?OrderReceipt $previous, int $amount, int $keep, ?array $items,
-        string $reason, string $by, bool $unqueued, ?string $previousState): OrderReceipt
+        string $reason, string $by, bool $unqueued, ?string $previousState, ?OrderReturn $return = null): OrderReceipt
     {
         $restore = function () use ($order, $unqueued, $previousState): void {
             if ($unqueued) {
@@ -201,8 +256,9 @@ class RefundService
             ['order_id' => $order->id, 'kind' => OrderReceipt::KIND_REFUND],
             ['status' => OrderReceipt::NEW, 'external_id' => null, 'error' => null, 'response' => null, 'done_at' => null,
                 'idempotence_key' => ReceiptService::key('refund/'.$order->id.'/'.$attempt), 'amount' => $amount, 'created_by' => mb_substr($by, 0, 120),
-                'payload' => ['reason' => mb_substr($reason, 0, 500), 'attempt' => $attempt, 'with_receipt' => $items !== null,
-                    'kept_delivery' => $keep, 'provider' => PaymentSettings::TOCHKA]],
+                'payload' => array_filter(['reason' => mb_substr($reason, 0, 500), 'attempt' => $attempt, 'with_receipt' => $items !== null,
+                    'kept_delivery' => $keep, 'provider' => PaymentSettings::TOCHKA,
+                    'return_id' => $return?->id, 'partial' => $return?->partial ?: null], fn ($value) => $value !== null)],
         );
 
         try {
@@ -246,7 +302,8 @@ class RefundService
             'order_id' => $order->id, 'user_id' => auth()->id(),
             'status' => Fulfillment::current($order) ?? Fulfillment::AWAITING,
             'source' => OrderFulfillmentEvent::SOURCE_MANUAL,
-            'comment' => mb_substr('Отмена заказа, возврат '.number_format($amount / 100, 2, ',', ' ').' ₽ через Точку'
+            'comment' => mb_substr(($return ? 'Возврат товара '.$return->number.', вернули ' : 'Отмена заказа, возврат ')
+                .number_format($amount / 100, 2, ',', ' ').' ₽ через Точку'
                 .($keep ? ' (без доставки '.number_format($keep / 100, 2, ',', ' ').' ₽)' : '').': '.$reason.' · '.$by, 0, 500),
         ]);
         $refund->update([
@@ -306,6 +363,39 @@ class RefundService
     {
         DB::transaction(function () use ($refund): void {
             $order = Order::query()->lockForUpdate()->findOrFail($refund->order_id);
+            $returnId = $refund->payload['return_id'] ?? null;
+            $return = $returnId
+                ? OrderReturn::query()->lockForUpdate()->find($returnId)
+                : $order->returns()->whereIn('status', [OrderReturn::REQUESTED, OrderReturn::APPROVED, OrderReturn::RECEIVED])->lockForUpdate()->latest('id')->first();
+
+            // Возврат части заказа: заказ остаётся оплаченным, освобождаются
+            // только коды вернувшихся штук.
+            if ($return && $returnId && $return->partial) {
+                if ($refund->done_at) {
+                    return;
+                }
+                $order->load('items.marks');
+                $released = [];
+                foreach ($return->items as $row) {
+                    $item = $order->items->firstWhere('id', (int) $row['item_id']);
+                    if (! $item) {
+                        continue;
+                    }
+                    $marks = $item->marks->sortBy('id')->values();
+                    $from = (int) $item->quantity - (int) $row['qty'];
+                    foreach ($marks as $index => $mark) {
+                        if ($index >= $from) {
+                            $released[] = $mark->gtin.' '.$mark->serial;
+                            $mark->delete();
+                        }
+                    }
+                }
+                $refund->update(['done_at' => now(), 'payload' => array_merge($refund->payload ?? [], ['released_marks' => $released])]);
+                $this->closeReturn($return, (int) $refund->amount);
+
+                return;
+            }
+
             if ($order->status === Order::STATUS_REFUNDED) {
                 return;
             }
@@ -333,7 +423,19 @@ class RefundService
             // Его нет ни в сборке, ни в доставке; история — в журнале заказа.
             $order->forceFill(array_merge(['status' => Order::STATUS_REFUNDED, 'cancelled_at' => $order->cancelled_at ?? now()],
                 $stayed ? ['fulfillment_status' => null, 'fulfillment_status_at' => now()] : []))->save();
+            // Деньги за весь заказ вернулись — открытая заявка на возврат закрыта,
+            // какой бы кнопкой ни возвращали.
+            if ($return && $return->isActive()) {
+                $this->closeReturn($return, (int) $refund->amount);
+            }
         });
+    }
+
+    /** Заявка на возврат закрыта деньгами; письмо покупателю — после записи. */
+    private function closeReturn(OrderReturn $return, int $amount): void
+    {
+        $return->update(['status' => OrderReturn::REFUNDED, 'refund_amount' => $amount, 'refunded_at' => now(), 'refund_error' => null]);
+        DB::afterCommit(fn () => app(OrderMailer::class)->returnUpdate($return->fresh(), 'refunded'));
     }
 
     private function fail(string $message): never

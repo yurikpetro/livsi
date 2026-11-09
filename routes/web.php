@@ -16,11 +16,13 @@ use App\Http\Controllers\LeadRequestController;
 use App\Http\Controllers\LegalPageController;
 use App\Http\Controllers\LineController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\OrderReturnController;
 use App\Http\Controllers\OzonClientCheckController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\TochkaWebhookController;
 use App\Http\Controllers\PrintOrderController;
+use App\Http\Controllers\ReturnPhotoController;
 use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\UnsubscribeController;
 use App\Http\Middleware\CaptureUtm;
@@ -99,8 +101,18 @@ Route::match(['get', 'post'], '/unsubscribe/{customer}', UnsubscribeController::
 // Заказ открывается по номеру и токену из письма: кабинета у гостя нет.
 Route::get('/order/{order}', [OrderController::class, 'show'])->name('order.show');
 
+// Возврат после получения: владелец аккаунта или ссылка с токеном из письма.
+Route::get('/order/{order}/return', [OrderReturnController::class, 'create'])->name('order.return');
+Route::post('/order/{order}/return', [OrderReturnController::class, 'store'])
+    ->middleware('throttle:10,60')
+    ->name('order.return.store');
+Route::post('/order/{order}/return/cancel', [OrderReturnController::class, 'cancel'])
+    ->middleware('throttle:20,60')
+    ->name('order.return.cancel');
+
 // Внутренний лист для комплектации заказа: проверка прав — в контроллере.
 Route::get('/admin/orders/{order}/print', PrintOrderController::class)->name('admin.orders.print');
+Route::get('/admin/returns/{return}/photos/{index}', ReturnPhotoController::class)->whereNumber('index')->name('admin.returns.photo');
 
 // Вебхук провайдера: без сессии и без проверки CSRF — запрос приходит
 // не из браузера. Защита — список адресов и перепроверка статуса по API.

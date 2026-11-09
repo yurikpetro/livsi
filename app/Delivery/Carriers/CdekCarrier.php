@@ -180,6 +180,8 @@ class CdekCarrier extends HttpCarrier
                 'city_code' => is_numeric($location['city_code'] ?? null) ? (int) $location['city_code'] : null,
                 'weight_max_g' => is_numeric($point['weight_max'] ?? null) && $point['weight_max'] > 0 ? (int) round($point['weight_max'] * 1000) : null,
                 'cells' => is_array($point['dimensions'] ?? null) && $point['dimensions'] ? array_values($point['dimensions']) : null,
+                // Принимает ли пункт посылки — нужно для возвратов: покупатель сдаёт товар туда.
+                'reception' => is_bool($point['is_reception'] ?? null) ? $point['is_reception'] : null,
             ], fn ($value) => $value !== null),
         ];
     }
@@ -437,6 +439,111 @@ class CdekCarrier extends HttpCarrier
         }
 
         throw new RuntimeException('СДЭК ещё готовит этикетку. Повторите через минуту.');
+    }
+
+    /**
+     * Клиентский возврат: покупатель сдаёт посылку в пункт СДЭК, она едет
+     * в наш пункт приёма (тот, куда сдаём заказы). Оплата — по нашему
+     * договору; номер заказа у СДЭК — номер заявки на возврат.
+     *
+     * Метод СДЭК «clientReturn» годится только для полного возврата заказа,
+     * который вёз СДЭК. Обычная регистрация с is_client_return подходит
+     * всем: частичному возврату и заказам других служб.
+     *
+     * @param  array{name: string, phone: string}  $sender  покупатель
+     * @param  array{name: string, phone: string}  $recipient  мы
+     * @param  array{weight: int, length: int, width: int, height: int}  $parcel
+     * @param  list<array{name: string, sku: string, cost: int, weight: int, amount: int}>  $items  cost — копейки за штуку
+     * @return array{external_id: string, tracking: ?string, status_code: ?string, status_name: ?string, cost: ?int}
+     */
+    public function createClientReturn(string $number, string $fromPoint, array $sender, array $recipient, array $parcel, array $items, string $comment): array
+    {
+        $response = $this->call('post', '/orders', [
+            'type' => 1,
+            'number' => $number,
+            'tariff_code' => (int) config('livsi.cdek.return_tariff', 136),
+            'is_client_return' => true,
+            'comment' => mb_substr($comment, 0, 255),
+            'shipment_point' => $fromPoint,
+            'delivery_point' => $this->origin(),
+            'sender' => ['name' => mb_substr($sender['name'], 0, 255), 'phones' => [['number' => $sender['phone']]]],
+            'recipient' => ['name' => mb_substr($recipient['name'], 0, 255), 'phones' => [['number' => $recipient['phone']]]],
+            'packages' => [['number' => '1', 'weight' => $parcel['weight'], 'length' => $parcel['length'],
+                'width' => $parcel['width'], 'height' => $parcel['height'],
+                'items' => array_map(fn (array $item): array => [
+                    'name' => mb_substr($item['name'], 0, 255),
+                    'ware_key' => mb_substr($item['sku'] ?: 'item', 0, 50),
+                    'payment' => ['value' => 0],
+                    'cost' => round($item['cost'] / 100, 2),
+                    'weight' => max(1, $item['weight']),
+                    'amount' => max(1, $item['amount']),
+                ], $items)]],
+        ], 40);
+        $this->rejectInvalid($response);
+        $uuid = $this->ok($response, 'создание возврата')->json('entity.uuid');
+        if (! is_string($uuid) || $uuid === '') {
+            throw new RuntimeException('СДЭК не вернул номер возврата.');
+        }
+
+        for ($i = 0; $i < 4; $i++) {
+            usleep((int) config('livsi.cdek.poll_microseconds', 1_200_000));
+            $info = $this->call('get', '/orders/'.$uuid);
+            if (! $info->successful()) {
+                continue;
+            }
+            $this->rejectInvalid($info);
+            if ($info->json('entity.cdek_number')) {
+                return ['external_id' => $uuid, ...$this->returnState($info->json())];
+            }
+        }
+
+        return ['external_id' => $uuid, 'tracking' => null, 'status_code' => 'ACCEPTED',
+            'status_name' => 'Принят СДЭК, номер присваивается', 'cost' => null];
+    }
+
+    /** Возврат по номеру заявки — если ответ на создание потерялся. */
+    public function findClientReturn(string $number): ?array
+    {
+        $response = $this->call('get', '/orders', ['im_number' => $number]);
+        if (in_array($response->status(), [400, 404], true)) {
+            return null;
+        }
+        $body = $this->ok($response, 'поиск возврата')->json();
+        foreach ((array) ($body['requests'] ?? []) as $request) {
+            if (($request['state'] ?? null) === 'INVALID') {
+                return null;
+            }
+        }
+        $uuid = $body['entity']['uuid'] ?? null;
+
+        return is_string($uuid) ? ['external_id' => $uuid, ...$this->returnState($body)] : null;
+    }
+
+    /** Где сейчас посылка возврата и сколько стоит перевозка. */
+    public function clientReturnInfo(string $uuid): array
+    {
+        $response = $this->call('get', '/orders/'.$uuid);
+        $this->rejectInvalid($response);
+
+        return $this->returnState($this->ok($response, 'статус возврата')->json());
+    }
+
+    /** @return array{tracking: ?string, status_code: ?string, status_name: ?string, cost: ?int} */
+    private function returnState(array $body): array
+    {
+        $state = $this->describe($body);
+        $detail = is_array($body['entity']['delivery_detail'] ?? null) ? $body['entity']['delivery_detail'] : [];
+
+        return ['tracking' => $state['tracking'], 'status_code' => $state['status_code'], 'status_name' => $state['status_name'],
+            'cost' => $this->kopecks($detail['total_sum'] ?? $detail['delivery_sum'] ?? null)];
+    }
+
+    /** Отменить возврат, пока посылку не сдали. */
+    public function cancelClientReturn(string $uuid): void
+    {
+        $response = $this->call('delete', '/orders/'.$uuid);
+        $this->rejectInvalid($response);
+        $this->ok($response, 'отмена возврата');
     }
 
     public function cancel(Order $order): void

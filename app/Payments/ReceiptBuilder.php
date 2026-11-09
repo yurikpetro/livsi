@@ -150,6 +150,66 @@ final class ReceiptBuilder
         return $items;
     }
 
+    /**
+     * Цены строки по штукам — как во втором чеке: поровну, остаток от
+     * деления — последней штуке. Возврат части строки берёт последние штуки.
+     *
+     * @return list<int>
+     */
+    public static function unitPrices(int $total, int $qty): array
+    {
+        if ($qty < 1) {
+            return [];
+        }
+        $per = intdiv(max(0, $total), $qty);
+        $prices = array_fill(0, $qty, $per);
+        $prices[$qty - 1] += max(0, $total) - $per * $qty;
+
+        return $prices;
+    }
+
+    /**
+     * Строки чека возврата для части заказа: возвращённые штуки (последние
+     * в строке) с их КИЗ, если второй чек был, и доставка — если её возвращаем.
+     *
+     * @param  array<int, int>  $qtyByItem  id позиции → сколько штук вернули
+     * @return list<array<string, mixed>>
+     */
+    public function returnItems(array $qtyByItem, bool $withDelivery, bool $closed): array
+    {
+        $this->order->loadMissing('items.marks');
+        $mode = $closed ? 'full_payment' : 'full_prepayment';
+        $items = [];
+        foreach ($this->order->items as $item) {
+            $back = min((int) ($qtyByItem[$item->id] ?? 0), (int) $item->quantity);
+            if ($back < 1 || (int) $item->total < 1) {
+                continue;
+            }
+            $vatCode = Vat::code($item->vat_rate);
+            $prices = self::unitPrices((int) $item->total, (int) $item->quantity);
+            $codes = $item->marks->sortBy('id')->pluck('code')->values()->all();
+            $plain = [];
+            for ($i = count($prices) - $back; $i < count($prices); $i++) {
+                $code = $codes[$i] ?? null;
+                if ($closed && is_string($code) && $code !== '') {
+                    $items[] = $this->line($item->label(), $prices[$i], 1, $vatCode, 'marked', $mode)
+                        + ['measure' => 'piece', 'mark_mode' => 0, 'mark_code_info' => ['gs_1m' => $code]];
+                } else {
+                    $plain[$prices[$i]] = ($plain[$prices[$i]] ?? 0) + 1;
+                }
+            }
+            foreach ($plain as $price => $count) {
+                $items[] = $this->line($item->label(), (int) $price, $count, $vatCode, 'commodity', $mode) + ['measure' => 'piece'];
+            }
+        }
+        if ($withDelivery && $this->order->delivery_price > 0) {
+            $items[] = $this->line('Доставка', $this->order->delivery_price, 1, Vat::code(Vat::defaultRate()), 'service', $mode)
+                + ['measure' => 'piece'];
+        }
+
+        return $items;
+    }
+
     /** Сумма строк чека в копейках. @param list<array<string, mixed>> $items */
     public static function sum(array $items): int
     {

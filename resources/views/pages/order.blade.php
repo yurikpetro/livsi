@@ -53,6 +53,8 @@
 
         @include('pages.partials.order-fulfillment', ['order' => $order])
 
+        @include('pages.partials.order-return', ['order' => $order])
+
         @guest
             @if ($canLinkAccount && $order->user_id === null)
                 {{-- «Аккаунт предлагаем создать уже после оформления, в один клик»

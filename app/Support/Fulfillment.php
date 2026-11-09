@@ -185,10 +185,17 @@ final class Fulfillment
         $flow = self::flow($order);
         $position = array_search($current, $flow, true);
 
-        // Время шага — последний раз, когда заказ в него переводили.
-        $times = $events->sortBy('id')->mapWithKeys(fn (OrderFulfillmentEvent $event): array => [
-            $event->status => $event->created_at,
-        ]);
+        // Время шага — последний раз, когда заказ в него переводили. Записи
+        // журнала с тем же статусом подряд (возврат денег, приёмка возврата)
+        // — не переход: время получения от них не сдвигается.
+        $times = collect();
+        $previous = null;
+        foreach ($events->sortBy('id') as $event) {
+            if ($event->status !== $previous) {
+                $times[$event->status] = $event->created_at;
+            }
+            $previous = $event->status;
+        }
 
         $steps = collect($flow)->map(function (string $status, int $index) use ($order, $position, $times): array {
             $reached = $position !== false && $index <= $position;

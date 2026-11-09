@@ -436,6 +436,17 @@ class OrdersController extends Controller
             'delivery_info' => $this->deliveryInfo($order),
             'payment' => $this->paymentInfo($order),
             'receipts' => $this->receiptsInfo($order),
+            // Возврат по заявке покупателя: что и в каком состоянии. Без контактов.
+            'return' => ($return = $order->latestReturn()) && $return->status !== \App\Models\OrderReturn::CANCELLED ? [
+                'number' => $return->number,
+                'status' => $return->statusLabel(),
+                'reason' => $return->reasonLabel(),
+                'items' => $return->itemsText(),
+                'method' => $return->methodLabel(),
+                'cdek_number' => $return->shipment_number,
+                'cdek_status' => $return->shipment_status_name,
+                'at' => $return->created_at?->toIso8601String(),
+            ] : null,
         ];
     }
 
