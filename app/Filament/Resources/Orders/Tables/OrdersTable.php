@@ -28,7 +28,7 @@ class OrdersTable
             ->deferFilters(false)
             // Открытая заявка на возврат — одним запросом на страницу, а не на строку.
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['returns' => fn ($returns) => $returns
-                ->whereIn('status', [OrderReturn::REQUESTED, OrderReturn::APPROVED, OrderReturn::RECEIVED])->latest('id')]))
+                ->where(fn ($q) => OrderReturn::scopeNeedsWork($q))->latest('id')]))
             ->columns([
                 TextColumn::make('number')
                     ->label('Номер')
@@ -39,7 +39,8 @@ class OrdersTable
                         ? new HtmlString('<span style="color: #f59e0b; font-weight: 600;">↩ '.e(match ($return->status) {
                             OrderReturn::REQUESTED => 'Клиент просит вернуть',
                             OrderReturn::APPROVED => 'Возврат: ждём товар',
-                            default => 'Возврат: вернуть деньги',
+                            OrderReturn::RECEIVED => 'Возврат: вернуть деньги',
+                            default => 'Возврат: код в оборот (ЧЗ)',
                         }).'</span>')
                         : null),
 

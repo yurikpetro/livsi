@@ -21,6 +21,8 @@ class OrderReturn extends Model
     protected $casts = [
         'items' => 'array',
         'photos' => 'array',
+        'marks_to_return' => 'array',
+        'marks_returned_at' => 'datetime',
         'partial' => 'boolean',
         'refund_delivery' => 'boolean',
         'restocked' => 'boolean',
@@ -206,6 +208,42 @@ class OrderReturn extends Model
             self::CANCELLED => 'Заявка на возврат отозвана.',
             default => $this->statusLabel(),
         };
+    }
+
+    /**
+     * Заявки, по которым у магазина есть дело: ждут решения, товара, денег
+     * или ручного возврата кодов в оборот. Для списка заказов и вкладки.
+     */
+    public static function scopeNeedsWork($query)
+    {
+        return $query->where(fn ($q) => $q->whereIn('status', [self::REQUESTED, self::APPROVED, self::RECEIVED])
+            ->orWhere(fn ($q) => $q->where('status', self::REFUNDED)->whereNotNull('marks_to_return')->whereNull('marks_returned_at')));
+    }
+
+    /** Коды ждут ручного возврата в оборот в «Честном знаке». */
+    public function marksPending(): bool
+    {
+        return ! empty($this->marks_to_return) && $this->marks_returned_at === null;
+    }
+
+    /**
+     * Коды идентификации для «Честного знака» из записи возврата денег:
+     * «GTIN серийный» → 01GTIN21серийный.
+     *
+     * @param  list<string>  $released
+     * @return list<string>
+     */
+    public static function identificationCodes(array $released): array
+    {
+        $codes = [];
+        foreach ($released as $mark) {
+            [$gtin, $serial] = array_pad(explode(' ', (string) $mark, 2), 2, '');
+            if ($gtin !== '' && $serial !== '') {
+                $codes[] = '01'.$gtin.'21'.$serial;
+            }
+        }
+
+        return $codes;
     }
 
     /** Есть ли у СДЭК посылка, которая пришла к нам. */

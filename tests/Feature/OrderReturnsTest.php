@@ -296,10 +296,21 @@ class OrderReturnsTest extends TestCase
         $this->assertSame(['04870216352462 S'.$order->id.'x3'], $refund->payload['released_marks']);
         Mail::assertQueued(OrderReturnMail::class, fn (OrderReturnMail $mail) => $mail->kind === 'refunded');
         $this->get($order->accessUrl())->assertSee('Деньги возвращены: 183,34');
-        // Чек возврата пробила Точка без КИЗ — код вернувшейся штуки показан, чтобы вернуть его в оборот вручную.
+        // Чек возврата пробила Точка без КИЗ — код вернувшейся штуки и подсказка, как вернуть его в оборот вручную.
+        $this->assertSame(['010487021635246221S'.$order->id.'x3'], $return->marks_to_return);
+        $this->assertTrue($return->marksPending());
+        Livewire::test(ListOrders::class)->assertSee('Возврат: код в оборот (ЧЗ)');
         Livewire::test(EditOrder::class, ['record' => $order->getRouteKey()])
-            ->assertSee('коды сами в оборот не вернулись')->assertSee('010487021635246221S'.$order->id.'x3')
-            ->assertActionHidden('refundReturn')->assertActionHidden('approveReturn');
+            ->assertSee('Коды нужно вернуть в оборот вручную')->assertSee('010487021635246221S'.$order->id.'x3')
+            ->assertSee('Возврат при розничной реализации')->assertSee('Возврат прихода')
+            ->assertActionHidden('refundReturn')->assertActionHidden('approveReturn')
+            ->assertActionVisible('marksReturned')
+            ->callAction('marksReturned')
+            ->assertHasNoActionErrors();
+        $this->assertNotNull($return->fresh()->marks_returned_at);
+        Livewire::test(EditOrder::class, ['record' => $order->getRouteKey()])
+            ->assertSee('Коды возвращены в оборот')->assertActionHidden('marksReturned');
+        Livewire::test(ListOrders::class)->assertDontSee('Возврат: код в оборот (ЧЗ)');
         $this->assertFalse(app(ReturnService::class)->eligibility($order)['allowed']);
     }
 

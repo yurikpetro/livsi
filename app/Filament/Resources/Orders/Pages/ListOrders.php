@@ -177,8 +177,7 @@ class ListOrders extends ListRecords
 
             // Открытые заявки на возврат; цифра — сколько ждут решения.
             'returns' => Tab::make('Возвраты')
-                ->modifyQueryUsing(fn ($query) => $query->whereHas('returns', fn ($returns) => $returns
-                    ->whereIn('status', [OrderReturn::REQUESTED, OrderReturn::APPROVED, OrderReturn::RECEIVED])))
+                ->modifyQueryUsing(fn ($query) => $query->whereHas('returns', fn ($returns) => OrderReturn::scopeNeedsWork($returns)))
                 ->badge(OrderReturn::query()->where('status', OrderReturn::REQUESTED)->count() ?: null)
                 ->badgeColor('danger'),
 

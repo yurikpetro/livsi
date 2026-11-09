@@ -391,7 +391,7 @@ class RefundService
                     }
                 }
                 $refund->update(['done_at' => now(), 'payload' => array_merge($refund->payload ?? [], ['released_marks' => $released])]);
-                $this->closeReturn($return, (int) $refund->amount);
+                $this->closeReturn($return, $refund);
 
                 return;
             }
@@ -426,15 +426,23 @@ class RefundService
             // Деньги за весь заказ вернулись — открытая заявка на возврат закрыта,
             // какой бы кнопкой ни возвращали.
             if ($return && $return->isActive()) {
-                $this->closeReturn($return, (int) $refund->amount);
+                $this->closeReturn($return, $refund->fresh());
             }
         });
     }
 
-    /** Заявка на возврат закрыта деньгами; письмо покупателю — после записи. */
-    private function closeReturn(OrderReturn $return, int $amount): void
+    /**
+     * Заявка на возврат закрыта деньгами; письмо покупателю — после записи.
+     * Чек возврата без кодов (его пробила Точка) — коды остались «выбывшими»,
+     * их список ложится в заявку: вернуть в оборот в «Честном знаке» вручную.
+     */
+    private function closeReturn(OrderReturn $return, OrderReceipt $refund): void
     {
-        $return->update(['status' => OrderReturn::REFUNDED, 'refund_amount' => $amount, 'refunded_at' => now(), 'refund_error' => null]);
+        $codes = empty($refund->payload['with_receipt'])
+            ? OrderReturn::identificationCodes((array) ($refund->payload['released_marks'] ?? []))
+            : [];
+        $return->update(['status' => OrderReturn::REFUNDED, 'refund_amount' => (int) $refund->amount, 'refunded_at' => now(),
+            'refund_error' => null, 'marks_to_return' => $codes ?: null]);
         DB::afterCommit(fn () => app(OrderMailer::class)->returnUpdate($return->fresh(), 'refunded'));
     }
 

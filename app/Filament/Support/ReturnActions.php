@@ -33,7 +33,7 @@ class ReturnActions
     /** @return list<Action> */
     public static function all(): array
     {
-        return [self::approve(), self::reject(), self::waybill(), self::checkWaybill(), self::receive(), self::refund()];
+        return [self::approve(), self::reject(), self::waybill(), self::checkWaybill(), self::receive(), self::refund(), self::marksReturned()];
     }
 
     private static function by(): string
@@ -257,6 +257,29 @@ class ReturnActions
                         ? Notification::make()->title('Деньги возвращены: '.Money::rub((int) $done->refund_amount))->body('Покупателю ушло письмо.')->success()->send()
                         : Notification::make()->title('Возврат оформлен — банк обрабатывает')->warning()->send();
                 });
+                $record->refresh();
+            });
+    }
+
+    /** Отметка: коды вернули в оборот в «Честном знаке» вручную. */
+    public static function marksReturned(): Action
+    {
+        return Action::make('marksReturned')
+            ->label('Коды вернул в оборот')
+            ->icon(Heroicon::OutlinedQrCode)
+            ->color('warning')
+            ->authorize(fn (): bool => (bool) auth()->user()?->is_admin)
+            ->visible(fn (Order $record): bool => (bool) $record->latestReturn()?->marksPending())
+            ->requiresConfirmation()
+            ->modalHeading('Коды вернули в оборот в «Честном знаке»?')
+            ->modalDescription('Отметьте, когда документ «Возврат в оборот» принят и код в «Честном знаке» стал «В обороте». Подсказка — в блоке возврата в карточке.')
+            ->modalSubmitActionLabel('Да, вернул')
+            ->action(function (Order $record): void {
+                $return = $record->latestReturn();
+                if ($return?->marksPending()) {
+                    $return->update(['marks_returned_at' => now(), 'marks_returned_by' => mb_substr(self::by(), 0, 120)]);
+                }
+                Notification::make()->title('Отмечено: коды в обороте')->success()->send();
                 $record->refresh();
             });
     }

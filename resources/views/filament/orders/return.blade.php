@@ -114,20 +114,40 @@
             @endif
             @if ($return->status === OrderReturn::REFUNDED)
                 <div style="{{ $row }}"><span style="opacity: .7;">Вернули</span><span>{{ Money::rub((int) $return->refund_amount) }} · {{ $time($return->refunded_at) }}</span></div>
-                @php
-                    $refund = $order->receipt(\App\Models\OrderReceipt::KIND_REFUND);
-                    $released = (array) ($refund?->payload['released_marks'] ?? []);
-                @endphp
-                @if ($released !== [] && ! ($refund->payload['with_receipt'] ?? false))
+                @if (! empty($return->marks_to_return))
+                    @php($closing = $order->receipt(\App\Models\OrderReceipt::KIND_CLOSING))
                     <div style="{{ $row }}"><span style="opacity: .7;">Честный знак</span>
-                        <span style="color: #f59e0b;">
-                            Чек возврата пробила Точка — без кодов маркировки, поэтому коды сами в оборот не вернулись.
-                            Верните их в личном кабинете «Честного знака» (возврат в оборот, основание — чек возврата):<br>
-                            @foreach ($released as $mark)
-                                @php([$gtin, $serial] = array_pad(explode(' ', (string) $mark, 2), 2, ''))
-                                <code style="user-select: all;">01{{ $gtin }}21{{ $serial }}</code><br>
-                            @endforeach
-                        </span>
+                        <div style="display: grid; gap: 8px;">
+                            @if ($return->marks_returned_at)
+                                <span style="color: #51a940; font-weight: 600;">✓ Коды возвращены в оборот — {{ $time($return->marks_returned_at) }} · {{ $return->marks_returned_by }}</span>
+                            @else
+                                <span style="color: #f59e0b; font-weight: 600;">Коды нужно вернуть в оборот вручную: чек возврата пробила Точка, а в её чеке кодов нет.</span>
+                            @endif
+                            <div>
+                                @foreach ($return->marks_to_return as $code)
+                                    <code style="user-select: all; padding: 2px 6px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(127,127,127,.35);">{{ $code }}</code><br>
+                                @endforeach
+                            </div>
+                            @unless ($return->marks_returned_at)
+                                <ol style="margin: 0; padding-left: 1.2rem; display: grid; gap: 4px; opacity: .9;">
+                                    <li><strong>Найдите чек возврата.</strong> Кабинет CloudKassir → «Чеки» → фильтр по дате
+                                        {{ Fulfillment::moscow($return->refunded_at, 'd.m.Y') }}: тип <strong>«Возврат прихода»</strong>,
+                                        сумма {{ Money::rub((int) $return->refund_amount) }}. Нужны его <strong>номер ФД</strong> и <strong>дата</strong>.
+                                        Тот же чек приходит покупателю на почту от Точки.
+                                        @if ($closing?->done_at)
+                                            Не перепутайте с чеком «Приход, полный расчёт» от {{ Fulfillment::moscow($closing->done_at, 'd.m.Y') }} — у него ФД меньше, и он с кодом.
+                                        @endif
+                                    </li>
+                                    <li><strong>Личный кабинет «Честного знака»</strong> → «Возврат в оборот».
+                                        Вид возврата — <strong>«Возврат при розничной реализации»</strong>: код выбыл по нашему кассовому чеку «Полный расчёт».
+                                        «Дистанционный способ продажи» и остальные виды — не наш случай.</li>
+                                    <li><strong>Код</strong> — скопируйте из списка выше (нажмите на код — выделится целиком).</li>
+                                    <li><strong>Документ-основание</strong> — «Кассовый чек»: номер — ФД чека «Возврат прихода», дата — дата этого чека.</li>
+                                    <li>Подпишите и отправьте. Через несколько минут код в «Честном знаке» станет «В обороте».</li>
+                                    <li>Вернитесь сюда и нажмите вверху <strong>«Коды вернул в оборот»</strong> — отметка останется в заказе.</li>
+                                </ol>
+                            @endunless
+                        </div>
                     </div>
                 @endif
             @endif
