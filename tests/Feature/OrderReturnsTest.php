@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Delivery\DeliverySettings;
 use App\Filament\Resources\Orders\Pages\EditOrder;
+use App\Filament\Resources\Orders\Pages\ListOrders;
 use App\Mail\OrderReturnMail;
 use App\Mail\OrderReturnManagerNotice;
 use App\Models\DeliveryPoint;
@@ -254,6 +255,9 @@ class OrderReturnsTest extends TestCase
         $return = app(ReturnService::class)->request($order, [$this->foamItem($order)->id => 1], OrderReturn::REASON_UNFIT, null, null);
         $this->actingAs(User::factory()->create(['is_admin' => true]));
 
+        // В списке заказов заявка видна сразу, есть вкладка «Возвраты».
+        Livewire::test(ListOrders::class)->assertSee('Клиент просит вернуть')->assertSee('Возвраты');
+
         Livewire::test(EditOrder::class, ['record' => $order->getRouteKey()])
             ->assertSee('Клиент просит вернуть заказ')
             ->assertActionVisible('approveReturn')->assertActionVisible('rejectReturn')->assertActionHidden('refundReturn')
@@ -437,6 +441,17 @@ class OrderReturnsTest extends TestCase
         $return->refresh();
         $this->assertSame([OrderReturn::METHOD_MANUAL, null, 20000], [$return->method, $return->shipment_state, (int) $return->shipping_cost]);
         Mail::assertQueued(OrderReturnMail::class, fn (OrderReturnMail $mail) => $mail->kind === 'approved' && str_contains($mail->render(), 'Почтой России'));
+    }
+
+    public function test_free_return_trip_is_not_promised_as_a_deduction(): void
+    {
+        $order = $this->delivered($this->order());
+        $service = app(ReturnService::class);
+        $return = $service->request($order, [$this->creamItem($order)->id => 1], OrderReturn::REASON_UNFIT, null, null);
+        $service->approve($return, ['method' => OrderReturn::METHOD_COURIER, 'payer' => OrderReturn::PAYER_BUYER, 'shipping_cost' => 0], 'admin');
+
+        Mail::assertQueued(OrderReturnMail::class, fn (OrderReturnMail $mail) => $mail->kind === 'approved'
+            && str_contains($mail->render(), 'за наш счёт') && ! str_contains($mail->render(), 'удержим'));
     }
 
     public function test_reject_explains_and_the_customer_may_ask_again(): void

@@ -6,6 +6,7 @@ use App\Filament\Resources\Orders\Pages\ListOrders;
 use App\Filament\Support\FulfillmentAction;
 use App\Filament\Support\ShipmentAction;
 use App\Models\Order;
+use App\Models\OrderReturn;
 use App\Support\Fulfillment;
 use App\Support\Money;
 use Filament\Actions\Action;
@@ -16,6 +17,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\HtmlString;
 
 class OrdersTable
 {
@@ -24,11 +26,22 @@ class OrdersTable
         return $table
             ->defaultSort('created_at', 'desc')
             ->deferFilters(false)
+            // Открытая заявка на возврат — одним запросом на страницу, а не на строку.
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['returns' => fn ($returns) => $returns
+                ->whereIn('status', [OrderReturn::REQUESTED, OrderReturn::APPROVED, OrderReturn::RECEIVED])->latest('id')]))
             ->columns([
                 TextColumn::make('number')
                     ->label('Номер')
                     ->searchable()
-                    ->copyable(),
+                    ->copyable()
+                    // Заявка на возврат видна прямо в списке: следующий шаг — за магазином.
+                    ->description(fn (Order $record): ?HtmlString => ($return = $record->returns->first())
+                        ? new HtmlString('<span style="color: #f59e0b; font-weight: 600;">↩ '.e(match ($return->status) {
+                            OrderReturn::REQUESTED => 'Клиент просит вернуть',
+                            OrderReturn::APPROVED => 'Возврат: ждём товар',
+                            default => 'Возврат: вернуть деньги',
+                        }).'</span>')
+                        : null),
 
                 TextColumn::make('created_at')
                     ->label('Создан')

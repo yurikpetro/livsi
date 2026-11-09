@@ -33,8 +33,10 @@
 
     <p style="margin:0 0 12px 0; font-size:13px; line-height:1.6; color:#6a6a65;">
         Положите товар в заводской упаковке.
-        @if ($return->buyerPaysShipping())
-            Обратная доставка — за счёт покупателя: её стоимость@if ($return->shipping_cost > 0) — {{ Money::rub($return->shipping_cost) }} —@endif удержим из суммы возврата.
+        @if ($return->deduction() > 0)
+            Обратная доставка — за счёт покупателя: {{ Money::rub($return->deduction()) }} удержим из суммы возврата.
+        @elseif ($return->buyerPaysShipping() && $return->method === OrderReturn::METHOD_CDEK)
+            Обратная доставка — за счёт покупателя: стоимость СДЭК удержим из суммы возврата.
         @else
             Обратная доставка — за наш счёт.
         @endif
