@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Product;
 use App\Models\Setting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -42,6 +43,21 @@ class SeoTest extends TestCase
         $this->app->usePublicPath($dir);
         $this->artisan('seo:robots')->assertSuccessful();
         $this->assertStringContainsString('Sitemap: https://livsi.shop/sitemap.xml', file_get_contents($dir.'/robots.txt'));
+    }
+
+    public function test_old_shop_addresses_from_yandex_lead_to_the_new_site(): void
+    {
+        $gel = Product::create(['slug' => 'keratoliticheskiy-gel-dlya-stop', 'title' => 'Кератолитический гель', 'is_active' => true, 'sort' => 1]);
+        $foam = Product::create(['slug' => 'multipenka-dlya-ruk-i-stop', 'title' => 'Мультипенка', 'is_active' => true, 'sort' => 2]);
+
+        $this->get('/magazin/tag/uhod-za-nogami/')->assertStatus(301)->assertRedirect(route('catalog.index'));
+        $this->get('/magazin/')->assertStatus(301)->assertRedirect(route('catalog.index'));
+        $this->get('/magazin/multipenka-dlya-ruk-i-stop/')->assertStatus(301)->assertRedirect(route('catalog.show', $foam));
+        $this->get('/product-category/nail/keratoliticheskiy-gel-dlya-stop-premium')->assertStatus(301)->assertRedirect(route('catalog.show', $gel));
+        // Чужие адреса — честный 404, формы — не переадресуются.
+        $this->get('/wp-login.php')->assertNotFound();
+        $this->get('/some/random/page')->assertNotFound();
+        $this->post('/magazin/tag/x')->assertStatus(405);
     }
 
     public function test_home_page_says_it_is_the_official_livsi_site(): void

@@ -15,6 +15,7 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LeadRequestController;
 use App\Http\Controllers\LegalPageController;
 use App\Http\Controllers\LineController;
+use App\Http\Controllers\LegacyRedirectController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrderReturnController;
 use App\Http\Controllers\OzonClientCheckController;
@@ -182,3 +183,7 @@ Route::post('/logout', [YandexAuthController::class, 'logout'])->name('logout');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 Route::get('/robots.txt', RobotsController::class)->name('robots');
+
+// Адреса старого сайта (/magazin/… и т. п.) из выдачи Яндекса — 301 на товар или в каталог.
+// Последним: срабатывает, только если адрес не нашёлся среди новых.
+Route::fallback(LegacyRedirectController::class);
