@@ -292,6 +292,10 @@ class OrderReturnsTest extends TestCase
         $this->assertSame(['04870216352462 S'.$order->id.'x3'], $refund->payload['released_marks']);
         Mail::assertQueued(OrderReturnMail::class, fn (OrderReturnMail $mail) => $mail->kind === 'refunded');
         $this->get($order->accessUrl())->assertSee('Деньги возвращены: 183,34');
+        // Чек возврата пробила Точка без КИЗ — код вернувшейся штуки показан, чтобы вернуть его в оборот вручную.
+        Livewire::test(EditOrder::class, ['record' => $order->getRouteKey()])
+            ->assertSee('коды сами в оборот не вернулись')->assertSee('010487021635246221S'.$order->id.'x3')
+            ->assertActionHidden('refundReturn')->assertActionHidden('approveReturn');
         $this->assertFalse(app(ReturnService::class)->eligibility($order)['allowed']);
     }
 
@@ -326,6 +330,8 @@ class OrderReturnsTest extends TestCase
         $order = $this->delivered($this->order());
         DeliveryPoint::create(['provider' => 'cdek', 'external_id' => 'MSK305', 'type' => 'pvz', 'name' => 'На Тверской', 'address' => 'Тверская, 1',
             'city' => 'Москва', 'city_key' => 'москва', 'limits' => ['city_code' => 44, 'reception' => true], 'is_active' => true]);
+        DeliveryPoint::create(['provider' => 'cdek', 'external_id' => 'STV7', 'type' => 'pvz', 'name' => 'Доваторцев', 'address' => 'Доваторцев, 84',
+            'city' => 'Ставрополь', 'city_key' => 'ставрополь', 'limits' => ['city_code' => 434], 'is_active' => true]);
         $service = app(ReturnService::class);
         $return = $service->request($order, [$this->creamItem($order)->id => 1], OrderReturn::REASON_UNFIT, null, null);
         $created = 0;
@@ -343,6 +349,14 @@ class OrderReturnsTest extends TestCase
                 return Http::response(['entity' => ['uuid' => 'uuid-ret-1'], 'requests' => [['state' => 'ACCEPTED']]], 202);
             },
         ]);
+
+        try {
+            $service->approve($return, ['method' => OrderReturn::METHOD_CDEK, 'payer' => OrderReturn::PAYER_BUYER, 'cdek_point' => 'STV7'], 'admin');
+            $this->fail('Из нашего пункта приёма в него же накладная не нужна.');
+        } catch (ValidationException $exception) {
+            $this->assertStringContainsString('приходят возвраты', $exception->validator->errors()->first());
+        }
+        $this->assertSame(0, $created);
 
         $return = $service->approve($return, ['method' => OrderReturn::METHOD_CDEK, 'payer' => OrderReturn::PAYER_BUYER, 'cdek_point' => 'MSK305'], 'admin');
 

@@ -5,6 +5,8 @@ namespace App\Filament\Support;
 use App\Models\DeliveryPoint;
 use App\Models\Order;
 use App\Models\OrderReturn;
+use App\Payments\PaymentSettings;
+use App\Services\DeliveryQuoteService;
 use App\Services\ReturnService;
 use App\Support\Fulfillment;
 use App\Support\Money;
@@ -81,7 +83,9 @@ class ReturnActions
                 }
 
                 return [
-                    'method' => Fulfillment::isCourier($record) ? OrderReturn::METHOD_COURIER : OrderReturn::METHOD_CDEK,
+                    // В городе склада товар заберёт курьер; в другие города — накладная СДЭК.
+                    'method' => Fulfillment::isCourier($record) || DeliveryQuoteService::courierServes($record->delivery_city)
+                        ? OrderReturn::METHOD_COURIER : OrderReturn::METHOD_CDEK,
                     'cdek_point' => app(ReturnService::class)->defaultCdekPoint($record),
                     'payer' => $return?->isSellerFault() ? OrderReturn::PAYER_SELLER : OrderReturn::PAYER_BUYER,
                     'refund_delivery' => (bool) $return?->isSellerFault(),
@@ -235,7 +239,10 @@ class ReturnActions
             ->visible(fn (Order $record): bool => self::active($record, OrderReturn::RECEIVED) !== null)
             ->modalHeading(fn (Order $record): string => 'Вернуть деньги за возврат · '.$record->number)
             ->modalDescription(fn (Order $record): string => 'По расчёту: '.(($r = $record->activeReturn()) ? ReturnService::breakdown($r) : '—')
-                .'. Деньги вернёт Точка на карту или счёт покупателя, чек возврата пробьёт связка Точка — CloudKassir.')
+                .'. Деньги вернёт Точка на карту или счёт покупателя.'
+                .(PaymentSettings::siteRefundReceipts()
+                    ? ' Чек возврата с кодами маркировки пробьёт сайт через CloudKassir.'
+                    : ' Чек возврата пробьёт Точка — без кодов маркировки: коды вернувшихся штук после возврата будут в карточке, их нужно вернуть в оборот в «Честном знаке».'))
             ->modalSubmitActionLabel('Вернуть деньги')
             ->fillForm(fn (Order $record): array => ['amount' => number_format(($record->activeReturn()?->expectedRefund() ?? 0) / 100, 2, '.', '')])
             ->schema([

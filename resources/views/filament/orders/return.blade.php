@@ -114,6 +114,22 @@
             @endif
             @if ($return->status === OrderReturn::REFUNDED)
                 <div style="{{ $row }}"><span style="opacity: .7;">Вернули</span><span>{{ Money::rub((int) $return->refund_amount) }} · {{ $time($return->refunded_at) }}</span></div>
+                @php
+                    $refund = $order->receipt(\App\Models\OrderReceipt::KIND_REFUND);
+                    $released = (array) ($refund?->payload['released_marks'] ?? []);
+                @endphp
+                @if ($released !== [] && ! ($refund->payload['with_receipt'] ?? false))
+                    <div style="{{ $row }}"><span style="opacity: .7;">Честный знак</span>
+                        <span style="color: #f59e0b;">
+                            Чек возврата пробила Точка — без кодов маркировки, поэтому коды сами в оборот не вернулись.
+                            Верните их в личном кабинете «Честного знака» (возврат в оборот, основание — чек возврата):<br>
+                            @foreach ($released as $mark)
+                                @php([$gtin, $serial] = array_pad(explode(' ', (string) $mark, 2), 2, ''))
+                                <code style="user-select: all;">01{{ $gtin }}21{{ $serial }}</code><br>
+                            @endforeach
+                        </span>
+                    </div>
+                @endif
             @endif
             @if ($return->refund_error && $return->status !== OrderReturn::REFUNDED)
                 <div style="{{ $row }}"><span style="opacity: .7;">Возврат денег</span><span style="color: #ef4444;">{{ $return->refund_error }}</span></div>

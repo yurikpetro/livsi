@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Delivery\Carriers\CdekCarrier;
 use App\Delivery\DeliveryGateway;
+use App\Delivery\DeliverySettings;
 use App\Models\DeliveryPoint;
 use App\Models\Order;
 use App\Models\OrderFulfillmentEvent;
@@ -263,6 +264,9 @@ class ReturnService
             $point = DeliveryPoint::query()->where('provider', 'cdek')->where('external_id', (string) ($data['cdek_point'] ?? ''))->first();
             if (! $point) {
                 $this->fail('Выберите пункт СДЭК, куда покупатель сдаст посылку.', 'cdek_point');
+            }
+            if ($point->external_id === DeliverySettings::origin('cdek')) {
+                $this->fail('В этот пункт и приходят возвраты — накладная из него в него не нужна. Выберите курьера или «Иначе».', 'cdek_point');
             }
         }
 
