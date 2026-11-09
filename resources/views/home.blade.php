@@ -1,5 +1,34 @@
 @extends('layouts.app')
 
+{{-- Главная — то, что Яндекс показывает по запросу «livsi»: в заголовке бренд и слово «официальный». --}}
+@section('title', 'LIVSI — официальный интернет-магазин косметики LIVSI PROFESSIONAL')
+@section('description', 'Официальный сайт LIVSI (ЛИВСИ): косметика для дома и профессионалов — уход, который чувствует тебя. Доставка по всей России.')
+
+@push('head')
+    @php
+        $root = rtrim((string) config('app.url'), '/');
+        $sameAs = array_values(array_filter(array_map(fn (string $key) => \App\Models\Setting::get($key) ?: null,
+            ['vk_url', 'telegram_url', 'wildberries_url', 'ozon_url'])));
+        $organization = array_filter([
+            '@type' => 'Organization',
+            '@id' => $root.'/#organization',
+            'name' => 'LIVSI',
+            'alternateName' => ['LIVSI PROFESSIONAL', 'ЛИВСИ', 'Ливси'],
+            'url' => $root.'/',
+            'logo' => asset('img/logo.svg'),
+            'email' => $siteSeller?->email ?: null,
+            'telephone' => $siteSeller?->phone ?: null,
+            'sameAs' => $sameAs ?: null,
+        ]);
+        $schema = ['@context' => 'https://schema.org', '@graph' => [
+            $organization,
+            ['@type' => 'WebSite', '@id' => $root.'/#website', 'url' => $root.'/', 'name' => 'LIVSI', 'alternateName' => 'ЛИВСИ',
+                'inLanguage' => 'ru-RU', 'publisher' => ['@id' => $root.'/#organization']],
+        ]];
+    @endphp
+    <script type="application/ld+json">{!! json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!}</script>
+@endpush
+
 @section('content')
     @php
         // Баннеры правятся в админке («Баннеры на главной»).

@@ -83,6 +83,10 @@ class Settings extends Page implements HasForms
         'manager_email' => '',
         'telegram_url' => '',
         'whatsapp_url' => '',
+        'vk_url' => '',
+        'wildberries_url' => '',
+        'ozon_url' => '',
+        'yandex_verification' => '',
         'vat_not_payer' => false,
         'vat_rate_default' => null,
         'vat_codes' => Vat::DEFAULT_CODES,
@@ -255,6 +259,21 @@ class Settings extends Page implements HasForms
                             ->maxLength(255),
                     ])
                     ->columns(3),
+
+                // Яндекс по этим данным понимает, что livsi.shop — официальный сайт бренда.
+                Section::make('Поиск: Яндекс и официальные страницы бренда')
+                    ->description('Ссылки ниже попадают в разметку главной страницы: так поисковик связывает сайт с брендом LIVSI. VK показывается и в подвале сайта.')
+                    ->schema([
+                        TextInput::make('yandex_verification')
+                            ->label('Код подтверждения Яндекс Вебмастера')
+                            ->helperText('Вебмастер → «Добавить сайт» → способ «Мета-тег»: из строки <meta name="yandex-verification" content="…"> вставьте только то, что в кавычках после content.')
+                            ->maxLength(64)
+                            ->regex('/^[A-Za-z0-9_-]*$/'),
+                        TextInput::make('vk_url')->label('Группа VK')->url()->maxLength(255)->placeholder('https://vk.com/...'),
+                        TextInput::make('wildberries_url')->label('Магазин бренда на Wildberries')->url()->maxLength(255),
+                        TextInput::make('ozon_url')->label('Магазин бренда на Ozon')->url()->maxLength(255),
+                    ])
+                    ->columns(2),
             ])
             ->statePath('data');
     }

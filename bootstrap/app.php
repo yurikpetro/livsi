@@ -25,6 +25,11 @@ return Application::configure(basePath: dirname(__DIR__))
             $middleware->trustProxies(at: $proxies === '*' ? '*' : explode(',', $proxies));
         }
 
+        // Один адрес сайта: www.livsi.shop → livsi.shop (или наоборот — как в APP_URL).
+        $middleware->web(prepend: [
+            \App\Http\Middleware\CanonicalHost::class,
+        ]);
+
         $middleware->web(append: [
             CaptureUtm::class,
         ]);
@@ -33,4 +38,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        // Боты-сканеры шлют в Livewire загрузку файла туда, где её нет.
+        // Это отказ, а не ошибка сайта: короткий ответ 400, без сообщения в «Ошибки».
+        $exceptions->dontReport(\Livewire\Features\SupportFileUploads\MissingFileUploadsTraitException::class);
+        $exceptions->render(fn (\Livewire\Features\SupportFileUploads\MissingFileUploadsTraitException $e) => response('Bad request', 400));
     })->create();

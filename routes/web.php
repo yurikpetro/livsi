@@ -23,6 +23,7 @@ use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\TochkaWebhookController;
 use App\Http\Controllers\PrintOrderController;
 use App\Http\Controllers\ReturnPhotoController;
+use App\Http\Controllers\RobotsController;
 use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\UnsubscribeController;
 use App\Http\Middleware\CaptureUtm;
@@ -180,3 +181,4 @@ Route::get('/auth/vk/callback', [VkAuthController::class, 'callback'])
 Route::post('/logout', [YandexAuthController::class, 'logout'])->name('logout');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
+Route::get('/robots.txt', RobotsController::class)->name('robots');

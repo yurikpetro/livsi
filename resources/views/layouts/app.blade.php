@@ -11,6 +11,9 @@
     {{-- Канонический адрес задаётся страницей: у каталога он без параметра
          сортировки, иначе порядок выдачи плодил бы дубли. --}}
     <link rel="canonical" href="{{ $canonical ?? url()->current() }}">
+    @if ($yandexVerification = \App\Models\Setting::get('yandex_verification'))
+        <meta name="yandex-verification" content="{{ $yandexVerification }}">
+    @endif
 
     @isset($robots)
         <meta name="robots" content="{{ $robots }}">
