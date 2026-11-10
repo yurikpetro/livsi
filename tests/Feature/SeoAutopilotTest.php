@@ -176,6 +176,65 @@ class SeoAutopilotTest extends TestCase
         $this->assertNotEmpty($state['log']);
     }
 
+    public function test_when_webmaster_is_read_only_the_pages_go_through_indexnow_and_the_log_says_why(): void
+    {
+        // 10.11.2026 Яндекс перевёл Вебмастер в режим «только чтение»: любое изменение — 504.
+        $this->app['env'] = 'production';
+        $this->connect();
+        Product::create(['slug' => 'keratoliticheskiy-gel-dlya-stop', 'title' => 'Гель', 'is_active' => true, 'sort' => 1]);
+        $this->fakeYandex(fn () => []);
+        $this->routes = [
+            self::HOST.'/recrawl/queue' => Http::response('', 504),
+            self::HOST.'/user-added-sitemaps/*' => Http::response('', 504),
+            'https://yandex.com/indexnow' => Http::response('', 202),
+        ] + array_filter($this->routes, fn ($key) => ! str_contains($key, 'recrawl/queue') && ! str_contains($key, 'user-added-sitemaps/'), ARRAY_FILTER_USE_KEY);
+
+        $this->artisan('seo:autopilot --quiet-telegram')->assertSuccessful();
+
+        // До Вебмастера постучались дважды и остановились, а не 55 раз.
+        $this->assertCount(2, $this->recrawled());
+        $ping = Http::recorded(fn (HttpRequest $r) => $r->url() === 'https://yandex.com/indexnow')->first()[0];
+        $this->assertContains('https://livsi.shop/', $ping['urlList']);
+        $this->assertContains('https://livsi.shop/magazin/vendor/livsi-professional/page/8/', $ping['urlList']);
+        $this->assertContains('https://livsi.shop/product/keratoliticheskiy-gel-dlya-stop', $ping['urlList']);
+
+        $log = implode("\n", Autopilot::state()['log']);
+        $this->assertStringContainsString('Вебмастер сейчас не принимает изменения (ответ 504) — сбой у Яндекса', $log);
+        $this->assertStringContainsString('Переобход: Вебмастер сейчас не принимает заявки (ответ 504) — сбой у Яндекса, повторю завтра.', $log);
+        $this->assertStringContainsString('Вместо Вебмастера отправил через IndexNow адресов', $log);
+
+        // Назавтра Вебмастер всё ещё лежит: в Вебмастер пробуем снова, через IndexNow повторно не шлём.
+        $this->travel(1)->day();
+        $before = count($this->recrawled());
+        $this->artisan('seo:autopilot --quiet-telegram')->assertSuccessful();
+        $this->assertCount(2, $this->recrawled($before));
+        $this->assertCount(1, Http::recorded(fn (HttpRequest $r) => $r->url() === 'https://yandex.com/indexnow'));
+        $this->assertStringContainsString('Через IndexNow эти адреса уже отправлены на этой неделе', implode("\n", Autopilot::state()['log']));
+
+        // Вебмастер ожил — всё уходит туда.
+        $this->travel(1)->day();
+        $this->routes[self::HOST.'/recrawl/queue'] = Http::response(['task_id' => 'x', 'quota_remainder' => 9], 202);
+        $this->routes[self::HOST.'/user-added-sitemaps/*'] = Http::response([], 204);
+        $before = count($this->recrawled());
+        $this->artisan('seo:autopilot --quiet-telegram')->assertSuccessful();
+        $this->assertContains('https://livsi.shop/', $this->recrawled($before));
+        $this->assertStringContainsString('Убрал из Вебмастера старую карту сайта', implode("\n", Autopilot::state()['log']));
+    }
+
+    public function test_refused_requests_stop_after_three_and_name_the_reason(): void
+    {
+        $this->connect();
+        $this->fakeYandex(fn () => []);
+        $this->routes = [self::HOST.'/recrawl/queue' => Http::response(['error_code' => 'INVALID_URL'], 400)] + $this->routes;
+
+        $this->artisan('seo:autopilot --quiet-telegram')->assertSuccessful();
+
+        $this->assertCount(3, $this->recrawled());
+        $this->assertStringContainsString('Яндекс отклоняет заявки (ответ 400 INVALID_URL)', implode("\n", Autopilot::state()['log']));
+        // Не боевой сайт — IndexNow выключен, так и пишем.
+        $this->assertStringContainsString('IndexNow на этом сайте выключен', implode("\n", Autopilot::state()['log']));
+    }
+
     public function test_search_page_shows_the_autopilot_log_and_downloads_the_report_for_claude(): void
     {
         $this->connect();

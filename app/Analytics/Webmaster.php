@@ -2,6 +2,7 @@
 
 namespace App\Analytics;
 
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -346,7 +347,10 @@ class Webmaster extends YandexApi
     /**
      * Отправить страницу на переобход.
      *
-     * @return array{status: string, left: ?int} status: sent | already | quota | invalid | error
+     * status: sent | already | quota | invalid | down (у Яндекса сбой, 5xx) | error;
+     * why — код ответа и код ошибки Яндекса, для отчёта.
+     *
+     * @return array{status: string, left: ?int, why: string}
      */
     public function recrawl(string $url): array
     {
@@ -358,10 +362,12 @@ class Webmaster extends YandexApi
                 $response->successful() => 'sent',
                 $code === 'URL_ALREADY_ADDED' => 'already',
                 $code === 'QUOTA_EXCEEDED' || $response->status() === 429 => 'quota',
+                $response->serverError() => 'down',
                 $code === 'INVALID_URL' || $response->status() === 400 => 'invalid',
                 default => 'error',
             },
             'left' => $response->json('quota_remainder') !== null ? (int) $response->json('quota_remainder') : null,
+            'why' => self::why($response),
         ];
     }
 
@@ -376,21 +382,43 @@ class Webmaster extends YandexApi
         ], (array) ($data['sitemaps'] ?? [])));
     }
 
-    /** @return string sent | already | error */
-    public function addSitemap(string $url): string
+    /** @return array{status: string, why: string} status: sent | already | down | error */
+    public function addSitemap(string $url): array
     {
         $response = $this->raw('POST', $this->host().'/user-added-sitemaps', json: ['url' => $url]);
 
-        return match (true) {
-            $response->successful() => 'sent',
-            (string) $response->json('error_code') === 'SITEMAP_ALREADY_ADDED' => 'already',
-            default => 'error',
-        };
+        return [
+            'status' => match (true) {
+                $response->successful() => 'sent',
+                (string) $response->json('error_code') === 'SITEMAP_ALREADY_ADDED' => 'already',
+                $response->serverError() => 'down',
+                default => 'error',
+            },
+            'why' => self::why($response),
+        ];
     }
 
-    public function deleteSitemap(string $id): bool
+    /** @return array{status: string, why: string} status: sent | down | error */
+    public function deleteSitemap(string $id): array
     {
-        return $this->raw('DELETE', $this->host().'/user-added-sitemaps/'.rawurlencode($id))->successful();
+        $response = $this->raw('DELETE', $this->host().'/user-added-sitemaps/'.rawurlencode($id));
+
+        return [
+            'status' => match (true) {
+                $response->successful() => 'sent',
+                $response->serverError() => 'down',
+                default => 'error',
+            },
+            'why' => self::why($response),
+        ];
+    }
+
+    /** «ответ 504» или «ответ 400 INVALID_URL» — что сказал Яндекс, без лишнего. */
+    private static function why(Response $response): string
+    {
+        $code = (string) ($response->json('error_code') ?? '');
+
+        return 'ответ '.$response->status().($code !== '' ? ' '.$code : '');
     }
 
     /** Адреса, которые сейчас в поиске. @return list<array{url: string, title: string}> */

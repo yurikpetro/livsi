@@ -24,6 +24,9 @@ use Throwable;
  *     которые теперь ведут на новые страницы или пропали, — чтобы Яндекс
  *     быстрее заменил их; страницы из карты, которых ещё нет в поиске.
  *     Тратит не больше 80 % суточной квоты: остальное — для ручного переобхода.
+ *     Если Вебмастер не принимает заявки (у Яндекса бывает режим «только
+ *     чтение», ответ 504), те же адреса уходят через IndexNow — его Яндекс
+ *     принимает отдельно, — а Вебмастер пробуем снова на следующую ночь.
  *  4. Серьёзные проблемы из «Диагностики» Вебмастера — в Telegram, когда
  *     появляются и когда Яндекс их снимает.
  */
@@ -39,6 +42,9 @@ final class Autopilot
 
     /** Сколько адресов из поиска проверять за запуск. */
     private const SCAN = 200;
+
+    /** Через IndexNow один и тот же адрес — не чаще, чем раз в столько дней. */
+    private const PING_DAYS = 7;
 
     /** @var list<string> */
     private array $log = [];
@@ -74,7 +80,7 @@ final class Autopilot
             $this->step('Карта сайта', fn () => $this->sitemaps());
             // Не стрелочные функции: им нужно менять $state, а не его копию.
             $this->step('Переобход', function () use (&$state): void {
-                $state['recrawl'] = $this->recrawl((array) ($state['recrawl'] ?? []));
+                [$state['recrawl'], $state['indexnow']] = $this->recrawl((array) ($state['recrawl'] ?? []), (array) ($state['indexnow'] ?? []));
             });
             $this->step('Диагностика', function () use (&$state, $notify): void {
                 $state['serious'] = $this->diagnostics((array) ($state['serious'] ?? []), $notify);
@@ -105,36 +111,48 @@ final class Autopilot
                 continue;
             }
             // Чужая или старая карта (прежний сайт, www, http) — убираем: у сайта одна карта.
-            $this->line($this->webmaster->deleteSitemap($sitemap['id'])
+            $result = $this->webmaster->deleteSitemap($sitemap['id']);
+            if ($result['status'] === 'down') {
+                $this->line('Карта сайта: Вебмастер сейчас не принимает изменения ('.$result['why'].') — сбой у Яндекса, повторю завтра. '
+                    .'Старая карта '.$sitemap['url'].' пока остаётся, но вреда от неё нет: она отвечает новой картой.');
+
+                return;
+            }
+            $this->line($result['status'] === 'sent'
                 ? 'Убрал из Вебмастера старую карту сайта '.$sitemap['url'].'.'
-                : 'Не смог убрать старую карту '.$sitemap['url'].'.');
+                : 'Не смог убрать старую карту '.$sitemap['url'].' ('.$result['why'].').');
         }
-        if (! $has) {
-            $result = $this->webmaster->addSitemap($ours);
-            $this->line(match ($result) {
-                'sent' => 'Добавил в Вебмастер карту сайта '.$ours.'.',
-                'already' => 'Карта сайта '.$ours.' уже была в Вебмастере.',
-                default => 'Не смог добавить карту сайта '.$ours.' в Вебмастер.',
-            });
-        } else {
+        if ($has) {
             $this->line('Карта сайта в Вебмастере в порядке.');
+
+            return;
         }
+        $result = $this->webmaster->addSitemap($ours);
+        $this->line(match ($result['status']) {
+            'sent' => 'Добавил в Вебмастер карту сайта '.$ours.'.',
+            'already' => 'Карта сайта '.$ours.' уже была в Вебмастере.',
+            'down' => 'Карта сайта: Вебмастер сейчас не принимает изменения ('.$result['why'].') — сбой у Яндекса, добавлю '.$ours.' завтра. Яндекс и так знает её из robots.txt.',
+            default => 'Не смог добавить карту сайта '.$ours.' в Вебмастер ('.$result['why'].').',
+        });
     }
 
     /**
-     * @param  array<string, string>  $sent  адрес → когда отправлен
-     * @return array<string, string>
+     * @param  array<string, string>  $sent  адрес → когда отправлен через Вебмастер
+     * @param  array<string, string>  $pinged  адрес → когда отправлен через IndexNow
+     * @return array{0: array<string, string>, 1: array<string, string>}
      */
-    private function recrawl(array $sent): array
+    private function recrawl(array $sent, array $pinged): array
     {
         // Старые отметки не копим.
-        $sent = array_filter($sent, fn (string $at): bool => Carbon::parse($at)->gt(now()->subDays(30)));
+        $recent = fn (string $at): bool => Carbon::parse($at)->gt(now()->subDays(30));
+        $sent = array_filter($sent, $recent);
+        $pinged = array_filter($pinged, $recent);
         $quota = $this->webmaster->recrawlQuota();
         $budget = (int) floor($quota['left'] * 0.8);
         if ($budget <= 0) {
             $this->line("Переобход: квота на сегодня исчерпана ({$quota['left']} из {$quota['daily']}).");
 
-            return $sent;
+            return [$sent, $pinged];
         }
 
         $fresh = fn (string $url, int $days): bool => ! isset($sent[$url]) || Carbon::parse($sent[$url])->lt(now()->subDays($days));
@@ -183,7 +201,16 @@ final class Autopilot
 
         $done = 0;
         $already = 0;
-        foreach ($candidates as $url => $why) {
+        $failed = 0;     // отказов подряд
+        $stop = null;    // down — у Яндекса сбой; refused — Яндекс отклоняет заявки
+        $why = '';
+        $rest = [];      // не ушли из-за сбоя или отказа
+        foreach ($candidates as $url => $reason) {
+            if ($stop !== null) {
+                $rest[$url] = $reason;
+
+                continue;
+            }
             if ($done >= $budget) {
                 break;
             }
@@ -192,19 +219,80 @@ final class Autopilot
                 break;
             }
             if (in_array($result['status'], ['sent', 'already'], true)) {
+                $failed = 0;
                 $sent[$url] = now()->toIso8601String();
                 $result['status'] === 'sent' ? $done++ : $already++;
                 if ($result['status'] === 'sent' && $done <= 15) {
-                    $this->line('На переобход: '.self::short($url).' — '.$why.'.');
+                    $this->line('На переобход: '.self::short($url).' — '.$reason.'.');
                 }
+
+                continue;
+            }
+            // Сбой или отказ: после нескольких подряд дальше не стучимся — квоту и время не тратим.
+            $rest[$url] = $reason;
+            $why = $result['why'];
+            $failed++;
+            if ($result['status'] === 'down' && $failed >= 2) {
+                $stop = 'down';
+            } elseif ($failed >= 3) {
+                $stop = 'refused';
             }
         }
 
         $left = count($candidates) - $done - $already;
         $this->line("Переобход: отправлено {$done}".($already ? ", уже стояли в очереди {$already}" : '')
             .($left > 0 ? ", осталось на следующие дни {$left}" : '').". Квота Яндекса: {$quota['daily']} в сутки.");
+        if ($stop === 'down') {
+            $this->line("Переобход: Вебмастер сейчас не принимает заявки ({$why}) — сбой у Яндекса, повторю завтра.");
+        } elseif ($stop === 'refused') {
+            $this->line("Переобход: Яндекс отклоняет заявки ({$why}). Скачайте SEO-отчёт и пришлите Claude.");
+        }
 
-        return $sent;
+        if ($stop !== null && $rest !== []) {
+            $pinged = $this->viaIndexNow($rest, $pinged);
+        }
+
+        return [$sent, $pinged];
+    }
+
+    /**
+     * Запасной путь, когда Вебмастер не принимает заявки: IndexNow.
+     *
+     * @param  array<string, string>  $urls  адрес → почему
+     * @param  array<string, string>  $pinged
+     * @return array<string, string>
+     */
+    private function viaIndexNow(array $urls, array $pinged): array
+    {
+        if (! IndexNow::enabled()) {
+            $this->line('IndexNow на этом сайте выключен — адреса подождут, пока заработает Вебмастер.');
+
+            return $pinged;
+        }
+        $fresh = array_values(array_filter(array_keys($urls), fn (string $url): bool => ! isset($pinged[$url])
+            || Carbon::parse($pinged[$url])->lt(now()->subDays(self::PING_DAYS))));
+        if ($fresh === []) {
+            $this->line('Через IndexNow эти адреса уже отправлены на этой неделе.');
+
+            return $pinged;
+        }
+        try {
+            $status = IndexNow::submit($fresh);
+        } catch (Throwable $e) {
+            $this->line('IndexNow не ответил: '.mb_substr($e->getMessage(), 0, 150));
+
+            return $pinged;
+        }
+        if (in_array($status, [200, 202], true)) {
+            foreach ($fresh as $url) {
+                $pinged[$url] = now()->toIso8601String();
+            }
+            $this->line('Вместо Вебмастера отправил через IndexNow адресов: '.count($fresh)." (ответ {$status}, принято) — робот Яндекса обойдёт их и так.");
+        } else {
+            $this->line('IndexNow тоже не принял адреса (ответ '.($status ?? '—').').');
+        }
+
+        return $pinged;
     }
 
     /**
