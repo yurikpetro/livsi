@@ -1,10 +1,16 @@
 <?php
 
+use App\Http\Middleware\ApplyRedirects;
+use App\Http\Middleware\CanonicalHost;
 use App\Http\Middleware\CaptureUtm;
+use App\Seo\MissingPages;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Livewire\Features\SupportFileUploads\MissingFileUploadsTraitException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -27,7 +33,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Один адрес сайта: www.livsi.shop → livsi.shop (или наоборот — как в APP_URL).
         $middleware->web(prepend: [
-            \App\Http\Middleware\CanonicalHost::class,
+            CanonicalHost::class,
+            // Переадресации из «Битых ссылок» — раньше страницы: старый адрес
+            // может совпасть с живым маршрутом.
+            ApplyRedirects::class,
         ]);
 
         $middleware->web(append: [
@@ -41,6 +50,16 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Боты-сканеры шлют в Livewire загрузку файла туда, где её нет.
         // Это отказ, а не ошибка сайта: короткий ответ 400, без сообщения в «Ошибки».
-        $exceptions->dontReport(\Livewire\Features\SupportFileUploads\MissingFileUploadsTraitException::class);
-        $exceptions->render(fn (\Livewire\Features\SupportFileUploads\MissingFileUploadsTraitException $e) => response('Bad request', 400));
+        $exceptions->dontReport(MissingFileUploadsTraitException::class);
+        $exceptions->render(fn (MissingFileUploadsTraitException $e) => response('Bad request', 400));
+
+        // 404 — в список «Битые ссылки» админки (страница при этом прежняя).
+        $exceptions->render(function (Throwable $e, Request $request) {
+            if ($e instanceof NotFoundHttpException
+                || $e instanceof ModelNotFoundException) {
+                MissingPages::record($request);
+            }
+
+            return null;
+        });
     })->create();

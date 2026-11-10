@@ -16,6 +16,7 @@
 
     <div class="la-grid">
         @include('filament.analytics.partials.periods', ['range' => $range])
+        @include('filament.analytics.partials.autopilot', ['autopilot' => $autopilot])
 
         @if (! $ready)
             @include('filament.analytics.partials.setup', [

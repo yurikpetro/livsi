@@ -43,7 +43,7 @@ class AnalyticsConnection extends Page implements HasForms
 
     protected static string|\UnitEnum|null $navigationGroup = AnalyticsPage::GROUP;
 
-    protected static ?int $navigationSort = 9;
+    protected static ?int $navigationSort = 11;
 
     protected static ?string $navigationLabel = 'Подключение';
 

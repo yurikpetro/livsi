@@ -27,3 +27,6 @@ Schedule::command('receipts:sync')->everyFiveMinutes()->withoutOverlapping(10);
 Schedule::command('mailings:send')->everyMinute()->withoutOverlapping(10);
 // «Аналитика сайта»: доступ к Метрике и Вебмастеру продлевается сам за месяц до конца.
 Schedule::command('analytics:token')->dailyAt('01:40')->withoutOverlapping(10);
+// SEO-автопилот — каждое утро в 06:10 МСК; недельная сводка — по понедельникам в 09:40 МСК.
+Schedule::command('seo:autopilot')->dailyAt('03:10')->withoutOverlapping(30);
+Schedule::command('seo:weekly')->weeklyOn(1, '06:40')->withoutOverlapping(10);

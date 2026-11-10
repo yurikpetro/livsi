@@ -333,6 +333,79 @@ class Webmaster extends YandexApi
         ];
     }
 
+    // ------------------------------------------------- действия автопилота
+
+    /** @return array{daily: int, left: int} */
+    public function recrawlQuota(): array
+    {
+        $data = $this->request('GET', $this->host().'/recrawl/quota');
+
+        return ['daily' => (int) ($data['daily_quota'] ?? 0), 'left' => (int) ($data['quota_remainder'] ?? 0)];
+    }
+
+    /**
+     * Отправить страницу на переобход.
+     *
+     * @return array{status: string, left: ?int} status: sent | already | quota | invalid | error
+     */
+    public function recrawl(string $url): array
+    {
+        $response = $this->raw('POST', $this->host().'/recrawl/queue', json: ['url' => $url]);
+        $code = (string) $response->json('error_code');
+
+        return [
+            'status' => match (true) {
+                $response->successful() => 'sent',
+                $code === 'URL_ALREADY_ADDED' => 'already',
+                $code === 'QUOTA_EXCEEDED' || $response->status() === 429 => 'quota',
+                $code === 'INVALID_URL' || $response->status() === 400 => 'invalid',
+                default => 'error',
+            },
+            'left' => $response->json('quota_remainder') !== null ? (int) $response->json('quota_remainder') : null,
+        ];
+    }
+
+    /** Карты сайта, которые добавлены в Вебмастер руками. @return list<array{id: string, url: string}> */
+    public function userSitemaps(): array
+    {
+        $data = $this->request('GET', $this->host().'/user-added-sitemaps', ['limit' => 100]);
+
+        return array_values(array_map(fn (array $row): array => [
+            'id' => (string) ($row['sitemap_id'] ?? ''),
+            'url' => (string) ($row['sitemap_url'] ?? ''),
+        ], (array) ($data['sitemaps'] ?? [])));
+    }
+
+    /** @return string sent | already | error */
+    public function addSitemap(string $url): string
+    {
+        $response = $this->raw('POST', $this->host().'/user-added-sitemaps', json: ['url' => $url]);
+
+        return match (true) {
+            $response->successful() => 'sent',
+            (string) $response->json('error_code') === 'SITEMAP_ALREADY_ADDED' => 'already',
+            default => 'error',
+        };
+    }
+
+    public function deleteSitemap(string $id): bool
+    {
+        return $this->raw('DELETE', $this->host().'/user-added-sitemaps/'.rawurlencode($id))->successful();
+    }
+
+    /** Адреса, которые сейчас в поиске. @return list<array{url: string, title: string}> */
+    public function inSearch(int $limit = 100, int $offset = 0): array
+    {
+        $data = $this->request('GET', $this->host().'/search-urls/in-search/samples', [
+            'offset' => max(0, $offset), 'limit' => max(1, min(100, $limit)),
+        ]);
+
+        return array_values(array_map(fn (array $row): array => [
+            'url' => (string) ($row['url'] ?? ''),
+            'title' => (string) ($row['title'] ?? ''),
+        ], (array) ($data['samples'] ?? [])));
+    }
+
     public static function verificationLabel(?string $state, ?string $type = null): string
     {
         $how = match ($type) {

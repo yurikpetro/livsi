@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Product;
-use Illuminate\Http\RedirectResponse;
+use App\Seo\LegacyMatcher;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -14,51 +13,43 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * выкидывает, а вес бренда пропадает. Постоянная переадресация (301): на тот
  * же товар, если его можно узнать по адресу, иначе — в каталог.
  *
- * Срабатывает только для адресов, которых на новом сайте нет.
+ * Старые карты сайта (sitemap.3972363.xml.gz и т. п.) отвечают содержимым
+ * новой карты с кодом 200: Яндекс считает ошибкой карту, которая отвечает
+ * не 200, в том числе переадресацией, — а эта ошибка висела в Вебмастере.
+ *
+ * Срабатывает только для адресов, которых на новом сайте нет. Переадресации,
+ * которые владелец задал руками («Битые ссылки»), проверяются раньше —
+ * в App\Http\Middleware\ApplyRedirects.
  */
 class LegacyRedirectController extends Controller
 {
-    /** Начала адресов старого магазина. */
-    private const LEGACY = '#^(magazin|shop|product|product-category|product-tag|tovar|tovary|katalog|catalog|category|tag)(/|$)#';
-
-    /** Слова, по которым товары не различить. */
-    private const COMMON = ['dlya', 'livsi', 'professional', 'premium', 'magazin', 'category', 'product', 'tovar'];
-
-    public function __invoke(Request $request): RedirectResponse
+    public function __invoke(Request $request): Response
     {
         $path = trim(urldecode($request->path()), '/');
         if (! in_array($request->getMethod(), ['GET', 'HEAD'], true) || $path === '') {
             throw new NotFoundHttpException;
         }
-        $segments = array_values(array_filter(explode('/', mb_strtolower($path))));
 
-        // Тот же адрес товара, что и раньше, — только под другим началом.
-        foreach (array_reverse($segments) as $segment) {
-            $product = Product::active()->where('slug', Str::slug($segment))->first();
-            if ($product) {
-                return redirect()->route('catalog.show', $product, 301);
+        if (preg_match(LegacyMatcher::OLD_SITEMAP, $path)) {
+            $sitemap = app(SitemapController::class)();
+            if (str_ends_with(strtolower($path), '.gz')) {
+                return response(gzencode((string) $sitemap->getContent(), 9), 200, ['Content-Type' => 'application/x-gzip']);
             }
+
+            return $sitemap;
         }
 
-        if (! preg_match(self::LEGACY, $path)) {
+        // Тот же адрес товара, что и раньше, — только под другим началом.
+        if ($product = LegacyMatcher::product($path)) {
+            return redirect()->route('catalog.show', $product, 301);
+        }
+
+        if (! LegacyMatcher::isLegacy($path)) {
             throw new NotFoundHttpException;
         }
 
-        // Похожий товар: не меньше двух значимых слов из старого адреса в новом.
-        $words = array_values(array_diff(array_filter(explode('-', Str::slug((string) end($segments))),
-            fn (string $word): bool => mb_strlen($word) >= 4), self::COMMON));
-        if (count($words) >= 2) {
-            $best = null;
-            $score = 1;
-            foreach (Product::active()->get(['id', 'slug']) as $product) {
-                $hits = count(array_intersect($words, explode('-', $product->slug)));
-                if ($hits > $score) {
-                    [$best, $score] = [$product, $hits];
-                }
-            }
-            if ($best) {
-                return redirect()->route('catalog.show', $best, 301);
-            }
+        if ($product = LegacyMatcher::similar($path)) {
+            return redirect()->route('catalog.show', $product, 301);
         }
 
         return redirect()->route('catalog.index', [], 301);

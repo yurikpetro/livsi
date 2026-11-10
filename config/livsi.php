@@ -255,6 +255,8 @@ return [
             'users' => env('TELEGRAM_TOPIC_USERS', 17),
             'issues' => env('TELEGRAM_TOPIC_ISSUES', 19),
             'shipments' => env('TELEGRAM_TOPIC_SHIPMENTS', 113),
+            // SEO-автопилот и недельный отчёт о поиске. По умолчанию — в тему «Проблемы».
+            'seo' => env('TELEGRAM_TOPIC_SEO', env('TELEGRAM_TOPIC_ISSUES', 19)),
         ],
 
         'payments_connection' => env('TELEGRAM_PAYMENTS_CONNECTION', 'database'),

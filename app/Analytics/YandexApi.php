@@ -45,6 +45,36 @@ abstract class YandexApi
         throw new AnalyticsException($this->explain($response));
     }
 
+    /**
+     * Запрос, ответ которого разбирает вызывающий: для действий, где «уже
+     * добавлено» или «квота кончилась» — не ошибка, а обычный исход.
+     *
+     * @param  array<string, scalar|list<scalar>|null>  $query
+     * @param  array<string, mixed>|null  $json  тело запроса
+     *
+     * @throws AnalyticsException нет доступа или Яндекс не ответил
+     */
+    protected function raw(string $method, string $url, array $query = [], ?array $json = null): Response
+    {
+        $token = $this->oauth->accessToken();
+        $qs = self::query($query);
+
+        try {
+            $request = Http::withHeaders(['Authorization' => 'OAuth '.$token])->acceptJson()->timeout(25);
+            $response = $json === null
+                ? $request->send($method, $url.($qs !== '' ? '?'.$qs : ''))
+                : $request->send($method, $url.($qs !== '' ? '?'.$qs : ''), ['json' => $json]);
+        } catch (Throwable $e) {
+            throw new AnalyticsException($this->service().' не ответил(а) вовремя.', previous: $e);
+        }
+
+        if (in_array($response->status(), [401, 403], true)) {
+            throw new AnalyticsException($this->explain($response));
+        }
+
+        return $response;
+    }
+
     private function explain(Response $response): string
     {
         $detail = (string) ($response->json('message') ?? $response->json('error_message') ?? $response->json('errors.0.message') ?? '');
