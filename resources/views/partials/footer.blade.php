@@ -6,7 +6,7 @@
                 Уход, который<br>подстраивается<br><span class="text-neon">под тебя.</span>
             </h2>
             <p class="mt-6 max-w-sm text-xs text-paper/60 leading-relaxed">
-                Средства для понятного ежедневного ухода и точных профессиональных протоколов.
+                LIVSI (ЛИВСИ) — официальный магазин бренда. Средства для понятного ежедневного ухода и точных профессиональных протоколов.
             </p>
             <a href="{{ route('catalog.index') }}" class="btn btn-neon mt-8">
                 Перейти в каталог <span aria-hidden="true">→</span>

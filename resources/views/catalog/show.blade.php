@@ -34,8 +34,9 @@
     ];
 @endphp
 
-@section('title', $product->seo_title ?: $product->title . ' — LIVSI')
-@section('description', $product->seo_description ?: $product->short_description)
+{{-- Без своего SEO-заголовка — бренд и «официальный магазин»: так страницу находят по «… livsi» и по «… купить». --}}
+@section('title', $product->seo_title ?: $product->title . (stripos($product->title, 'livsi') === false ? ' LIVSI' : '') . ' — купить в официальном магазине')
+@section('description', $product->seo_description ?: trim($product->short_description . ' Официальный магазин LIVSI, доставка по всей России.'))
 @section('og_type', 'product')
 @section('og_image', $cover ? asset($cover->path) : asset('img/catalog/fresh-hero.jpg'))
 

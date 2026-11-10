@@ -17,6 +17,8 @@ Schedule::command('delivery:points')->dailyAt('00:20')->withoutOverlapping(120);
 Schedule::command('delivery:statuses')->everyFifteenMinutes()->withoutOverlapping(30);
 // Посылки возвратов от покупателей: где они и пришли ли к нам.
 Schedule::command('returns:sync')->everyThirtyMinutes()->withoutOverlapping(30);
+// Изменившиеся страницы — Яндексу (IndexNow), пачкой раз в 10 минут.
+Schedule::command('seo:indexnow')->everyTenMinutes()->withoutOverlapping(10);
 // «Обновить пункты выдачи» в админке: заявку забираем раз в минуту.
 Schedule::command('delivery:points --requested')->everyMinute()->withoutOverlapping(60)->runInBackground();
 // Второй чек «полный расчёт» с КИЗ полученным заказам; итог чеков и возвратов в обработке.

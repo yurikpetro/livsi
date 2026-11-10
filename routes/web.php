@@ -183,6 +183,10 @@ Route::post('/logout', [YandexAuthController::class, 'logout'])->name('logout');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 Route::get('/robots.txt', RobotsController::class)->name('robots');
+// Ключ IndexNow: Яндекс сверяет его, когда сайт сообщает об изменившихся страницах.
+Route::get('/indexnow.txt', fn () => response(\App\Seo\IndexNow::key(), 200, ['Content-Type' => 'text/plain; charset=UTF-8']))->name('indexnow.key');
+// Товары для Яндекса (блок «Товары» в поиске): цены и наличие берутся с сайта.
+Route::get('/yml.xml', \App\Http\Controllers\YmlFeedController::class)->name('feed.yml');
 
 // Адреса старого сайта (/magazin/… и т. п.) из выдачи Яндекса — 301 на товар или в каталог.
 // Последним: срабатывает, только если адрес не нашёлся среди новых.

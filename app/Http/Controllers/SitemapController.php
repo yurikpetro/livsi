@@ -10,6 +10,19 @@ class SitemapController extends Controller
 {
     public function __invoke(): Response
     {
+        return response()
+            ->view('sitemap', ['urls' => self::urls()])
+            ->header('Content-Type', 'application/xml');
+    }
+
+    /**
+     * Все адреса, которые сайт отдаёт поисковикам: карта сайта и разовая
+     * отправка в Яндекс (seo:indexnow --all) берут их отсюда.
+     *
+     * @return list<array{loc: string, priority: string, lastmod?: ?string}>
+     */
+    public static function urls(): array
+    {
         $urls = [
             ['loc' => route('home'), 'priority' => '1.0'],
             ['loc' => route('catalog.index'), 'priority' => '0.9'],
@@ -49,8 +62,6 @@ class SitemapController extends Controller
         // Страницы фильтров и поиска в карту не кладём: фильтры индексируются
         // сами по ссылкам, а выдача поиска закрыта от индексации.
 
-        return response()
-            ->view('sitemap', ['urls' => $urls])
-            ->header('Content-Type', 'application/xml');
+        return $urls;
     }
 }
