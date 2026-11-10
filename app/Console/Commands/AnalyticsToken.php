@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Analytics\AnalyticsException;
+use App\Analytics\AnalyticsSettings;
 use App\Analytics\YandexOAuth;
 use Illuminate\Console\Command;
 
@@ -18,8 +19,11 @@ class AnalyticsToken extends Command
 
     public function handle(YandexOAuth $oauth): int
     {
+        $this->line('Код Яндекс Вебмастера на сайте: '.(AnalyticsSettings::verificationCode() ?? 'нет').'.');
+        $this->line('Счётчик Метрики: '.(AnalyticsSettings::counterId() ?? 'не выбран').'.');
+
         if (! $oauth->connected()) {
-            $this->line('Яндекс не подключён — нечего продлевать.');
+            $this->line('Яндекс к админке не подключён — «Аналитика сайта», страница «Подключение».');
 
             return self::SUCCESS;
         }
