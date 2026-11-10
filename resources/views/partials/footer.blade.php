@@ -78,6 +78,8 @@
             @foreach ($siteLegalPages as $page)
                 <a href="{{ route('legal.' . $page->slug) }}" class="hover:text-neon">{{ $page->menuTitle() }}</a>
             @endforeach
+            {{-- Политика обещает, что решение о cookie можно изменить в любой момент. --}}
+            <button type="button" data-cookie-settings class="hover:text-neon">Настройки cookie</button>
         </nav>
     </div>
 </footer>

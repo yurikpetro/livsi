@@ -25,3 +25,5 @@ Schedule::command('delivery:points --requested')->everyMinute()->withoutOverlapp
 Schedule::command('receipts:sync')->everyFiveMinutes()->withoutOverlapping(10);
 // Рассылки клиентам: по 30 писем в минуту.
 Schedule::command('mailings:send')->everyMinute()->withoutOverlapping(10);
+// «Аналитика сайта»: доступ к Метрике и Вебмастеру продлевается сам за месяц до конца.
+Schedule::command('analytics:token')->dailyAt('01:40')->withoutOverlapping(10);

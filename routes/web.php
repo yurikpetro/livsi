@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\Admin\YandexAnalyticsController;
 use App\Http\Controllers\Auth\VkAuthController;
 use App\Http\Controllers\Auth\YandexAuthController;
 use App\Http\Controllers\CartController;
@@ -115,6 +116,10 @@ Route::post('/order/{order}/return/cancel', [OrderReturnController::class, 'canc
 // Внутренний лист для комплектации заказа: проверка прав — в контроллере.
 Route::get('/admin/orders/{order}/print', PrintOrderController::class)->name('admin.orders.print');
 Route::get('/admin/returns/{return}/photos/{index}', ReturnPhotoController::class)->whereNumber('index')->name('admin.returns.photo');
+
+// «Аналитика сайта» → «Подключить Яндекс»: туда и обратно со страницы разрешения Яндекса.
+Route::get('/admin/analytics/yandex/connect', [YandexAnalyticsController::class, 'connect'])->name('admin.analytics.yandex.connect');
+Route::get('/admin/analytics/yandex/callback', [YandexAnalyticsController::class, 'callback'])->name('admin.analytics.yandex.callback');
 
 // Вебхук провайдера: без сессии и без проверки CSRF — запрос приходит
 // не из браузера. Защита — список адресов и перепроверка статуса по API.

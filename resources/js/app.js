@@ -266,23 +266,42 @@ function initCookieBar() {
     if (!bar) return;
 
     const NAME = 'livsi_cookie_consent';
+    const year = 60 * 60 * 24 * 365;
 
     const stored = document.cookie
         .split('; ')
         .find((row) => row.startsWith(NAME + '='))
         ?.split('=')[1];
 
-    if (stored === 'all' || stored === 'necessary') return;
-
-    bar.hidden = false;
+    if (stored !== 'all' && stored !== 'necessary') bar.hidden = false;
 
     bar.querySelectorAll('[data-cookie-choice]').forEach((button) => {
         button.addEventListener('click', () => {
             const choice = button.dataset.cookieChoice;
-            const year = 60 * 60 * 24 * 365;
 
             document.cookie = `${NAME}=${choice}; path=/; max-age=${year}; SameSite=Lax`;
             bar.hidden = true;
+
+            // Отказались от аналитики — убираем файлы Метрики, если она была включена раньше.
+            if (choice !== 'all') {
+                document.cookie.split('; ').map((row) => row.split('=')[0]).filter((name) => name.startsWith('_ym')).forEach((name) => {
+                    const host = location.hostname.replace(/^www\./, '');
+                    [`domain=.${host}; `, ''].forEach((domain) => {
+                        document.cookie = `${name}=; path=/; ${domain}max-age=0`;
+                    });
+                });
+            }
+
+            // Счётчик (partials/metrika.blade.php) включается сразу, без перезагрузки.
+            window.dispatchEvent(new CustomEvent('livsi:consent', { detail: choice }));
+        });
+    });
+
+    // «Настройки cookie» в подвале: политика обещает, что решение можно изменить.
+    document.querySelectorAll('[data-cookie-settings]').forEach((link) => {
+        link.addEventListener('click', () => {
+            bar.hidden = false;
+            bar.querySelector('[data-cookie-choice="necessary"]')?.focus();
         });
     });
 }
