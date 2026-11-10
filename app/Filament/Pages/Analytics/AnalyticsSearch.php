@@ -39,12 +39,28 @@ class AnalyticsSearch extends AnalyticsPage
         }
         $webmaster = app(Webmaster::class);
 
+        // До какого дня у Яндекса вообще есть статистика запросов. Дни после
+        // него — «данных нет», а не ноль показов.
+        $until = $this->block(fn () => $webmaster->dataUntil())['data'];
+        $queries = $this->block(fn () => $webmaster->popular($period));
+
+        // За выбранный период пусто, потому что данные у Яндекса кончаются
+        // раньше, — показываем последнюю неделю, которая у него есть.
+        $latest = null;
+        if (($queries['data']['rows'] ?? null) === [] && $until !== null && $until < $period->date1()) {
+            $latest = $this->block(fn () => $webmaster->popular(null));
+        }
+
         return [
             'ready' => true,
             'range' => $period,
+            'until' => $until,
             'summary' => $this->block(fn () => $webmaster->summary()),
-            'history' => $this->block(fn () => $webmaster->history($period)),
-            'queries' => $this->block(fn () => $webmaster->popular($period)),
+            'history' => $this->block(fn () => $webmaster->historyUntil($period, $until)),
+            'queries' => $queries,
+            'latest' => $latest,
+            'problems' => $this->block(fn () => $webmaster->problems()),
+            'events' => $this->block(fn () => $webmaster->searchEvents()),
             'brand' => self::BRAND,
         ];
     }

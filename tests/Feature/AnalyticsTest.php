@@ -188,27 +188,84 @@ class AnalyticsTest extends TestCase
     public function test_search_page_shows_queries_from_webmaster_and_marks_brand_ones(): void
     {
         $this->connect();
+        $today = now('Europe/Moscow');
         $this->fakeYandex([
-            '*/search-queries/popular*' => Http::response(['queries' => [
-                ['query_id' => 'a', 'query_text' => 'livsi', 'indicators' => ['TOTAL_SHOWS' => 120.0, 'TOTAL_CLICKS' => 30.0, 'AVG_SHOW_POSITION' => 2.4, 'AVG_CLICK_POSITION' => 1.3]],
-                ['query_id' => 'b', 'query_text' => 'пенка для маникюра', 'indicators' => ['TOTAL_SHOWS' => 80.0, 'TOTAL_CLICKS' => 2.0, 'AVG_SHOW_POSITION' => 14.2]],
-            ], 'count' => 2]),
+            '*/search-queries/popular*' => function (HttpRequest $r) use ($today) {
+                return Http::response(['queries' => [
+                    ['query_id' => 'a', 'query_text' => 'livsi', 'indicators' => ['TOTAL_SHOWS' => 120.0, 'TOTAL_CLICKS' => 30.0, 'AVG_SHOW_POSITION' => 2.4, 'AVG_CLICK_POSITION' => 1.3]],
+                    ['query_id' => 'b', 'query_text' => 'пенка для маникюра', 'indicators' => ['TOTAL_SHOWS' => 80.0, 'TOTAL_CLICKS' => 2.0, 'AVG_SHOW_POSITION' => 14.2]],
+                ], 'count' => 2, 'date_from' => $today->copy()->subDays(9)->format('Y-m-d'), 'date_to' => $today->copy()->subDays(3)->format('Y-m-d')]);
+            },
             '*/search-queries/all/history*' => Http::response(['indicators' => [
-                'TOTAL_SHOWS' => [['date' => now('Europe/Moscow')->subDays(5)->format('Y-m-d').'T00:00:00.000+03:00', 'value' => 40.0]],
-                'TOTAL_CLICKS' => [['date' => now('Europe/Moscow')->subDays(5)->format('Y-m-d').'T00:00:00.000+03:00', 'value' => 6.0]],
+                'TOTAL_SHOWS' => [['date' => $today->copy()->subDays(5)->format('Y-m-d').'T00:00:00.000+03:00', 'value' => 40.0]],
+                'TOTAL_CLICKS' => [['date' => $today->copy()->subDays(5)->format('Y-m-d').'T00:00:00.000+03:00', 'value' => 6.0]],
             ]]),
             '*/summary' => Http::response(['sqi' => 10, 'searchable_pages_count' => 24, 'excluded_pages_count' => 3,
-                'site_problems' => ['FATAL' => 0, 'CRITICAL' => 0, 'POSSIBLE_PROBLEM' => 2, 'RECOMMENDATION' => 1]]),
+                'site_problems' => ['FATAL' => 0, 'CRITICAL' => 1, 'POSSIBLE_PROBLEM' => 2, 'RECOMMENDATION' => 1]]),
+            '*/diagnostics' => Http::response(['problems' => [
+                'NO_REGIONS' => ['severity' => 'RECOMMENDATION', 'state' => 'PRESENT', 'last_state_update' => '2026-09-30T07:41:49.107+03:00'],
+                'URL_ALERT_4XX' => ['severity' => 'CRITICAL', 'state' => 'PRESENT', 'last_state_update' => '2026-10-08T01:00:00.000+03:00'],
+                'NO_ROBOTS_TXT' => ['severity' => 'POSSIBLE_PROBLEM', 'state' => 'ABSENT', 'last_state_update' => null],
+            ]]),
+            '*/search-urls/events/samples*' => Http::response(['count' => 2, 'samples' => [
+                ['url' => 'https://livsi.shop/magazin/tag/uhod-za-nogami/', 'title' => 'Уход за ногами', 'event_date' => '2026-09-23T00:00:00,000+0300',
+                    'event' => 'REMOVED_FROM_SEARCH', 'excluded_url_status' => 'HTTP_ERROR', 'bad_http_status' => 401],
+                ['url' => 'https://livsi.shop/catalog', 'title' => 'Каталог', 'event_date' => '2026-10-20T00:00:00,000+0300', 'event' => 'APPEARED_IN_SEARCH'],
+                ['url' => 'https://www.livsi.shop/', 'title' => 'LIVSI', 'event_date' => '2026-10-10T00:00:00,000+0300',
+                    'event' => 'REMOVED_FROM_SEARCH', 'excluded_url_status' => 'NOT_MAIN_MIRROR'],
+            ]]),
         ]);
 
-        $this->get(AnalyticsSearch::getUrl())->assertOk()
+        $html = $this->get(AnalyticsSearch::getUrl())->assertOk()
             ->assertSee('страниц в поиске')->assertSee('24')
             ->assertSee('пенка для маникюра')->assertSee('14,2')
-            ->assertSee('<tr class="is-brand">', false);
+            ->assertSee('<tr class="is-brand">', false)
+            ->assertSee('Часть страниц отвечала роботу ошибкой 4xx')
+            ->assertSee('Не задан регион сайта')
+            ->assertDontSee('Нет файла robots.txt')
+            ->assertSee('Страница отвечала ошибкой (код 401)')
+            ->assertSee('/magazin/tag/uhod-za-nogami/')
+            ->assertSee('www.livsi.shop/')->assertSee('Неглавное зеркало сайта')
+            ->assertDontSee('нет свежей статистики')
+            ->getContent();
+        // Серьёзная проблема — первой в списке.
+        $this->assertLessThan(strpos($html, 'Не задан регион сайта'), strpos($html, 'Часть страниц отвечала роботу ошибкой 4xx'));
 
         Http::assertSent(fn (HttpRequest $r) => str_contains($r->url(), '/search-queries/popular')
             && str_contains($r->url(), 'query_indicator=TOTAL_SHOWS&query_indicator=TOTAL_CLICKS')
             && str_contains($r->url(), '/hosts/https:livsi.shop:443/'));
+    }
+
+    public function test_when_yandex_statistics_stop_the_page_says_so_and_shows_the_last_week_it_has(): void
+    {
+        $this->connect();
+        $this->fakeYandex([
+            // Как ответил Яндекс по livsi.shop 10.11.2026: данные о запросах кончаются 6 октября.
+            '*/search-queries/popular*' => function (HttpRequest $r) {
+                return str_contains($r->url(), 'date_from=')
+                    ? Http::response(['count' => 0, 'queries' => [], 'date_from' => '2026-10-11', 'date_to' => '2026-10-06'])
+                    : Http::response(['count' => 2, 'queries' => [
+                        ['query_id' => 'a', 'query_text' => 'livsi официальный сайт', 'indicators' => ['TOTAL_SHOWS' => 1, 'TOTAL_CLICKS' => 0]],
+                        ['query_id' => 'b', 'query_text' => 'ливси для педикюра', 'indicators' => ['TOTAL_SHOWS' => 1, 'TOTAL_CLICKS' => 0]],
+                    ], 'date_from' => '2026-09-30', 'date_to' => '2026-10-06']);
+            },
+            '*/search-queries/all/history*' => Http::response(['indicators' => ['TOTAL_SHOWS' => [
+                ['date' => now('Europe/Moscow')->subDays(3)->format('Y-m-d').'T00:00:00.000+03:00', 'value' => 0],
+            ], 'TOTAL_CLICKS' => []]]),
+            '*/summary' => Http::response(['sqi' => 10, 'searchable_pages_count' => 31, 'excluded_pages_count' => 15, 'site_problems' => []]),
+            '*/diagnostics' => Http::response(['problems' => []]),
+            '*/search-urls/events/samples*' => Http::response(['count' => 0, 'samples' => []]),
+        ]);
+
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2026-11-10 13:00', 'Europe/Moscow'));
+        $this->get(AnalyticsSearch::getUrl())->assertOk()
+            ->assertSee('нет свежей статистики запросов: последние данные — за 06.10.2026')
+            ->assertSee('30.09.2026 – 06.10.2026')
+            ->assertSee('livsi официальный сайт')
+            ->assertSee('<tr class="is-brand">', false)
+            // Нули после 6 октября — не «0 показов», а «нет данных».
+            ->assertDontSee('<b>0</b><span>показов', false)
+            ->assertSee('Яндекс проблем не видит');
     }
 
     public function test_sales_page_splits_orders_by_where_buyers_came_from(): void

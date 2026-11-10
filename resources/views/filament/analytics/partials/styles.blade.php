@@ -5,7 +5,8 @@
     .la-cols-2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); align-items: start; }
     @media (max-width: 640px) { .la-cols-2 { grid-template-columns: 1fr; } }
     .la-kpis { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-    .la-kpi { padding: 12px 14px; border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(127, 127, 127, .2); }
+    .la-kpi { display: block; padding: 12px 14px; border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(127, 127, 127, .2); }
+    a.la-kpi:hover { box-shadow: inset 0 0 0 1px #51a940; }
     .la-kpi b { display: block; font-size: 1.5rem; line-height: 1.2; font-weight: 600; white-space: nowrap; }
     .la-kpi span { font-size: .8rem; opacity: .7; }
     .la-periods { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
