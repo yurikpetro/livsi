@@ -138,6 +138,25 @@ class Order extends Model
         return $this->receipts()->where('kind', $kind)->first();
     }
 
+    /** Заявки покупателя на возврат после получения. */
+    public function returns(): HasMany
+    {
+        return $this->hasMany(OrderReturn::class);
+    }
+
+    /** Последняя заявка на возврат — её состояние и показываем. */
+    public function latestReturn(): ?OrderReturn
+    {
+        return $this->returns()->latest('id')->first();
+    }
+
+    /** Заявка, которая ещё в работе: ждёт решения, товара или денег. */
+    public function activeReturn(): ?OrderReturn
+    {
+        return $this->returns()->whereIn('status', [OrderReturn::REQUESTED, OrderReturn::APPROVED, OrderReturn::RECEIVED])
+            ->latest('id')->first();
+    }
+
     /** Заказы без оформленного возврата денег: их ещё собирают и везут. */
     public function scopeWithoutRefund(Builder $query): void
     {

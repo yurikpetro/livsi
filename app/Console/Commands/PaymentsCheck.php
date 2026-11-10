@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Payments\CloudKassir;
 use App\Payments\PaymentSettings;
 use App\Payments\TochkaClient;
+use App\Payments\TrustedCa;
 use App\Payments\Vat;
 use App\Payments\YooKassaGateway;
 use Illuminate\Console\Command;
@@ -21,7 +22,7 @@ use Throwable;
  */
 class PaymentsCheck extends Command
 {
-    protected $signature = 'payments:check';
+    protected $signature = 'payments:check {--tochka : проверить Точку и CloudKassir, даже если оплата пока через ЮKassa}';
 
     protected $description = 'Проверить ключи платёжного провайдера и готовность к приёму оплаты';
 
@@ -30,7 +31,7 @@ class PaymentsCheck extends Command
         $this->line('');
         $this->line('Оплату принимает: '.PaymentSettings::providerLabel());
 
-        if (PaymentSettings::provider() === PaymentSettings::TOCHKA) {
+        if (PaymentSettings::provider() === PaymentSettings::TOCHKA || $this->option('tochka')) {
             return $this->tochka($tochka, $kassa);
         }
 
@@ -105,8 +106,16 @@ class PaymentsCheck extends Command
     /** Точка: ключ, эквайринг, уведомления; CloudKassir — для второго чека. */
     private function tochka(TochkaClient $tochka, CloudKassir $kassa): int
     {
-        if (! $tochka->isConfigured()) {
-            $this->error('Не заданы JWT-ключ и код компании Точки — «Интеграции оплаты» в админке.');
+        $this->line('Сертификат Минцифры для связи с Точкой: '.(TrustedCa::installed() ? 'установлен' : 'НЕ установлен'));
+        if (PaymentSettings::secret('tochka_jwt') === null) {
+            $this->error('Не задан JWT-ключ Точки — «Интеграции оплаты» в админке.');
+
+            return self::FAILURE;
+        }
+        try {
+            $this->line('Код компании: '.$tochka->ensureCustomerCode());
+        } catch (Throwable $e) {
+            $this->error($e->getMessage());
 
             return self::FAILURE;
         }

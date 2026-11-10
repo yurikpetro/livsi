@@ -9,8 +9,11 @@ use App\Models\OrderFulfillmentEvent;
 use App\Models\OrderItem;
 use App\Models\OrderItemMark;
 use App\Models\OrderReceipt;
+use App\Models\Payment;
+use App\Payments\PaymentSettings;
 use App\Services\DeliverySelection;
 use App\Services\FulfillmentService;
+use App\Services\ReceiptService;
 use App\Services\ShipmentService;
 use App\Services\StockReturnService;
 use App\Support\Fulfillment;
@@ -27,8 +30,10 @@ use Throwable;
  * Заказы сайта для вкладки «Сайт» на livsipro.ru.
  *
  * Отдаёт только то, что нужно сборщику: состав, пункт выдачи, имя
- * получателя (оно же на этикетке), статусы. Телефон и почта покупателя
- * сюда не попадают — для сборки они не нужны.
+ * получателя (оно же на этикетке), статусы, а в карточке заказа — ещё
+ * оплату, чеки и суммы, чтобы владелец не ходил за ними в админку.
+ * Телефон и почта покупателя сюда не попадают — для сборки они не нужны
+ * (исключение — курьер по Ставрополю: ему телефон нужен).
  *
  * Каждое действие подписывается именем сборщика (поле by): оно уходит в
  * журнал заказа на сайте, и видно, кто собрал и кто передал.
@@ -407,6 +412,8 @@ class OrdersController extends Controller
                 'title' => $item->label(),
                 'quantity' => (int) $item->quantity,
                 'is_gift' => (bool) $item->is_gift,
+                'price' => (int) $item->unit_price,
+                'total' => (int) $item->total,
                 'barcode' => $item->variant?->barcode,
                 'gtin' => $this->gtin($item),
                 'marks' => $item->marks->map(fn (OrderItemMark $mark): array => [
@@ -419,6 +426,107 @@ class OrdersController extends Controller
                 'comment' => $event->comment,
                 'at' => $event->created_at?->toIso8601String(),
             ])->all(),
+            'created_at' => $order->created_at?->toIso8601String(),
+            'money' => [
+                'items' => (int) $order->items_total,
+                'discount' => (int) $order->promo_discount,
+                'delivery' => (int) $order->delivery_price,
+                'total' => (int) $order->total,
+            ],
+            'delivery_info' => $this->deliveryInfo($order),
+            'payment' => $this->paymentInfo($order),
+            'receipts' => $this->receiptsInfo($order),
+            // Возврат по заявке покупателя: что и в каком состоянии. Без контактов.
+            'return' => ($return = $order->latestReturn()) && $return->status !== \App\Models\OrderReturn::CANCELLED ? [
+                'number' => $return->number,
+                'status' => $return->statusLabel(),
+                'reason' => $return->reasonLabel(),
+                'items' => $return->itemsText(),
+                'method' => $return->methodLabel(),
+                'cdek_number' => $return->shipment_number,
+                'cdek_status' => $return->shipment_status_name,
+                'at' => $return->created_at?->toIso8601String(),
+            ] : null,
+        ];
+    }
+
+    /** Способы оплаты ЮKassa и Точки — как их назвать человеку. */
+    private const PAY_METHODS = [
+        'sbp' => 'СБП', 'card' => 'банковская карта', 'bank_card' => 'банковская карта',
+        'tinkoff' => 'T-Pay', 'tinkoff_bank' => 'T-Pay', 'dolyame' => 'Долями',
+        'yoo_money' => 'ЮMoney', 'sberbank' => 'SberPay', 'sber_loan' => 'кредит Сбера',
+    ];
+
+    /** Куда, чем и когда: то, что нужно для листа сборки. @return array<string, mixed> */
+    private function deliveryInfo(Order $order): array
+    {
+        $quote = (array) $order->delivery_quote;
+        $parcel = (array) ($quote['parcel'] ?? []);
+
+        return [
+            'tariff' => filled($quote['tariff_name'] ?? null) ? (string) $quote['tariff_name'] : null,
+            'days_min' => isset($quote['days_min']) ? (int) $quote['days_min'] : null,
+            'days_max' => isset($quote['days_max']) ? (int) $quote['days_max'] : null,
+            'region' => $order->delivery_region,
+            'point_id' => $order->delivery_point_id,
+            'point_hint' => $order->delivery_point_hint,
+            'address' => $order->delivery_address,
+            'weight' => isset($parcel['weight']) ? (int) $parcel['weight'] : null,
+            'size' => isset($parcel['length'], $parcel['width'], $parcel['height'])
+                ? [(int) $parcel['length'], (int) $parcel['width'], (int) $parcel['height']] : null,
+        ];
+    }
+
+    /** Последняя оплата заказа: кто принял, как и когда. @return array<string, mixed>|null */
+    private function paymentInfo(Order $order): ?array
+    {
+        $payment = $order->payments()->where('status', Payment::STATUS_SUCCEEDED)->latest('id')->first()
+            ?? $order->payments()->latest('id')->first();
+        if (! $payment) {
+            return null;
+        }
+
+        return [
+            'provider' => PaymentSettings::providerLabel($payment->gateway === PaymentSettings::TOCHKA ? PaymentSettings::TOCHKA : PaymentSettings::YOOKASSA),
+            'status' => $payment->statusLabel(),
+            'paid' => $payment->status === Payment::STATUS_SUCCEEDED,
+            'method' => self::PAY_METHODS[(string) $payment->payment_method] ?? ($payment->payment_method ?: null),
+            'amount' => (int) $payment->amount,
+            'at' => $payment->paid_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * Чеки: первый (предоплата) пробивается вместе с оплатой; второй
+     * «полный расчёт» с КИЗ — когда заказ получен; возврат и чек возврата.
+     *
+     * @return array<string, mixed>
+     */
+    private function receiptsInfo(Order $order): array
+    {
+        $receipts = app(ReceiptService::class);
+        $paid = $receipts->payment($order) !== null;
+        $row = function (?OrderReceipt $record): ?array {
+            return $record ? [
+                'state' => $record->status,
+                'label' => $record->statusLabel(),
+                'amount' => (int) $record->amount,
+                'at' => $record->sent_at?->toIso8601String(),
+                'done_at' => $record->done_at?->toIso8601String(),
+                'error' => $record->error,
+            ] : null;
+        };
+        $closing = $row($order->receipt(OrderReceipt::KIND_CLOSING)) ?? ['state' => 'none', 'label' => match (true) {
+            ! $paid => 'не нужен — заказ оплачен не через сайт',
+            ! $receipts->enabled() => 'второй чек выключен в настройках сайта',
+            default => 'уйдёт сам, когда заказ получит статус «Получен»',
+        }];
+
+        return [
+            'first' => $paid ? 'Предоплата 100 % — пробит при оплате' : null,
+            'closing' => $closing,
+            'refund' => $row($order->receipt(OrderReceipt::KIND_REFUND)),
+            'refund_receipt' => $row($order->receipt(OrderReceipt::KIND_REFUND_RECEIPT)),
         ];
     }
 

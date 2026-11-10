@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\Admin\YandexAnalyticsController;
 use App\Http\Controllers\Auth\VkAuthController;
 use App\Http\Controllers\Auth\YandexAuthController;
 use App\Http\Controllers\CartController;
@@ -15,12 +16,16 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LeadRequestController;
 use App\Http\Controllers\LegalPageController;
 use App\Http\Controllers\LineController;
+use App\Http\Controllers\LegacyRedirectController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\OrderReturnController;
 use App\Http\Controllers\OzonClientCheckController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\TochkaWebhookController;
 use App\Http\Controllers\PrintOrderController;
+use App\Http\Controllers\ReturnPhotoController;
+use App\Http\Controllers\RobotsController;
 use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\UnsubscribeController;
 use App\Http\Middleware\CaptureUtm;
@@ -99,8 +104,22 @@ Route::match(['get', 'post'], '/unsubscribe/{customer}', UnsubscribeController::
 // Заказ открывается по номеру и токену из письма: кабинета у гостя нет.
 Route::get('/order/{order}', [OrderController::class, 'show'])->name('order.show');
 
+// Возврат после получения: владелец аккаунта или ссылка с токеном из письма.
+Route::get('/order/{order}/return', [OrderReturnController::class, 'create'])->name('order.return');
+Route::post('/order/{order}/return', [OrderReturnController::class, 'store'])
+    ->middleware('throttle:10,60')
+    ->name('order.return.store');
+Route::post('/order/{order}/return/cancel', [OrderReturnController::class, 'cancel'])
+    ->middleware('throttle:20,60')
+    ->name('order.return.cancel');
+
 // Внутренний лист для комплектации заказа: проверка прав — в контроллере.
 Route::get('/admin/orders/{order}/print', PrintOrderController::class)->name('admin.orders.print');
+Route::get('/admin/returns/{return}/photos/{index}', ReturnPhotoController::class)->whereNumber('index')->name('admin.returns.photo');
+
+// «Аналитика сайта» → «Подключить Яндекс»: туда и обратно со страницы разрешения Яндекса.
+Route::get('/admin/analytics/yandex/connect', [YandexAnalyticsController::class, 'connect'])->name('admin.analytics.yandex.connect');
+Route::get('/admin/analytics/yandex/callback', [YandexAnalyticsController::class, 'callback'])->name('admin.analytics.yandex.callback');
 
 // Вебхук провайдера: без сессии и без проверки CSRF — запрос приходит
 // не из браузера. Защита — список адресов и перепроверка статуса по API.
@@ -168,3 +187,12 @@ Route::get('/auth/vk/callback', [VkAuthController::class, 'callback'])
 Route::post('/logout', [YandexAuthController::class, 'logout'])->name('logout');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
+Route::get('/robots.txt', RobotsController::class)->name('robots');
+// Ключ IndexNow: Яндекс сверяет его, когда сайт сообщает об изменившихся страницах.
+Route::get('/indexnow.txt', fn () => response(\App\Seo\IndexNow::key(), 200, ['Content-Type' => 'text/plain; charset=UTF-8']))->name('indexnow.key');
+// Товары для Яндекса (блок «Товары» в поиске): цены и наличие берутся с сайта.
+Route::get('/yml.xml', \App\Http\Controllers\YmlFeedController::class)->name('feed.yml');
+
+// Адреса старого сайта (/magazin/… и т. п.) из выдачи Яндекса — 301 на товар или в каталог.
+// Последним: срабатывает, только если адрес не нашёлся среди новых.
+Route::fallback(LegacyRedirectController::class);

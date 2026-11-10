@@ -61,7 +61,11 @@
                                             Повторить заказ
                                         </button>
                                     </form>
+
+                                    @include('pages.partials.order-return', ['order' => $order, 'part' => 'button'])
                                 </div>
+
+                                @include('pages.partials.order-return', ['order' => $order, 'part' => 'status'])
                             </div>
                         @endforeach
                     </div>

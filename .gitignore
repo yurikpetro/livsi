@@ -34,3 +34,4 @@ Thumbs.db
 # Брендбук весит 337 МБ — держим во внешнем хранилище, не в git
 LIVSI*.pdf
 /public/img/derived
+/public/robots.txt

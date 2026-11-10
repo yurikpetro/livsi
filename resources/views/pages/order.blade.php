@@ -34,6 +34,31 @@
     };
 @endphp
 
+{{-- Покупка для Метрики: один раз на браузер и только с согласием на
+     аналитику. Сумма и товары — без имени, телефона и адреса. --}}
+@if ($order->paid_at && $order->status === Order::STATUS_PAID && \App\Analytics\AnalyticsSettings::counterId())
+    @push('head')
+        <script>
+            (function () {
+                if (document.cookie.split('; ').indexOf('livsi_cookie_consent=all') === -1) return;
+                var key = 'livsi.ym.purchase.' + @js($order->number);
+                try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (e) {}
+                window.dataLayer = window.dataLayer || [];
+                window.dataLayer.push({ecommerce: {currencyCode: 'RUB', purchase: {
+                    actionField: {id: @js($order->number), revenue: {{ round($order->total / 100, 2) }}},
+                    products: @js($order->items->where('is_gift', false)->values()->map(fn ($item) => [
+                        'id' => (string) $item->sku,
+                        'name' => (string) $item->title,
+                        'variant' => (string) $item->option_label,
+                        'price' => round($item->unit_price / 100, 2),
+                        'quantity' => (int) $item->quantity,
+                    ])->all()),
+                }}});
+            })();
+        </script>
+    @endpush
+@endif
+
 @section('content')
     <section class="site-container py-16 md:py-24">
         <x-development-notice />
@@ -52,6 +77,8 @@
         </div>
 
         @include('pages.partials.order-fulfillment', ['order' => $order])
+
+        @include('pages.partials.order-return', ['order' => $order])
 
         @guest
             @if ($canLinkAccount && $order->user_id === null)

@@ -6,7 +6,10 @@ use App\Mail\OrderCancelled;
 use App\Mail\OrderPaid;
 use App\Mail\OrderPaidManagerNotice;
 use App\Mail\OrderPlaced;
+use App\Mail\OrderReturnMail;
+use App\Mail\OrderReturnManagerNotice;
 use App\Models\Order;
+use App\Models\OrderReturn;
 use App\Models\Setting;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\Log;
@@ -53,6 +56,26 @@ class OrderMailer
         $this->toCustomer($order, new OrderCancelled($order), 'cancelled');
     }
 
+    /**
+     * Письмо покупателю по заявке на возврат: принята, одобрена (как передать
+     * товар), отказ, деньги вернулись.
+     */
+    public function returnUpdate(OrderReturn $return, string $kind): void
+    {
+        $order = $return->order;
+        if ($order) {
+            $this->toCustomer($order, new OrderReturnMail($return, $kind), 'return-'.$kind);
+        }
+    }
+
+    /** Новая заявка на возврат — менеджеру на почту. */
+    public function returnRequestedManager(OrderReturn $return): void
+    {
+        if ($return->order) {
+            $this->toManager($return->order, new OrderReturnManagerNotice($return), 'Заявка на возврат');
+        }
+    }
+
     private function toCustomer(Order $order, Mailable $letter, string $reason): void
     {
         if (blank($order->customer_email)) {
@@ -66,12 +89,12 @@ class OrderMailer
      * Адрес менеджера правится в настройках сайта, значение из окружения —
      * запасное. Не задан — письмо не уходит, но заказ от этого не страдает.
      */
-    private function toManager(Order $order, Mailable $letter): void
+    private function toManager(Order $order, Mailable $letter, string $what = 'Заказ оплачен'): void
     {
         $to = Setting::get('manager_email') ?: config('livsi.manager_email');
 
         if (blank($to)) {
-            Log::warning('Заказ оплачен, но менеджеру не написали: не задан адрес.', [
+            Log::warning($what.', но менеджеру не написали: не задан адрес.', [
                 'order' => $order->number,
             ]);
 

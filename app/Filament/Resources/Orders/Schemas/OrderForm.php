@@ -28,6 +28,16 @@ class OrderForm
     {
         return $schema
             ->components([
+                // Заявка покупателя на возврат — первой: её ждут решение и сроки.
+                Section::make('Возврат по заявке покупателя')
+                    ->schema([
+                        Placeholder::make('return_overview')
+                            ->hiddenLabel()
+                            ->content(fn (Order $record) => new HtmlString(view('filament.orders.return', ['order' => $record])->render()))
+                            ->columnSpanFull(),
+                    ])
+                    ->visible(fn (?Order $record): bool => (bool) $record?->returns()->exists()),
+
                 Section::make('Работа с заказом')
                     ->schema([
                         Select::make('status')

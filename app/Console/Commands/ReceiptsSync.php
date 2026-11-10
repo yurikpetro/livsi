@@ -21,6 +21,12 @@ use Throwable;
  */
 class ReceiptsSync extends Command
 {
+    private const TITLES = [
+        OrderReceipt::KIND_CLOSING => 'второй чек',
+        OrderReceipt::KIND_REFUND => 'возврат денег',
+        OrderReceipt::KIND_REFUND_RECEIPT => 'чек возврата',
+    ];
+
     protected $signature = 'receipts:sync
         {--retry= : номер заказа, по которому повторить второй чек}
         {--show= : номер заказа — показать, что уйдёт во втором чеке, ничего не отправляя}';
@@ -63,7 +69,9 @@ class ReceiptsSync extends Command
             ->whereNotIn('id', $just)->with('order')->oldest('id')->limit(100)->get();
         foreach ($pending as $record) {
             try {
-                $record->kind === OrderReceipt::KIND_REFUND ? $refunds->refresh($record) : $receipts->refresh($record);
+                $record = $record->kind === OrderReceipt::KIND_REFUND ? $refunds->refresh($record) : $receipts->refresh($record);
+                $this->line(($record->order?->number ?? '#'.$record->order_id).': '.(self::TITLES[$record->kind] ?? $record->kind).' — '
+                    .$record->statusLabel().($record->error ? ' ('.$record->error.')' : ''));
             } catch (Throwable $exception) {
                 Log::warning('Не удалось узнать итог у кассы.', ['order' => $record->order?->number, 'kind' => $record->kind,
                     'error' => mb_substr($exception->getMessage(), 0, 300)]);

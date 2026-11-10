@@ -6,7 +6,7 @@
                 Уход, который<br>подстраивается<br><span class="text-neon">под тебя.</span>
             </h2>
             <p class="mt-6 max-w-sm text-xs text-paper/60 leading-relaxed">
-                Средства для понятного ежедневного ухода и точных профессиональных протоколов.
+                LIVSI (ЛИВСИ) — официальный магазин бренда. Средства для понятного ежедневного ухода и точных профессиональных протоколов.
             </p>
             <a href="{{ route('catalog.index') }}" class="btn btn-neon mt-8">
                 Перейти в каталог <span aria-hidden="true">→</span>
@@ -47,7 +47,7 @@
         <div>
             <div class="eyebrow text-paper/40">Соцсети и связь</div>
             <ul class="mt-5 space-y-3 text-xs text-paper/70">
-                @foreach (['telegram_url' => 'Telegram', 'whatsapp_url' => 'WhatsApp'] as $setting => $label)
+                @foreach (['telegram_url' => 'Telegram', 'vk_url' => 'VK', 'whatsapp_url' => 'WhatsApp'] as $setting => $label)
                     @if (\App\Models\Setting::get($setting))<li><a href="{{ \App\Models\Setting::get($setting) }}" rel="noopener" target="_blank" class="hover:text-neon">{{ $label }} ↗</a></li>@endif
                 @endforeach
                 <li>{{ $siteWorkHours }}</li>
@@ -78,6 +78,8 @@
             @foreach ($siteLegalPages as $page)
                 <a href="{{ route('legal.' . $page->slug) }}" class="hover:text-neon">{{ $page->menuTitle() }}</a>
             @endforeach
+            {{-- Политика обещает, что решение о cookie можно изменить в любой момент. --}}
+            <button type="button" data-cookie-settings class="hover:text-neon">Настройки cookie</button>
         </nav>
     </div>
 </footer>

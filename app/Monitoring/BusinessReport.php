@@ -7,8 +7,10 @@ use App\Filament\Resources\Orders\OrderResource;
 use App\Filament\Resources\StockQuotas\StockQuotaResource;
 use App\Models\LeadRequest;
 use App\Models\OrderIssue;
+use App\Models\OrderReturn;
 use App\Models\StockQuota;
 use App\Models\User;
+use App\Support\Money;
 use RuntimeException;
 
 class BusinessReport
@@ -20,6 +22,7 @@ class BusinessReport
             'stock_low', 'stock_empty' => $this->stock($recordId, $kind),
             'user' => $this->user($recordId, $detail),
             'order_issue' => $this->issue($recordId),
+            'return_request', 'return_arrived' => $this->returnRequest($recordId, $kind),
             default => throw new RuntimeException("Неизвестное событие Telegram: {$kind}."),
         };
     }
@@ -88,6 +91,27 @@ class BusinessReport
             'Обращение: '.$issue->id,
             'Статус: требует проверки менеджером',
         ], OrderResource::getUrl('edit', ['record' => $issue->order], panel: 'admin'));
+    }
+
+    private function returnRequest(int $id, string $kind): ?string
+    {
+        $return = OrderReturn::with('order')->find($id);
+        if (! $return || ! $return->order) {
+            return null;
+        }
+
+        return $this->lines($kind === 'return_arrived' ? [
+            '📦 Посылка возврата пришла в пункт СДЭК',
+            'Заказ: '.$return->order->number,
+            'Возврат: '.$return->number.($return->shipment_number ? ' · СДЭК №'.$return->shipment_number : ''),
+            'Заберите, проверьте и нажмите «Товар получен».',
+        ] : [
+            '↩️ Клиент просит вернуть заказ',
+            'Заказ: '.$return->order->number,
+            'Причина: '.$return->reasonLabel(),
+            'Возвращает: '.$return->itemsText().' — '.Money::rub((int) $return->goods_amount),
+            'Деньги по закону — до '.$return->refundDeadline()->timezone('Europe/Moscow')->format('d.m.Y'),
+        ], OrderResource::getUrl('edit', ['record' => $return->order], panel: 'admin'));
     }
 
     private function lines(array $lines, ?string $url = null): string

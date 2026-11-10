@@ -143,6 +143,8 @@ return [
         // Какие тарифы СДЭК можно предлагать: до ПВЗ — 136, 234, 483;
         // до постамата — 368, 378, 486. Берётся самый дешёвый подходящий.
         'tariffs' => env('CDEK_TARIFFS', '136,368,234,378,483,486'),
+        // Возврат от покупателя: из пункта СДЭК в наш пункт приёма, «склад-склад».
+        'return_tariff' => (int) env('CDEK_RETURN_TARIFF', 136),
     ],
 
     /*
@@ -253,6 +255,8 @@ return [
             'users' => env('TELEGRAM_TOPIC_USERS', 17),
             'issues' => env('TELEGRAM_TOPIC_ISSUES', 19),
             'shipments' => env('TELEGRAM_TOPIC_SHIPMENTS', 113),
+            // SEO-автопилот и недельный отчёт о поиске. По умолчанию — в тему «Проблемы».
+            'seo' => env('TELEGRAM_TOPIC_SEO', env('TELEGRAM_TOPIC_ISSUES', 19)),
         ],
 
         'payments_connection' => env('TELEGRAM_PAYMENTS_CONNECTION', 'database'),

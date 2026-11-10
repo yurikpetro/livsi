@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Orders\Pages;
 
 use App\Filament\Resources\Orders\OrderResource;
 use App\Models\Order;
+use App\Models\OrderReturn;
 use App\Services\FulfillmentService;
 use App\Support\Fulfillment;
 use Filament\Notifications\Notification;
@@ -173,6 +174,12 @@ class ListOrders extends ListRecords
 
             'in_delivery' => Tab::make('В доставке')
                 ->modifyQueryUsing(fn ($query) => $query->whereIn('fulfillment_status', [Fulfillment::SHIPPED, Fulfillment::AT_PICKUP])),
+
+            // Открытые заявки на возврат; цифра — сколько ждут решения.
+            'returns' => Tab::make('Возвраты')
+                ->modifyQueryUsing(fn ($query) => $query->whereHas('returns', fn ($returns) => OrderReturn::scopeNeedsWork($returns)))
+                ->badge(OrderReturn::query()->where('status', OrderReturn::REQUESTED)->count() ?: null)
+                ->badgeColor('danger'),
 
             'awaiting' => Tab::make('Ждут оплаты')
                 ->modifyQueryUsing(fn ($query) => $query->where('status', Order::STATUS_AWAITING_PAYMENT)),

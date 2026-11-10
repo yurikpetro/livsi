@@ -11,6 +11,10 @@
     {{-- Канонический адрес задаётся страницей: у каталога он без параметра
          сортировки, иначе порядок выдачи плодил бы дубли. --}}
     <link rel="canonical" href="{{ $canonical ?? url()->current() }}">
+    @if ($yandexVerification = \App\Analytics\AnalyticsSettings::verificationCode())
+        <meta name="yandex-verification" content="{{ $yandexVerification }}">
+    @endif
+    @include('partials.metrika')
 
     @isset($robots)
         <meta name="robots" content="{{ $robots }}">

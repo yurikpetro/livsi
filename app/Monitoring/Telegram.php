@@ -45,7 +45,24 @@ class Telegram
      * Бросает исключение: команде проверки нужна настоящая причина отказа.
      * Обработчик лога, наоборот, всё глотает — там сообщать о сбое некому.
      */
-    public function send(string $html, ?string $topic = null): void
+    /**
+     * Ответ не пришёл, но запрос уже ушёл: соединение было, Телеграм молчал
+     * дольше таймаута. Так бывает на боевом сервере — а сообщение при этом
+     * доходит. Повторять такую отправку нельзя: в группе будет три одинаковых
+     * сообщения. Повторяем только когда соединиться не удалось вовсе.
+     */
+    public static function maybeDelivered(Throwable $e): bool
+    {
+        $message = $e->getMessage();
+
+        return str_contains($message, 'Operation timed out') || str_contains($message, 'bytes received');
+    }
+
+    /**
+     * @param  float|null  $timeout  сколько ждать ответа; фоновым заданиям
+     *                               можно дольше, чем отчёту об ошибке внутри запроса покупателя
+     */
+    public function send(string $html, ?string $topic = null, ?float $timeout = null): void
     {
         $text = $html;
         $mode = 'HTML';
@@ -71,11 +88,11 @@ class Telegram
             'link_preview_options' => ['is_disabled' => true],
         ], fn ($value) => $value !== null);
 
-        $this->call('sendMessage', $payload);
+        $this->call('sendMessage', $payload, $timeout);
     }
 
     /** @return array<string, mixed> */
-    public function call(string $method, array $payload = []): array
+    public function call(string $method, array $payload = [], ?float $timeout = null): array
     {
         if (! $this->isConfigured()) {
             throw new RuntimeException('Бот не настроен: нет TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID.');
@@ -84,14 +101,14 @@ class Telegram
         $request = Http::baseUrl($this->endpoint())
             ->acceptJson()
             ->connectTimeout((float) config('livsi.telegram.connect_timeout', 2))
-            ->timeout((float) config('livsi.telegram.timeout', 5))
+            ->timeout($timeout ?? (float) config('livsi.telegram.timeout', 5))
             // Повтор только когда соединение не установилось. Отказ самого
             // Телеграма («неизвестный чат») повторять незачем — ответ будет
             // тот же, а секунды тратятся внутри запроса покупателя.
             ->retry(
                 times: (int) config('livsi.telegram.tries', 3),
                 sleepMilliseconds: 250,
-                when: fn (Throwable $e) => $e instanceof ConnectionException,
+                when: fn (Throwable $e) => $e instanceof ConnectionException && ! self::maybeDelivered($e),
                 throw: false,
             );
 

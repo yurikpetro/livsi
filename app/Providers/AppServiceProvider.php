@@ -2,17 +2,23 @@
 
 namespace App\Providers;
 
+use App\Models\LegalPage;
 use App\Models\Order;
+use App\Models\Product;
+use App\Models\ProductLine;
+use App\Models\ProductVariant;
 use App\Models\User;
 use App\Payments\GatewayManager;
 use App\Payments\PaymentGateway;
 use App\Services\CartService;
+use App\Seo\IndexNow;
 use App\Services\CustomerDirectory;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\ServiceProvider;
 
@@ -52,5 +58,13 @@ class AppServiceProvider extends ServiceProvider
         // Каждый заказ и каждый новый пользователь — в справочник клиентов.
         Order::created(fn (Order $order) => app(CustomerDirectory::class)->attachOrder($order));
         User::created(fn (User $user) => app(CustomerDirectory::class)->attachUser($user));
+
+        // Изменилась страница товара, линейки или документа — сайт сам скажет Яндексу (IndexNow).
+        $product = fn (Product $product) => IndexNow::queue(route('catalog.show', $product), route('catalog.index'));
+        Product::saved($product);
+        Product::deleted($product);
+        ProductVariant::saved(fn (ProductVariant $variant) => $variant->product ? IndexNow::queue(route('catalog.show', $variant->product)) : null);
+        ProductLine::saved(fn (ProductLine $line) => IndexNow::queue(route('catalog.line', $line)));
+        LegalPage::saved(fn (LegalPage $page) => Route::has('legal.'.$page->slug) ? IndexNow::queue(route('legal.'.$page->slug)) : null);
     }
 }

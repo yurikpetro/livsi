@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Orders\Pages;
 use App\Filament\Resources\Orders\OrderResource;
 use App\Filament\Support\FulfillmentAction;
 use App\Filament\Support\RefundAction;
+use App\Filament\Support\ReturnActions;
 use App\Filament\Support\ShipmentAction;
 use App\Filament\Support\StockReturnAction;
 use App\Models\OrderIssue;
@@ -26,6 +27,8 @@ class EditOrder extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            // Возврат по заявке покупателя — первым: видна только кнопка следующего шага.
+            ...ReturnActions::all(),
             FulfillmentAction::change(),
             ShipmentAction::make(),
             ShipmentAction::check(),

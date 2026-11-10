@@ -7,6 +7,7 @@ use App\Payments\CloudKassir;
 use App\Payments\PaymentSettings;
 use App\Payments\TochkaClient;
 use App\Payments\TochkaGateway;
+use App\Payments\TrustedCa;
 use App\Payments\Vat;
 use App\Payments\YooKassaGateway;
 use BackedEnum;
@@ -169,7 +170,8 @@ class PaymentIntegrations extends Page implements HasForms
     private function stateHtml(): HtmlString
     {
         $provider = PaymentSettings::provider();
-        $tochka = app(TochkaClient::class)->isConfigured();
+        $jwt = PaymentSettings::secret('tochka_jwt') !== null;
+        $code = PaymentSettings::customerCode();
         $kassa = app(CloudKassir::class)->isConfigured();
         $webhook = PaymentSettings::option('tochka_webhook_at');
         $closing = (bool) Setting::get('closing_receipts_enabled', false);
@@ -177,8 +179,9 @@ class PaymentIntegrations extends Page implements HasForms
         $lines = [
             '<b>Оплата: '.e(PaymentSettings::providerLabel($provider)).'</b>',
             'ЮKassa: '.(app(YooKassaGateway::class)->isConfigured() ? 'ключи заданы на сервере' : 'ключи не заданы'),
-            'Точка: '.($tochka ? 'ключ и код компании заданы' : 'не настроена')
-                .($webhook ? ' · уведомления подключены '.e(Carbon::parse($webhook)->timezone('Europe/Moscow')->format('d.m H:i')) : ' · уведомления не подключены'),
+            'Точка: ключ '.($jwt ? 'задан' : 'не задан').' · код компании '.($code !== null ? e($code) : 'не задан')
+                .($webhook ? ' · уведомления подключены '.e(Carbon::parse($webhook)->timezone('Europe/Moscow')->format('d.m H:i')) : ' · уведомления не подключены')
+                .' · сертификат Минцифры '.(TrustedCa::installed() ? 'установлен' : '<span style="color:#dc2626">не установлен (ставит установщик 14.1)</span>'),
             'CloudKassir: '.($kassa ? 'ключи заданы' : 'не настроен'),
         ];
         if ($provider === PaymentSettings::TOCHKA && $closing && ! $kassa) {
@@ -252,9 +255,7 @@ class PaymentIntegrations extends Page implements HasForms
     {
         $this->saveKeys();
         $client = app(TochkaClient::class);
-        if (! $client->isConfigured()) {
-            Notification::make()->title('Задайте JWT-ключ и код компании')->warning()->send();
-
+        if (! $this->ensureTochka($client)) {
             return;
         }
         try {
@@ -284,7 +285,8 @@ class PaymentIntegrations extends Page implements HasForms
         $this->saveKeys();
         $clientId = PaymentSettings::clientId();
         if (PaymentSettings::secret('tochka_jwt') === null || $clientId === null) {
-            Notification::make()->title('Задайте JWT-ключ и client_id')->warning()->send();
+            Notification::make()->title(PaymentSettings::secret('tochka_jwt') === null ? 'Вставьте JWT-ключ Точки' : 'Вставьте client_id')
+                ->body('client_id показывается на том же экране интернет-банка, что и ключ.')->warning()->send();
 
             return;
         }
@@ -309,9 +311,7 @@ class PaymentIntegrations extends Page implements HasForms
     {
         $this->saveKeys();
         $client = app(TochkaClient::class);
-        if (! $client->isConfigured()) {
-            Notification::make()->title('Задайте JWT-ключ и код компании')->warning()->send();
-
+        if (! $this->ensureTochka($client)) {
             return;
         }
         try {
@@ -397,6 +397,32 @@ class PaymentIntegrations extends Page implements HasForms
             ->success()->persistent()->send();
     }
 
+    /**
+     * Ключ задан, код компании есть (или найден по ключу и сохранён).
+     * Иначе — уведомление, что именно не так.
+     */
+    private function ensureTochka(TochkaClient $client): bool
+    {
+        if (PaymentSettings::secret('tochka_jwt') === null) {
+            Notification::make()->title('Вставьте JWT-ключ Точки')->warning()->send();
+
+            return false;
+        }
+        if (PaymentSettings::customerCode() !== null) {
+            return true;
+        }
+        try {
+            $this->data['tochka_customer_code'] = $client->ensureCustomerCode();
+        } catch (Throwable $exception) {
+            Notification::make()->title('Ключ сохранён, но код компании не найден')
+                ->body(mb_substr($exception->getMessage(), 0, 300))->danger()->persistent()->send();
+
+            return false;
+        }
+
+        return true;
+    }
+
     // -------------------------------------------------------------- CloudKassir
 
     public function checkCloudKassir(): void
@@ -461,6 +487,13 @@ class PaymentIntegrations extends Page implements HasForms
         }
 
         $want = ($this->data['provider'] ?? null) === PaymentSettings::TOCHKA ? PaymentSettings::TOCHKA : PaymentSettings::YOOKASSA;
+        if ($want === PaymentSettings::TOCHKA && PaymentSettings::customerCode() === null && PaymentSettings::secret('tochka_jwt') !== null) {
+            try {
+                $this->data['tochka_customer_code'] = app(TochkaClient::class)->ensureCustomerCode();
+            } catch (Throwable) {
+                // объяснение — в notReady ниже
+            }
+        }
         if ($want === PaymentSettings::TOCHKA && PaymentSettings::provider() !== PaymentSettings::TOCHKA) {
             $why = $this->notReady();
             if ($why !== null) {
@@ -480,8 +513,11 @@ class PaymentIntegrations extends Page implements HasForms
 
     private function notReady(): ?string
     {
-        if (! app(TochkaClient::class)->isConfigured()) {
-            return 'не заданы JWT-ключ и код компании Точки.';
+        if (PaymentSettings::secret('tochka_jwt') === null) {
+            return 'не задан JWT-ключ Точки.';
+        }
+        if (PaymentSettings::customerCode() === null) {
+            return 'не найден код компании — нажмите «Проверить связь» и посмотрите, что ответит Точка.';
         }
         if (! Vat::isConfigured()) {
             return 'не задана ставка НДС («Настройки сайта» → «Налоги и чеки»).';
