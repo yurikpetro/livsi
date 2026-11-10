@@ -33,6 +33,8 @@ class SeoRedirectResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Переадресации';
 
+    protected static bool $hasTitleCaseModelLabel = false;
+
     protected static ?string $slug = 'analytics/redirects';
 
     public static function canAccess(): bool

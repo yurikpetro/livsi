@@ -42,6 +42,8 @@ class MissingPageResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Битые ссылки';
 
+    protected static bool $hasTitleCaseModelLabel = false;
+
     protected static ?string $slug = 'analytics/broken-links';
 
     public static function canAccess(): bool
