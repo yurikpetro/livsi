@@ -15,7 +15,6 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
@@ -46,7 +45,8 @@ class ProductForm
                             // смена адреса ломает ссылки и накопленную выдачу.
                             ->afterStateUpdated(function (Get $get, ?string $state, callable $set, ?Product $record) {
                                 if (! $record && filled($state)) {
-                                    $set('slug', Str::slug($state));
+                                    // Занят — свободный с -2, -3: руками буквы не дописываем.
+                                    $set('slug', Product::uniqueSlug($state));
                                 }
                             }),
 
@@ -55,7 +55,9 @@ class ProductForm
                             ->required()
                             ->maxLength(255)
                             ->unique(ignoreRecord: true)
-                            ->helperText('Часть адреса: /product/скраб-для-тела. Менять у опубликованного товара нельзя — сломаются ссылки.'),
+                            ->regex(Product::SLUG_PATTERN)
+                            ->validationMessages(['regex' => 'Только латинские буквы, цифры и дефис, без пробелов. Например: multipenka-greipfrut-zhasmin.'])
+                            ->helperText('Часть адреса: /product/multipenka-greipfrut-zhasmin. Латиница, цифры и дефис. Если поменять, со старого адреса сайт сам будет вести на новый.'),
 
                         TextInput::make('sku')
                             ->label('Артикул')

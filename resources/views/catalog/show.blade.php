@@ -14,7 +14,7 @@
     $jsonLd = [
         '@context'    => 'https://schema.org',
         '@type'       => 'Product',
-        'name'        => $product->title,
+        'name'        => $product->displayName(),
         'description' => $product->short_description,
         'sku'         => $variant?->sku,
         'gtin13'      => $variant?->barcode,
@@ -34,9 +34,10 @@
     ];
 @endphp
 
-{{-- Без своего SEO-заголовка — бренд и «официальный магазин»: так страницу находят по «… livsi» и по «… купить». --}}
-@section('title', $product->seo_title ?: $product->title . (stripos($product->title, 'livsi') === false ? ' LIVSI' : '') . ' — купить в официальном магазине')
-@section('description', $product->seo_description ?: trim($product->short_description . ' Официальный магазин LIVSI, доставка по всей России.'))
+{{-- Без своего SEO-заголовка — название с ароматом, бренд и «официальный магазин»:
+     так страницу находят по «… livsi» и по «… купить», а шесть мультипенок не сливаются в одну. --}}
+@section('title', $product->seoTitle())
+@section('description', $product->seoDescription())
 @section('og_type', 'product')
 @section('og_image', $cover ? asset($cover->path) : asset('img/catalog/fresh-hero.jpg'))
 

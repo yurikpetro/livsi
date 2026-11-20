@@ -28,7 +28,12 @@
     <meta property="og:image" content="@yield('og_image', asset('img/catalog/fresh-hero.jpg'))">
     <meta name="twitter:card" content="summary_large_image">
 
-    <link rel="icon" href="{{ asset('img/logo.svg') }}" type="image/svg+xml">
+    {{-- Квадратный значок: логотип на неоновом фоне. Яндекс берёт SVG или PNG 120×120,
+         браузеры — favicon.ico, iPhone — apple-touch-icon. --}}
+    <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="48x48">
+    <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+    <link rel="icon" href="{{ asset('favicon-120.png') }}" type="image/png" sizes="120x120">
+    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
 
     <link rel="preload" href="{{ asset('fonts/Geist-VariableFont_wght.ttf') }}" as="font" type="font/ttf" crossorigin>
     @vite(['resources/css/app.css', 'resources/js/app.js'])

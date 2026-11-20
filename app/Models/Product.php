@@ -40,6 +40,14 @@ class Product extends Model
         // Поисковый текст пересобирается после сохранения, а не до: связи
         // (назначения, задачи) синхронизируются уже после самой модели.
         static::saved(fn (Product $product) => $product->rebuildSearchText());
+
+        // Сменили адрес товара — со старого сайт сам ведёт на новый (301):
+        // ссылки из выдачи, соцсетей и чатов не превращаются в «не найдено».
+        static::updated(function (Product $product): void {
+            if ($product->wasChanged('slug') && filled($product->getOriginal('slug'))) {
+                SeoRedirect::follow('/product/'.$product->getOriginal('slug'), route('catalog.show', $product, false));
+            }
+        });
     }
 
     public function line(): BelongsTo
@@ -165,6 +173,73 @@ class Product extends Model
     public function getRouteKeyName(): string
     {
         return 'slug';
+    }
+
+    // ─────────────────────────────────────────── для поиска
+
+    /** Адрес товара: латиница, цифры и дефисы. */
+    public const SLUG_PATTERN = '/^[a-z0-9]+(?:-[a-z0-9]+)*$/';
+
+    /**
+     * Название с ароматом. У одной мультипенки шесть ароматов: без аромата
+     * шесть страниц для Яндекса одинаковые, и он показывает одну из них.
+     */
+    public function displayName(): string
+    {
+        $title = trim((string) $this->title);
+        $aroma = trim((string) $this->aroma);
+
+        return $aroma !== '' && mb_stripos($title, $aroma) === false ? $title.' «'.$aroma.'»' : $title;
+    }
+
+    /** Заголовок страницы (title): свой из админки или собранный. */
+    public function seoTitle(): string
+    {
+        if (filled($this->seo_title)) {
+            return trim((string) $this->seo_title);
+        }
+        $name = $this->displayName();
+
+        return $name.(mb_stripos($name, 'livsi') === false ? ' LIVSI' : '').' — купить в официальном магазине';
+    }
+
+    /** Описание для выдачи: своё из админки или собранное — каждое предложение с точкой. */
+    public function seoDescription(): string
+    {
+        if (filled($this->seo_description)) {
+            return trim((string) $this->seo_description);
+        }
+        $sentence = function (string $text): string {
+            $text = trim(preg_replace('/\s+/u', ' ', $text));
+
+            return $text === '' || preg_match('/[.!?…]$/u', $text) ? $text : $text.'.';
+        };
+        $parts = [$sentence((string) $this->short_description)];
+        if (filled($this->aroma)) {
+            $parts[] = 'Аромат «'.trim((string) $this->aroma).'».';
+        }
+        if ($this->line) {
+            $parts[] = 'Линейка '.$this->line->title.'.';
+        }
+        $parts[] = 'Официальный магазин LIVSI, доставка по всей России.';
+
+        return implode(' ', array_filter($parts));
+    }
+
+    /**
+     * Свободный адрес из текста: «Очищающая мультипенка» → ochischayuschaya-multipenka
+     * (русская транслитерация: ж → zh, ч → ch), занят — с -2, -3… Раньше при занятом
+     * адресе дописывали буквы руками («…multipenkaаа»), и такие адреса уходили в выдачу.
+     */
+    public static function uniqueSlug(string $text, ?int $ignoreId = null): string
+    {
+        $base = Str::slug($text, '-', 'ru') ?: 'tovar';
+        $slug = $base;
+        for ($i = 2; static::query()->where('slug', $slug)->when($ignoreId, fn ($q) => $q->whereKeyNot($ignoreId))->exists(); $i++) {
+            $slug = $base.'-'.$i;
+        }
+
+        return $slug;
     }
 
     // ─────────────────────────────────────────── поиск

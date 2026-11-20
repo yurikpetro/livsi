@@ -15,7 +15,8 @@ use Throwable;
  */
 final class SiteHealth
 {
-    public const UA = 'Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)';
+    /** Как у робота Яндекса — сервер может отвечать ему иначе, — с пометкой: в логах свои проверки отличимы от настоящего робота. */
+    public const UA = 'Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots) livsi-autopilot';
 
     /**
      * @return array{ok: bool, problems: list<string>, checked: list<string>}
